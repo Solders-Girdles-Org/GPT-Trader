@@ -108,7 +108,14 @@ def _validate_latest_records(
     will do, so READY matches reality.
     """
     for decision_id in sorted({event.decision_id for event in events}):
-        service.get(decision_id)
+        view = service.get(decision_id)
+        if view.idea.decision_id != decision_id:
+            raise AuditIntegrityError(
+                f"Stored trade idea '{decision_id}' latest record contains "
+                f"decision_id '{view.idea.decision_id}'",
+                field="decision_id",
+                value=view.idea.decision_id,
+            )
 
 
 def _check_cli_surface(checker: PreflightCheck, details: dict[str, str]) -> bool:

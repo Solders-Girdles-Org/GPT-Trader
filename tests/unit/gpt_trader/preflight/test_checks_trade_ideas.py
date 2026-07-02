@@ -228,6 +228,35 @@ def test_trade_ideas_readiness_fails_when_latest_record_is_deleted(
     assert result["details"]["ideas_root"] == str(ideas_root)
 
 
+def test_trade_ideas_readiness_fails_when_latest_record_id_mismatches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ideas_root = tmp_path / "trade_ideas"
+    _seed_budget(ideas_root)
+    service = TradeIdeaService(
+        ideas_root,
+        now_factory=lambda: datetime(2026, 6, 12, 10, 0, tzinfo=UTC),
+    )
+    audited = build_trade_idea(decision_id="trade-20260612-audited-a")
+    other = build_trade_idea(decision_id="trade-20260612-audited-b")
+    service.propose(audited, actor_id="idea-generator-v1")
+    service.propose(other, actor_id="idea-generator-v1")
+    # Replace A's latest with B's (valid, audited) record: a swapped file must
+    # not report READY just because the payload's own id has an audit trail.
+    records = ideas_root / "records"
+    (records / audited.decision_id / "latest.json").write_text(
+        (records / other.decision_id / "latest.json").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GPT_TRADER_IDEAS_ROOT", str(ideas_root))
+
+    checker = PreflightCheck(profile="dev")
+
+    assert check_trade_ideas_readiness(checker) is False
+    result = _failed_result(checker, "latest record integrity failed")
+    assert result["details"]["ideas_root"] == str(ideas_root)
+
+
 def test_trade_ideas_readiness_fails_when_budget_is_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
