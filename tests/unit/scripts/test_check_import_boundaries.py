@@ -270,6 +270,8 @@ def test_cross_slice_allowlist_is_frozen_topology() -> None:
             ("live_trade", "intelligence"),
             ("live_trade", "strategy_tools"),
             ("live_trade", "trade_ideas"),
+            # RegimeAwareProposer overlays intelligence regime state onto proposal text.
+            ("trade_ideas", "intelligence"),
             ("optimize", "live_trade"),
             ("strategy_tools", "trade_ideas"),
         }
@@ -280,6 +282,8 @@ def test_trade_ideas_allowed_prefixes_are_frozen() -> None:
     assert check_import_boundaries.TRADE_IDEAS_ALLOWED_IMPORT_PREFIXES == (
         "gpt_trader.core",
         "gpt_trader.errors",
+        # Regime-aware proposer reads MarketRegimeDetector before human approval.
+        "gpt_trader.features.intelligence.regime",
         "gpt_trader.features.trade_ideas",
     )
 
