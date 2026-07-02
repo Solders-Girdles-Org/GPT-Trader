@@ -950,8 +950,8 @@ def register(subparsers: Any) -> None:
     )
     cycle.add_argument(
         "--coinbase-base-url",
-        default=None,
-        help="Override the public Coinbase market-data base URL",
+        default="https://api.coinbase.com",
+        help="Coinbase API base URL for market-data reads",
     )
     cycle.add_argument(
         "--source-label",

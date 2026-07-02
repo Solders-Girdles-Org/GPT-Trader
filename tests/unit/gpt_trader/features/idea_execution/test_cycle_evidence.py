@@ -82,6 +82,22 @@ class TestEvidenceContract:
 
 
 class TestLocking:
+    def test_lock_releases_even_when_manifest_write_fails(
+        self, cycle_service: TradeIdeaService, tmp_path: Path
+    ) -> None:
+        cycle_root = tmp_path / "cycle"
+        # A directory at the manifest path makes the append raise.
+        (cycle_root / "manifest.jsonl").mkdir(parents=True)
+        runner = make_cycle_runner(cycle_service, tmp_path, proposers=[])
+        provider = snapshot_provider(snapshot(flat_series("BTC-USD")))
+        with pytest.raises(IsADirectoryError):
+            runner.run(provider)
+
+        # The lock must not leak: a follow-up turn acquires it normally.
+        (cycle_root / "manifest.jsonl").rmdir()
+        result = runner.run(provider)
+        assert result.run_id
+
     def test_concurrent_turn_is_refused_without_manifest_row(
         self, cycle_service: TradeIdeaService, tmp_path: Path
     ) -> None:

@@ -204,8 +204,10 @@ class PaperCycleRunner:
             row["finished_at"] = self._now_factory().isoformat()
             raise
         finally:
-            self._append_manifest_row(row)
-            lock.release()
+            try:
+                self._append_manifest_row(row)
+            finally:
+                lock.release()
 
     def _run_steps(
         self,
