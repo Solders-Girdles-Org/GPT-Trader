@@ -56,7 +56,7 @@ uv run pytest --cov=gpt_trader --cov-report=term-missing
 ```
 
 ### Test Metrics
-- **Coverage Goal**: Maintain ~73% overall, >90% on new code paths
+- **Coverage**: 82.6% overall as of 2026-07-01 (`make cov`); the current number is the `coverage-json` artifact uploaded by the CI **Unit Tests (Core)** job. Target >90% on new code paths.
 - **Integration Paths**: Coordinate with maintainers before toggling derivatives gates
 
 ## Running the Bot Locally
