@@ -73,6 +73,10 @@ paper-only.
 """
 
 
+def _instrument_key(instrument: str) -> str:
+    return instrument.casefold()
+
+
 class PaperCycleLockError(ValidationError):
     """Raised when another cycle turn already holds the ideas-root lock."""
 
@@ -303,14 +307,15 @@ class PaperCycleRunner:
         known_decision_ids: set[str] = set()
         for view in self._service.list_views():
             known_decision_ids.add(view.idea.decision_id)
+            instrument_key = _instrument_key(view.idea.instrument)
             if view.state in _OPEN_STATES:
-                busy_instruments[view.idea.instrument] = (
+                busy_instruments[instrument_key] = (
                     view.idea.decision_id,
                     "instrument already has an open idea",
                 )
             elif view.state is TradeIdeaState.FILLED and view.closeout_attribution is None:
                 busy_instruments.setdefault(
-                    view.idea.instrument,
+                    instrument_key,
                     (view.idea.decision_id, "instrument has a filled idea awaiting closeout"),
                 )
         admitted = []
@@ -328,7 +333,8 @@ class PaperCycleRunner:
                     }
                 )
                 continue
-            busy = busy_instruments.get(idea.instrument)
+            instrument_key = _instrument_key(idea.instrument)
+            busy = busy_instruments.get(instrument_key)
             if busy is not None:
                 existing_decision_id, reason = busy
                 skipped.append(
@@ -341,7 +347,7 @@ class PaperCycleRunner:
                 continue
             admitted.append(idea)
             known_decision_ids.add(idea.decision_id)
-            busy_instruments[idea.instrument] = (
+            busy_instruments[instrument_key] = (
                 idea.decision_id,
                 "instrument already has an open idea",
             )
@@ -377,7 +383,9 @@ class PaperCycleRunner:
         approved_before_turn: tuple[str, ...],
     ) -> ExecutionTurn:
         marks = {
-            series.symbol: series.candles[-1].close for series in snapshot.series if series.candles
+            _instrument_key(series.symbol): series.candles[-1].close
+            for series in snapshot.series
+            if series.candles
         }
         executed: list[dict[str, Any]] = []
         skipped: list[dict[str, str]] = []
@@ -394,7 +402,7 @@ class PaperCycleRunner:
                     }
                 )
                 continue
-            mark = marks.get(view.idea.instrument)
+            mark = marks.get(_instrument_key(view.idea.instrument))
             if mark is None:
                 skipped.append(
                     {

@@ -76,6 +76,33 @@ class TestProposeLeg:
         assert skip["instrument"] == "BTC-USD"
         assert skip["existing_decision_id"] == first.proposer_turns[0].proposed_decision_ids[0]
 
+    def test_open_instrument_match_is_case_insensitive(
+        self, cycle_service: TradeIdeaService, tmp_path: Path
+    ) -> None:
+        existing_decision_id = "trade-20260703-cycle-lower-open"
+        cycle_service.propose(
+            build_cycle_idea(existing_decision_id, instrument="btc-usd"),
+            actor_id="test-proposer",
+        )
+
+        class UppercaseProposer:
+            proposer_id = "test-uppercase-proposer"
+
+            def propose(self, market_snapshot: MarketSnapshot) -> list:
+                return [build_cycle_idea("trade-20260703-cycle-upper-candidate")]
+
+        result = make_cycle_runner(
+            cycle_service,
+            tmp_path,
+            proposers=[UppercaseProposer()],
+        ).run(snapshot_provider(snapshot(flat_series("BTC-USD"))))
+
+        (proposer_turn,) = result.proposer_turns
+        assert proposer_turn.proposal_count == 0
+        (skip,) = proposer_turn.skipped_open_instruments
+        assert skip["instrument"] == "BTC-USD"
+        assert skip["existing_decision_id"] == existing_decision_id
+
     def test_rerun_over_resolved_idea_skips_duplicate_id_idempotently(
         self, cycle_service: TradeIdeaService, tmp_path: Path
     ) -> None:
@@ -158,6 +185,26 @@ class TestExecuteApprovedLeg:
         assert executed["decision_id"] == decision_id
         assert executed["client_order_id"] == decision_id
         # Priced from the turn's snapshot: the fixture's last close is 130.
+        assert executed["fill_price"] == "130"
+        assert cycle_service.get(decision_id).state is TradeIdeaState.FILLED
+
+    def test_executes_approved_idea_when_snapshot_symbol_case_differs(
+        self, cycle_service: TradeIdeaService, tmp_path: Path
+    ) -> None:
+        decision_id = "trade-20260703-cycle-lower-approved"
+        cycle_service.propose(
+            build_cycle_idea(decision_id, instrument="btc-usd"),
+            actor_id="test-proposer",
+        )
+        cycle_service.approve(decision_id, actor_id="test-operator", reason="test approval")
+
+        result = make_cycle_runner(cycle_service, tmp_path, proposers=[]).run(
+            snapshot_provider(snapshot(crossover_series("BTC-USD")))
+        )
+
+        (executed,) = result.execution.executed
+        assert executed["decision_id"] == decision_id
+        assert executed["symbol"] == "btc-usd"
         assert executed["fill_price"] == "130"
         assert cycle_service.get(decision_id).state is TradeIdeaState.FILLED
 
