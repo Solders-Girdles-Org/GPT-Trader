@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
@@ -11,7 +12,14 @@ from gpt_trader.app.container import (
     clear_application_container,
     set_application_container,
 )
-from gpt_trader.core import Balance, Position
+from gpt_trader.core import (
+    Balance,
+    MarketType,
+    Order,
+    OrderStatus,
+    Position,
+    Product,
+)
 from gpt_trader.features.live_trade.engines.base import CoordinatorContext
 from gpt_trader.features.live_trade.engines.strategy import TradingEngine
 from gpt_trader.features.live_trade.execution.order_submission import (
@@ -53,10 +61,7 @@ def mock_strategy():
     return strategy
 
 
-@pytest.fixture
-def context(mock_broker, application_container):
-    risk = BotRiskConfig(position_fraction=Decimal("0.1"))
-    config = BotConfig(symbols=["BTC-USD"], interval=1, risk=risk)
+def _make_risk_manager() -> MagicMock:
     risk_manager = MagicMock()
     risk_manager._start_of_day_equity = Decimal("1000.0")
     risk_manager.check_mark_staleness.return_value = False
@@ -70,11 +75,18 @@ def context(mock_broker, application_container):
     risk_manager.config.validation_failure_cooldown_seconds = 180
     risk_manager.config.preview_failure_disable_after = 3
     risk_manager.config.api_health_cooldown_seconds = 300
+    return risk_manager
+
+
+@pytest.fixture
+def context(mock_broker, application_container):
+    risk = BotRiskConfig(position_fraction=Decimal("0.1"))
+    config = BotConfig(symbols=["BTC-USD"], interval=1, risk=risk)
     return CoordinatorContext(
         config=config,
         container=application_container,
         broker=mock_broker,
-        risk_manager=risk_manager,
+        risk_manager=_make_risk_manager(),
     )
 
 
@@ -126,4 +138,121 @@ def engine(context, mock_strategy, application_container, monkeypatch):
         order_id="order-123",
     )
 
+    return engine
+
+
+@pytest.fixture
+def real_flow_product() -> Product:
+    return Product(
+        symbol="BTC-USD",
+        base_asset="BTC",
+        quote_asset="USD",
+        market_type=MarketType.SPOT,
+        min_size=Decimal("0.0001"),
+        step_size=Decimal("0.00001"),
+        min_notional=Decimal("1"),
+        price_increment=Decimal("0.01"),
+        leverage_max=None,
+    )
+
+
+@pytest.fixture
+def real_flow_broker(real_flow_product):
+    """Boundary-double broker for the real-flow engine.
+
+    Unlike ``mock_broker``, every configured return value is a real domain
+    object so the production StateCollector/OrderValidator/OrderSubmitter
+    stack can run against it unstubbed.
+    """
+    broker = MagicMock()
+    broker.get_ticker.return_value = {"price": "50000"}
+    broker.get_candles.return_value = []
+    broker.list_balances.return_value = [
+        Balance(asset="USD", total=Decimal("1000"), available=Decimal("1000")),
+    ]
+    broker.list_positions.return_value = []
+    broker.get_product.return_value = real_flow_product
+    broker.get_mark_price.return_value = Decimal("50000")
+    # None skips the slippage guard's market-impact math; tests that exercise
+    # the guard set a real snapshot dict.
+    broker.get_market_snapshot.return_value = None
+
+    order_ids = iter(f"order-{n}" for n in range(1, 1000))
+
+    def _place_order(**kwargs):
+        return Order(
+            id=next(order_ids),
+            symbol=kwargs["symbol"],
+            side=kwargs["side"],
+            type=kwargs["order_type"],
+            quantity=kwargs["quantity"],
+            status=OrderStatus.SUBMITTED,
+            price=kwargs.get("price"),
+            tif=kwargs.get("tif") or "GTC",
+            client_id=kwargs.get("client_id"),
+            submitted_at=datetime.now(UTC),
+        )
+
+    broker.place_order.side_effect = _place_order
+    return broker
+
+
+@pytest.fixture
+def real_flow_context(real_flow_broker, tmp_path):
+    """CoordinatorContext whose engine keeps its REAL guard stack.
+
+    Only the process boundaries are doubles: the broker (``real_flow_broker``)
+    and the risk manager (MagicMock with explicitly passing defaults). The
+    orders/event stores are isolated under ``tmp_path`` because the real
+    OrderSubmitter persists submissions.
+    """
+    risk = BotRiskConfig(position_fraction=Decimal("0.1"))
+    config = BotConfig(
+        symbols=["BTC-USD"],
+        interval=1,
+        risk=risk,
+        runtime_root=str(tmp_path),
+    )
+    container = ApplicationContainer(config)
+    set_application_container(container)
+
+    risk_manager = _make_risk_manager()
+    # The real validator/submitter consult these boundaries; MagicMock's
+    # truthy auto-attributes would otherwise silently flip trading modes.
+    risk_manager.is_reduce_only_mode.return_value = False
+    risk_manager.check_order.return_value = True
+    risk_manager.pre_trade_validate.return_value = None
+    risk_manager._daily_pnl_triggered = False
+    risk_manager.last_mark_update = {}
+    risk_manager.config.slippage_guard_bps = 50
+    risk_manager.config.kill_switch_enabled = False
+
+    yield CoordinatorContext(
+        config=config,
+        container=container,
+        broker=real_flow_broker,
+        risk_manager=risk_manager,
+    )
+    clear_application_container()
+
+
+@pytest.fixture
+def real_flow_engine(real_flow_context, mock_strategy, monkeypatch):
+    """TradingEngine wired with its production validator/submitter stack.
+
+    No engine internals are stubbed, so tests written against this fixture
+    survive strategy.py decomposition refactors. Steer behavior at the
+    broker/risk-manager boundary instead of patching ``_order_validator``,
+    ``_order_submitter``, or ``_state_collector``.
+    """
+    import gpt_trader.features.live_trade.engines.strategy as strategy_module
+
+    monkeypatch.setattr(
+        strategy_module,
+        "create_strategy",
+        MagicMock(return_value=mock_strategy),
+    )
+
+    engine = TradingEngine(real_flow_context)
+    engine.strategy = mock_strategy
     return engine
