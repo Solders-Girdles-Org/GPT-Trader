@@ -207,6 +207,27 @@ def test_trade_ideas_readiness_fails_when_latest_record_is_tampered(
     assert result["details"]["ideas_root"] == str(ideas_root)
 
 
+def test_trade_ideas_readiness_fails_when_latest_record_is_deleted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ideas_root = tmp_path / "trade_ideas"
+    _seed_budget(ideas_root)
+    service = TradeIdeaService(
+        ideas_root,
+        now_factory=lambda: datetime(2026, 6, 12, 10, 0, tzinfo=UTC),
+    )
+    idea = build_trade_idea(decision_id="trade-20260612-deleted-latest")
+    service.propose(idea, actor_id="idea-generator-v1")
+    (ideas_root / "records" / idea.decision_id / "latest.json").unlink()
+    monkeypatch.setenv("GPT_TRADER_IDEAS_ROOT", str(ideas_root))
+
+    checker = PreflightCheck(profile="dev")
+
+    assert check_trade_ideas_readiness(checker) is False
+    result = _failed_result(checker, "latest record integrity failed")
+    assert result["details"]["ideas_root"] == str(ideas_root)
+
+
 def test_trade_ideas_readiness_fails_when_budget_is_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
