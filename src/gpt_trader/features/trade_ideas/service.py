@@ -49,7 +49,11 @@ from gpt_trader.features.trade_ideas.models import (
     TicketVenue,
     TradeIdea,
 )
-from gpt_trader.features.trade_ideas.policy import ApprovalPolicy, PolicyViolationError
+from gpt_trader.features.trade_ideas.policy import (
+    ApprovalBudgetContext,
+    ApprovalPolicy,
+    PolicyViolationError,
+)
 from gpt_trader.features.trade_ideas.service_models import (
     DuplicateTradeIdeaError,
     PreApprovalBrokerTicketError,
@@ -79,6 +83,12 @@ EXPIRABLE_STATES = frozenset(
         TradeIdeaState.PROPOSED,
         TradeIdeaState.NEEDS_CHANGES,
         TradeIdeaState.APPROVED,
+    }
+)
+OPEN_BUDGET_EXPOSURE_STATES = frozenset(
+    {
+        TradeIdeaState.APPROVED,
+        TradeIdeaState.SUBMITTED,
     }
 )
 _AUDIT_VENUES = frozenset({TicketVenue.COINBASE, TicketVenue.MANUAL})
@@ -127,6 +137,65 @@ def _timestamp_in_window(
     if until is not None and timestamp > until:
         return False
     return True
+
+
+def _decimal_to_str(value: Decimal | None) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
+def _percent_of_amount(amount: Decimal, equity: Decimal) -> Decimal | None:
+    if equity <= 0:
+        return None
+    return amount / equity * Decimal("100")
+
+
+def _equity_from_max_loss_amount_percent(
+    *,
+    amount: Decimal | None,
+    percent_of_account: Decimal | None,
+) -> Decimal | None:
+    if amount is None or percent_of_account is None or percent_of_account <= 0:
+        return None
+    return amount * Decimal("100") / percent_of_account
+
+
+def _closeout_loss_percent(closeout: CloseoutAttribution) -> Decimal | None:
+    if closeout.realized_profit_loss_percent is not None:
+        return abs(min(closeout.realized_profit_loss_percent, Decimal("0")))
+    realized_amount = closeout.realized_profit_loss_amount
+    if realized_amount is None:
+        return None
+    if realized_amount >= 0:
+        return Decimal("0")
+    closeout_equity_snapshot = _equity_from_max_loss_amount_percent(
+        amount=closeout.max_loss.amount,
+        percent_of_account=closeout.max_loss.percent_of_account,
+    )
+    if closeout_equity_snapshot is None:
+        return None
+    return _percent_of_amount(abs(realized_amount), closeout_equity_snapshot)
+
+
+def _closeout_has_realized_profit_loss(closeout: CloseoutAttribution) -> bool:
+    return (
+        closeout.realized_profit_loss_amount is not None
+        or closeout.realized_profit_loss_percent is not None
+    )
+
+
+def _absolute_notional(idea: TradeIdea) -> Decimal | None:
+    notional = idea.sizing_recommendation.notional
+    if notional is None:
+        return None
+    return abs(notional)
+
+
+def _same_day(timestamp: datetime, now: datetime) -> bool:
+    if now.tzinfo is None or now.utcoffset() is None:
+        return timestamp.date() == now.date()
+    return timestamp.astimezone(now.tzinfo).date() == now.date()
 
 
 def _page_items(
@@ -193,6 +262,10 @@ class TradeIdeaService:
 
     # -- budget ----------------------------------------------------------
 
+    def peek_budget(self) -> RiskBudget:
+        """Return the active budget without seeding the log (read-only paths)."""
+        return self._budget_log.current() or DEFAULT_RISK_BUDGET
+
     def current_budget(self) -> RiskBudget:
         """Return the active budget, seeding the accepted defaults on first use."""
         budget = self._budget_log.current()
@@ -222,7 +295,126 @@ class TradeIdeaService:
             open_approved_count=self.open_approved_count(),
             now=self._now(),
             review_started_at=self._review_started_at(idea.decision_id),
+            budget_context=self.approval_budget_context(
+                exclude_decision_id=idea.decision_id,
+            ),
         )
+
+    def approval_budget_context(
+        self,
+        *,
+        exclude_decision_id: str | None = None,
+        now: datetime | None = None,
+    ) -> ApprovalBudgetContext:
+        """Return aggregate budget exposure for approval policy evaluation."""
+        evaluation_time = now or self._now()
+        latest_events = self._latest_audit_events_by_decision_id()
+        open_ideas: list[TradeIdea] = []
+        closeouts: list[CloseoutAttribution] = []
+        for decision_id, event in latest_events.items():
+            if event.after_state in OPEN_BUDGET_EXPOSURE_STATES:
+                if decision_id == exclude_decision_id:
+                    continue
+                open_ideas.append(self.load_record_version(decision_id, event.record_hash))
+                continue
+            if event.after_state not in TERMINAL_STATES:
+                continue
+            events = tuple(self._audit.read_events(decision_id))
+            idea = self.load_record_version(decision_id, event.record_hash)
+            closeout = self._validated_closeout_attribution(idea, events)
+            if (
+                event.after_state is TradeIdeaState.FILLED
+                and closeout is None
+                and decision_id != exclude_decision_id
+            ):
+                open_ideas.append(idea)
+                continue
+            if closeout is not None and _same_day(closeout.timestamp, evaluation_time):
+                if (
+                    event.after_state is TradeIdeaState.FILLED
+                    or _closeout_has_realized_profit_loss(closeout)
+                ):
+                    closeouts.append(closeout)
+        account_equity_snapshot = self._account_equity_snapshot(
+            # Non-mutating read: building a budget context (e.g. during a
+            # render-only ticket export) must not seed risk_budget.jsonl.
+            budget_equity=self.peek_budget().account_equity,
+            open_ideas=open_ideas,
+            closeouts=closeouts,
+        )
+        closeout_loss_pcts = tuple(_closeout_loss_percent(closeout) for closeout in closeouts)
+        same_day_realized_loss_pct = sum(
+            (loss_pct for loss_pct in closeout_loss_pcts if loss_pct is not None),
+            Decimal("0"),
+        )
+        same_day_realized_loss_unavailable_count = sum(
+            1 for loss_pct in closeout_loss_pcts if loss_pct is None
+        )
+        open_at_risk_pcts = tuple(idea.max_loss.percent_of_account for idea in open_ideas)
+        open_approved_at_risk_pct = sum(
+            (risk_pct for risk_pct in open_at_risk_pcts if risk_pct is not None),
+            Decimal("0"),
+        )
+        open_at_risk_unavailable_count = sum(
+            1 for risk_pct in open_at_risk_pcts if risk_pct is None
+        )
+        open_notionals = tuple(_absolute_notional(idea) for idea in open_ideas)
+        open_notional = sum(
+            (notional for notional in open_notionals if notional is not None), Decimal("0")
+        )
+        open_notional_unavailable_count = sum(1 for notional in open_notionals if notional is None)
+        return ApprovalBudgetContext(
+            same_day_realized_loss_pct=same_day_realized_loss_pct,
+            same_day_realized_loss_unavailable_count=(same_day_realized_loss_unavailable_count),
+            open_approved_at_risk_pct=open_approved_at_risk_pct,
+            open_at_risk_unavailable_count=open_at_risk_unavailable_count,
+            open_notional=open_notional,
+            open_notional_unavailable_count=open_notional_unavailable_count,
+            account_equity_snapshot=account_equity_snapshot,
+        )
+
+    def budget_headroom(self, *, now: datetime | None = None) -> dict[str, object]:
+        """Return read-only aggregate budget headroom for operators and agents."""
+        evaluation_time = now or self._now()
+        budget = self.current_budget()
+        context = self.approval_budget_context(now=evaluation_time)
+        account_equity = context.account_equity_snapshot
+        daily_loss_used_pct = context.same_day_realized_loss_pct + context.open_approved_at_risk_pct
+        daily_loss_headroom_pct = max(
+            budget.max_daily_loss_pct - daily_loss_used_pct,
+            Decimal("0"),
+        )
+        open_notional_pct = None
+        open_notional_headroom = None
+        open_notional_headroom_pct = None
+        if account_equity is not None and account_equity > 0:
+            open_notional_pct = _percent_of_amount(context.open_notional, account_equity)
+            max_open_notional = account_equity * budget.max_open_notional_pct / Decimal("100")
+            open_notional_headroom = max(max_open_notional - context.open_notional, Decimal("0"))
+            open_notional_headroom_pct = max(
+                budget.max_open_notional_pct - (open_notional_pct or Decimal("0")),
+                Decimal("0"),
+            )
+        return {
+            "evaluated_at": evaluation_time.isoformat(),
+            "account_equity_snapshot": _decimal_to_str(account_equity),
+            "same_day_realized_loss_pct": str(context.same_day_realized_loss_pct),
+            "same_day_realized_loss_unavailable_count": (
+                context.same_day_realized_loss_unavailable_count
+            ),
+            "open_approved_at_risk_pct": str(context.open_approved_at_risk_pct),
+            "open_at_risk_unavailable_count": context.open_at_risk_unavailable_count,
+            "daily_loss_used_pct": str(daily_loss_used_pct),
+            "daily_loss_headroom_pct": str(daily_loss_headroom_pct),
+            "open_notional": str(context.open_notional),
+            "open_notional_unavailable_count": context.open_notional_unavailable_count,
+            "open_notional_pct": _decimal_to_str(open_notional_pct),
+            "open_notional_headroom": _decimal_to_str(open_notional_headroom),
+            "open_notional_headroom_pct": _decimal_to_str(open_notional_headroom_pct),
+            "open_budget_exposure_states": sorted(
+                state.value for state in OPEN_BUDGET_EXPOSURE_STATES
+            ),
+        }
 
     def validate_new_proposal(self, idea: TradeIdea) -> None:
         """Validate proposal lifecycle preconditions without writing state."""
@@ -378,6 +570,9 @@ class TradeIdeaService:
             open_approved_count=self.open_approved_count(),
             now=self._now(),
             review_started_at=self._review_started_at(decision_id),
+            budget_context=self.approval_budget_context(
+                exclude_decision_id=decision_id,
+            ),
         )
         if violations:
             raise PolicyViolationError(
@@ -600,6 +795,10 @@ class TradeIdeaService:
             open_approved_count=self._open_approved_count_excluding(decision_id),
             now=export_time,
             review_started_at=self._review_started_at_from_events(view.events),
+            budget_context=self.approval_budget_context(
+                exclude_decision_id=decision_id,
+                now=export_time,
+            ),
         )
         if (
             view.state is TradeIdeaState.APPROVED
@@ -860,6 +1059,37 @@ class TradeIdeaService:
         return approved_count
 
     # -- internals -----------------------------------------------------------
+
+    def _account_equity_snapshot(
+        self,
+        *,
+        budget_equity: Decimal | None,
+        open_ideas: list[TradeIdea],
+        closeouts: list[CloseoutAttribution],
+    ) -> Decimal | None:
+        # Equity must come from a source independent of the candidate under
+        # evaluation; a candidate could otherwise inflate max_loss.amount to
+        # fabricate an arbitrarily large denominator for the notional cap.
+        # Precedence: operator-attested budget equity, then records that
+        # already passed human approval. With no independent source the policy
+        # fails closed (None blocks max_open_notional_pct verification).
+        if budget_equity is not None:
+            return budget_equity
+        for idea in open_ideas:
+            equity = _equity_from_max_loss_amount_percent(
+                amount=idea.max_loss.amount,
+                percent_of_account=idea.max_loss.percent_of_account,
+            )
+            if equity is not None:
+                return equity
+        for closeout in closeouts:
+            equity = _equity_from_max_loss_amount_percent(
+                amount=closeout.max_loss.amount,
+                percent_of_account=closeout.max_loss.percent_of_account,
+            )
+            if equity is not None:
+                return equity
+        return None
 
     def _latest_audit_events_by_decision_id(self) -> dict[str, AuditEvent]:
         latest_events: dict[str, AuditEvent] = {}

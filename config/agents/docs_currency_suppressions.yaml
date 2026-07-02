@@ -14,9 +14,6 @@ suppressions:
   - doc: docs/INFORMATION_ARCHITECTURE.md
     item: "--ignored"
     reason: git flag example, not a gpt-trader flag
-  - doc: docs/READINESS.md
-    item: var/ops/controls_smoke_20260117_123003.json
-    reason: timestamped runtime artifact shown as an example path
   - doc: docs/decisions/intx-default-derivatives-venue.md
     item: "--hidden"
     reason: example flag quoted in a decision record

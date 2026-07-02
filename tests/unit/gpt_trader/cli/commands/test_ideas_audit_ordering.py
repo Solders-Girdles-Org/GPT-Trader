@@ -11,6 +11,7 @@ import pytest
 from gpt_trader import cli
 from gpt_trader.features.trade_ideas import AuditAction, TimeHorizon
 from gpt_trader.features.trade_ideas.service import TradeIdeaService
+from tests.unit.gpt_trader.cli.commands.conftest import attest_account_equity
 from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
 
 
@@ -43,6 +44,7 @@ def test_audit_export_pages_non_monotonic_timestamps_in_append_order(
     root = tmp_path / "ideas"
     current_time = [datetime(2026, 6, 12, 10, 3, tzinfo=UTC)]
     service = TradeIdeaService(root, now_factory=lambda: current_time[0])
+    attest_account_equity(service)
     idea = _idea("trade-audit-non-monotonic")
     service.propose(idea, actor_id="generator-a")
     current_time[0] = datetime(2026, 6, 12, 10, 1, tzinfo=UTC)

@@ -10,7 +10,8 @@ outscore this on the same replayed snapshots, it is noise.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -23,12 +24,19 @@ from gpt_trader.features.trade_ideas.models import (
     EntryZone,
     MaxLoss,
     ProductType,
-    SizingRecommendation,
     TimeHorizon,
     TradeDirection,
     TradeIdea,
 )
+from gpt_trader.features.trade_ideas.sizing import (
+    TradeIdeaPositionSizingBridge,
+    TradeIdeaSizingConfig,
+    TradeIdeaSizingContext,
+)
 from gpt_trader.features.trade_ideas.snapshot import MarketSnapshot, SymbolSeries
+
+# Per-run hook letting wrapping proposers adjust confidence before sizing.
+ConfidenceOverlay = Callable[[str, Confidence], Confidence]
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +50,7 @@ class BaselineProposerConfig:
     expiry_hours: int = 48
     expected_hold: str = "5-15 days"
     price_precision: Decimal = Decimal("0.01")
+    sizing_config: TradeIdeaSizingConfig = field(default_factory=TradeIdeaSizingConfig)
 
 
 def _moving_average(closes: list[Decimal], window: int, end_index: int) -> Decimal:
@@ -58,23 +67,40 @@ def _utc_aware(value: datetime) -> datetime:
 class BaselineProposer:
     """Long-only MA-crossover proposer over spot symbols in a snapshot."""
 
-    def __init__(self, config: BaselineProposerConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: BaselineProposerConfig | None = None,
+        *,
+        sizing_bridge: TradeIdeaPositionSizingBridge | None = None,
+    ) -> None:
         self._config = config or BaselineProposerConfig()
+        self._sizing_bridge = sizing_bridge or TradeIdeaPositionSizingBridge(
+            self._config.sizing_config
+        )
 
     @property
     def proposer_id(self) -> str:
         return f"baseline-ma-{self._config.short_window}-{self._config.long_window}"
 
-    def propose(self, snapshot: MarketSnapshot) -> list[TradeIdea]:
+    def propose(
+        self,
+        snapshot: MarketSnapshot,
+        *,
+        confidence_overlay: ConfidenceOverlay | None = None,
+    ) -> list[TradeIdea]:
         ideas: list[TradeIdea] = []
         for series in snapshot.series:
-            idea = self._propose_for_series(snapshot, series)
+            idea = self._propose_for_series(snapshot, series, confidence_overlay=confidence_overlay)
             if idea is not None:
                 ideas.append(idea)
         return ideas
 
     def _propose_for_series(
-        self, snapshot: MarketSnapshot, series: SymbolSeries
+        self,
+        snapshot: MarketSnapshot,
+        series: SymbolSeries,
+        *,
+        confidence_overlay: ConfidenceOverlay | None = None,
     ) -> TradeIdea | None:
         config = self._config
         as_of = _utc_aware(snapshot.as_of)
@@ -107,7 +133,12 @@ class BaselineProposer:
         target = (close + config.reward_multiple * (close - stop_level)).quantize(
             config.price_precision
         )
-        stop_distance_pct = ((close - stop_level) / close * 100).quantize(Decimal("0.01"))
+        # Size against the worst permitted long entry (the top of the entry
+        # zone): a fill at entry_upper is explicitly allowed, so the persisted
+        # risk snapshot must not assume a cheaper fill at the last close.
+        stop_distance_pct = ((entry_upper - stop_level) / entry_upper * 100).quantize(
+            Decimal("0.01")
+        )
 
         volumes = [candle.volume for candle in series.candles[-config.long_window :]]
         average_volume = sum(volumes, Decimal("0")) / Decimal(len(volumes))
@@ -119,6 +150,21 @@ class BaselineProposer:
                 if volume_confirmed
                 else "Crossover lacks volume confirmation; treat as a weaker signal"
             ),
+        )
+        # Overlays (e.g. the regime-aware proposer) must adjust the visible
+        # confidence BEFORE sizing so the decision-confidence factor and the
+        # persisted confidence label agree.
+        if confidence_overlay is not None:
+            confidence = confidence_overlay(series.symbol, confidence)
+        sizing = self._sizing_bridge.recommend(
+            TradeIdeaSizingContext(
+                symbol=series.symbol,
+                current_price=entry_upper,
+                confidence_label=confidence.label,
+                stop_loss_distance=entry_upper - stop_level,
+                take_profit_distance=target - entry_upper,
+                max_loss_pct=config.risk_per_idea_pct,
+            )
         )
 
         idea = TradeIdea(
@@ -139,19 +185,17 @@ class BaselineProposer:
                 f"Take profit near {target} ({config.reward_multiple}R) or exit at expiry"
             ),
             max_loss=MaxLoss(
-                percent_of_account=config.risk_per_idea_pct,
+                amount=sizing.estimated_loss_amount,
+                percent_of_account=sizing.estimated_loss_pct,
                 assumptions=(
-                    f"Position sized so a stop-out at {stop_level} costs "
-                    f"{config.risk_per_idea_pct}% of account equity",
-                    f"Stop distance is {stop_distance_pct}% from the last close",
+                    f"PositionSizer notional {sizing.recommendation.notional} implies "
+                    f"an estimated stop-out loss of {sizing.estimated_loss_amount}",
+                    f"Risk budget cap remains {sizing.effective_max_loss_pct}% per idea",
+                    f"Sized at the worst permitted entry {entry_upper}; stop distance "
+                    f"is {stop_distance_pct}% from there",
                 ),
             ),
-            sizing_recommendation=SizingRecommendation(
-                rationale=(
-                    f"Size = ({config.risk_per_idea_pct}% of equity) / "
-                    f"({stop_distance_pct}% stop distance) in notional terms"
-                ),
-            ),
+            sizing_recommendation=sizing.recommendation,
             time_horizon=TimeHorizon(
                 expected_hold=config.expected_hold,
                 expires_at=as_of + timedelta(hours=config.expiry_hours),
@@ -159,6 +203,7 @@ class BaselineProposer:
             data_used=(
                 f"{snapshot.source}:{series.symbol}:{series.granularity}"
                 f":as_of={as_of.isoformat()}",
+                sizing.data_used,
             ),
             confidence=confidence,
             failure_mode=(

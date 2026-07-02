@@ -67,8 +67,18 @@ from gpt_trader.features.trade_ideas.paper_reconciliation import (
     paper_fill_events_from_store_events,
     validate_paper_reconciliation_profile,
 )
-from gpt_trader.features.trade_ideas.policy import ApprovalPolicy, PolicyViolationError
+from gpt_trader.features.trade_ideas.policy import (
+    ApprovalBudgetContext,
+    ApprovalPolicy,
+    PolicyViolationError,
+)
 from gpt_trader.features.trade_ideas.proposer import Proposer
+from gpt_trader.features.trade_ideas.regime import (
+    DEFAULT_SUPPRESSED_REGIMES,
+    REGIME_DETECTOR_VERSION,
+    RegimeAwareProposer,
+    RegimeAwareProposerConfig,
+)
 from gpt_trader.features.trade_ideas.replay import (
     ReplayOutcome,
     ReplayReport,
@@ -103,6 +113,14 @@ from gpt_trader.features.trade_ideas.service import (
     resolve_ideas_root,
     resolve_trade_idea_actor_id,
 )
+from gpt_trader.features.trade_ideas.sizing import (
+    POSITION_SIZER_BRIDGE_VERSION,
+    PositionSizerLike,
+    TradeIdeaPositionSizingBridge,
+    TradeIdeaSizingConfig,
+    TradeIdeaSizingContext,
+    TradeIdeaSizingOutput,
+)
 from gpt_trader.features.trade_ideas.snapshot import (
     MarketSnapshot,
     SnapshotIntegrityError,
@@ -130,6 +148,7 @@ __all__ = [
     "ACTOR_ENV_VAR",
     "DEFAULT_RISK_BUDGET",
     "DEFAULT_IDEAS_ROOT",
+    "DEFAULT_SUPPRESSED_REGIMES",
     "DEFAULT_TIME_IN_FORCE",
     "DEFAULT_VENUE_ORDER_TYPE",
     "DuplicateCloseoutAttributionError",
@@ -139,6 +158,7 @@ __all__ = [
     "TICKET_PAYLOAD_SCHEMA_VERSION",
     "TERMINAL_STATES",
     "ActorType",
+    "ApprovalBudgetContext",
     "ApprovalPolicy",
     "AuditAction",
     "AuditEvent",
@@ -164,6 +184,7 @@ __all__ = [
     "MaxLoss",
     "MaxLossSnapshot",
     "PAPER_RECONCILIATION_PROFILES",
+    "POSITION_SIZER_BRIDGE_VERSION",
     "PaperFillEvent",
     "PaperFillProfileError",
     "PaperFillReconciliationEntry",
@@ -171,6 +192,7 @@ __all__ = [
     "PaperFillReconciler",
     "PreApprovalBrokerTicketError",
     "PolicyViolationError",
+    "PositionSizerLike",
     "ProductType",
     "Proposer",
     "ReplayOutcome",
@@ -178,6 +200,9 @@ __all__ = [
     "ReplayResult",
     "ReplayRunnerConfig",
     "ReplayScoringError",
+    "REGIME_DETECTOR_VERSION",
+    "RegimeAwareProposer",
+    "RegimeAwareProposerConfig",
     "RiskBudget",
     "RiskBudgetLog",
     "ScoringLevels",
@@ -193,11 +218,15 @@ __all__ = [
     "TradeIdeaListQuery",
     "TradeIdeaListResult",
     "TradeIdeaListSortKey",
+    "TradeIdeaPositionSizingBridge",
     "TradeIdeaQueueExpiration",
     "TradeIdeaQueueStatus",
     "TradeIdeaQueryPage",
     "TradeIdeaReplayRunner",
     "TradeIdeaService",
+    "TradeIdeaSizingConfig",
+    "TradeIdeaSizingContext",
+    "TradeIdeaSizingOutput",
     "TradeIdeaState",
     "TradeIdeaStore",
     "TradeIdeaView",

@@ -20,6 +20,7 @@ from .checks import (
     check_risk_configuration,
     check_system_time,
     check_test_suite,
+    check_trade_ideas_readiness,
     simulate_dry_run,
 )
 from .context import PreflightContext
@@ -115,6 +116,9 @@ class PreflightCheck:
 
     def check_readiness_report(self) -> bool:
         return check_readiness_report(self)
+
+    def check_trade_ideas_readiness(self) -> bool:
+        return check_trade_ideas_readiness(self)
 
     def check_event_store_redaction(self) -> bool:
         return check_event_store_redaction(self)
