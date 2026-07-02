@@ -11,7 +11,7 @@ import pytest
 
 import gpt_trader.security.validate as security_validate_module
 from gpt_trader.core import Balance, Position
-from gpt_trader.features.live_trade.strategies.perps_baseline import Action, Decision
+from gpt_trader.features.live_trade.strategies.baseline import Action, Decision
 
 
 def test_health_check_runner_initialized(engine):

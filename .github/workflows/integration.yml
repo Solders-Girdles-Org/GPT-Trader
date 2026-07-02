@@ -2,22 +2,12 @@ name: Integration Tests (Manual)
 
 on:
   workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Environment to run tests against'
-        required: true
-        default: 'sandbox'
-        type: choice
-        options:
-          - sandbox
-          - production
 
 jobs:
   integration:
-    name: Coinbase Integration
+    name: Integration Suite (Mock Broker)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    environment: ${{ github.event.inputs.environment }}
     env:
       GPT_TRADER_STRICT_CONTAINER: "1"
       PYTHONWARNINGS: default
@@ -25,6 +15,8 @@ jobs:
     steps:
       # actions/checkout@v7
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
 
       - name: Install uv
         # astral-sh/setup-uv@v7
@@ -41,24 +33,9 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
-      # Only run if secrets are available
-      - name: Run Integration Tests
-        env:
-          COINBASE_API_KEY: ${{ secrets.COINBASE_API_KEY }}
-          COINBASE_API_SECRET: ${{ secrets.COINBASE_API_SECRET }}
-          COINBASE_PASSPHRASE: ${{ secrets.COINBASE_PASSPHRASE }}
-          COINBASE_ENV: ${{ github.event.inputs.environment }}
-        run: |
-          if [ -z "${COINBASE_API_KEY}" ] || [ -z "${COINBASE_API_SECRET}" ] || [ -z "${COINBASE_PASSPHRASE}" ]; then
-            echo "Skipping integration tests: Coinbase secrets not set."
-            exit 0
-          fi
-          echo "Running integration tests against ${{ github.event.inputs.environment }}..."
-          # Running the integration tests that were previously in targeted-suites
-          # assuming they are located in tests/integration or similar.
-          # Based on targeted-suites.yml, it ran:
-          # pytest tests/unit/gpt_trader/features/brokerages/coinbase -v (Coinbase API suite)
-          # pytest tests/integration/test_paper_mode.py (Perps paper)
-
-          # Override default marker filter in pytest.ini to run integration tests.
-          uv run pytest tests/integration/ -v -m "integration and not real_api and not legacy_delete and not legacy_modernize"
+      # Full integration suite including slow tests. The suite runs against
+      # DeterministicBroker (tests/integration/conftest.py forces MOCK_BROKER=1),
+      # so no Coinbase secrets or deployment environment are needed. The fast
+      # subset (not slow) also runs on every PR via ci.yml.
+      - name: Run integration tests
+        run: uv run pytest -o addopts= -m "integration and not real_api" tests/integration -v

@@ -31,6 +31,15 @@ from gpt_trader.core.market import (
     Quote,
 )
 
+# Broker protocols
+from gpt_trader.core.protocols import (
+    BrokerProtocol,
+    ExtendedBrokerProtocol,
+    MarketDataProtocol,
+    TickerFreshnessProvider,
+    TickerFreshnessProviderSource,
+)
+
 # Strategy types
 from gpt_trader.core.strategy import (
     Action,
@@ -62,6 +71,12 @@ __all__ = [
     # Strategy
     "Action",
     "Decision",
+    # Broker protocols
+    "BrokerProtocol",
+    "ExtendedBrokerProtocol",
+    "MarketDataProtocol",
+    "TickerFreshnessProvider",
+    "TickerFreshnessProviderSource",
     # Errors
     "InvalidRequestError",
     "InsufficientFunds",

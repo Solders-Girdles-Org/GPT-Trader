@@ -10,7 +10,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from gpt_trader.core import Product
-from gpt_trader.features.live_trade.strategies.perps_baseline import Decision
+from gpt_trader.features.live_trade.strategies.baseline import Decision
 
 if TYPE_CHECKING:
     from gpt_trader.features.live_trade.strategies.base import MarketDataContext
