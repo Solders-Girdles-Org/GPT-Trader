@@ -337,6 +337,11 @@ def test_cross_slice_narrow_import_prefixes_are_frozen() -> None:
     )
 
 
+def test_cross_slice_narrow_import_prefixes_have_topology_edges() -> None:
+    for source, target, _prefix in check_import_boundaries.CROSS_SLICE_NARROW_IMPORT_PREFIXES:
+        assert (source, target) in check_import_boundaries.CROSS_SLICE_ALLOWED_EDGES
+
+
 def test_trade_ideas_allowed_prefixes_are_frozen() -> None:
     assert check_import_boundaries.TRADE_IDEAS_ALLOWED_IMPORT_PREFIXES == (
         "gpt_trader.core",

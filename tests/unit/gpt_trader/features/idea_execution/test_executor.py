@@ -36,6 +36,7 @@ from gpt_trader.features.trade_ideas import (
     TradeDirection,
     TradeIdea,
     TradeIdeaService,
+    UnknownTradeIdeaError,
 )
 
 _NOW = datetime(2026, 7, 2, 12, 0, tzinfo=UTC)
@@ -180,5 +181,5 @@ class TestApprovedIdeaAdmission:
             )
 
     def test_missing_idea_error_propagates(self, service: TradeIdeaService) -> None:
-        with pytest.raises(Exception, match="trade-20260702-exec-404"):
+        with pytest.raises(UnknownTradeIdeaError, match="trade-20260702-exec-404"):
             self._executor(service).resolve_approved_idea("trade-20260702-exec-404")

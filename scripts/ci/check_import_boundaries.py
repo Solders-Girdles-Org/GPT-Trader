@@ -197,6 +197,13 @@ CROSS_SLICE_NARROW_IMPORT_PREFIXES: frozenset[tuple[str, str, str]] = frozenset(
     }
 )
 
+for _source, _target, _prefix in CROSS_SLICE_NARROW_IMPORT_PREFIXES:
+    if (_source, _target) not in CROSS_SLICE_ALLOWED_EDGES:
+        raise ValueError(
+            f"Narrow cross-slice prefix for {_source}->{_target} requires a matching "
+            "CROSS_SLICE_ALLOWED_EDGES entry."
+        )
+
 
 def _discover_feature_slices() -> tuple[str, ...]:
     """Enumerate feature slice packages so new slices are guarded automatically."""
