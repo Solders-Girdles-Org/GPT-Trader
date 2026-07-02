@@ -288,6 +288,10 @@ def build_steps(profile: LocalCIProfile, args: argparse.Namespace) -> list[Plann
             env=test_env,
         ),
         PlannedStep(
+            label="Stage 1 rails end-to-end smoke",
+            command=["uv", "run", "python", "scripts/ops/stage1_rails_smoke.py"],
+        ),
+        PlannedStep(
             label="Property tests",
             command=["uv", "run", "pytest", "tests/property", "-v"],
             env=test_env,
