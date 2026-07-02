@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from typing import cast
 
 import pytest
 
 from gpt_trader.core import Candle
+from gpt_trader.features.intelligence.regime import MarketRegimeDetector, RegimeState, RegimeType
+from gpt_trader.features.intelligence.sizing import PositionSizer, PositionSizingConfig
 from gpt_trader.features.trade_ideas import (
     BaselineProposer,
     BaselineProposerConfig,
@@ -13,6 +16,8 @@ from gpt_trader.features.trade_ideas import (
     Proposer,
     SymbolSeries,
     TradeDirection,
+    TradeIdeaPositionSizingBridge,
+    TradeIdeaSizingConfig,
     evaluate_eligibility,
 )
 
@@ -52,6 +57,17 @@ FLAT = ["100"] * 30
 DOWNTREND = [str(130 - i) for i in range(30)]
 
 
+class StaticRegimeDetector:
+    def __init__(self, state: RegimeState) -> None:
+        self._state = state
+
+    def get_regime(self, symbol: str) -> RegimeState:
+        return self._state
+
+    def get_indicator_values(self, symbol: str) -> dict[str, object]:
+        return {"atr": None}
+
+
 def test_satisfies_proposer_protocol() -> None:
     assert isinstance(BaselineProposer(CONFIG), Proposer)
 
@@ -70,11 +86,64 @@ def test_idea_records_are_complete_and_pinned() -> None:
     idea = BaselineProposer(CONFIG).propose(snapshot_of(make_series(GOLDEN_CROSS)))[0]
 
     assert idea.time_horizon.expires_at == AS_OF + timedelta(hours=CONFIG.expiry_hours)
-    assert idea.data_used == (f"coinbase:candles:BTC-USD:1d:as_of={AS_OF.isoformat()}",)
-    assert idea.max_loss.percent_of_account == CONFIG.risk_per_idea_pct
+    assert idea.data_used[0] == f"coinbase:candles:BTC-USD:1d:as_of={AS_OF.isoformat()}"
+    assert any("engine=position-sizer-bridge-v1" in item for item in idea.data_used)
+    # Sized at the worst permitted entry (entry_zone.upper), not the last close.
+    assert idea.max_loss.amount == Decimal("2.26")
+    assert idea.max_loss.percent_of_account == Decimal("0.0226")
+    assert any("Risk budget cap remains 2% per idea" in item for item in idea.max_loss.assumptions)
     assert idea.entry_zone.lower is not None
     assert idea.entry_zone.upper is not None
     assert idea.entry_zone.lower < idea.entry_zone.upper
+    assert idea.sizing_recommendation.quantity is not None
+    assert idea.sizing_recommendation.notional is not None
+    assert "kelly_factor=1.0000 (kelly_enabled=false)" in idea.sizing_recommendation.rationale
+
+
+def test_position_sizer_enriches_sizing_with_regime_kelly_and_budget_cap() -> None:
+    state = RegimeState(
+        regime=RegimeType.BULL_QUIET,
+        confidence=0.8,
+        trend_score=0.7,
+        volatility_percentile=0.2,
+        momentum_score=0.8,
+    )
+    position_config = PositionSizingConfig(
+        base_position_fraction=2.0,
+        max_position_fraction=2.0,
+        min_position_fraction=0.0,
+        regime_scale_factors={RegimeType.BULL_QUIET.name: 1.2},
+        enable_volatility_scaling=False,
+        enable_confidence_scaling=False,
+        enable_kelly_sizing=True,
+        max_portfolio_heat=2.0,
+    )
+    sizer = PositionSizer(
+        regime_detector=cast(MarketRegimeDetector, StaticRegimeDetector(state)),
+        config=position_config,
+    )
+    for index in range(10):
+        sizer.record_trade_result("BTC-USD", is_win=index < 8)
+    sizing_config = TradeIdeaSizingConfig(
+        equity=Decimal("10000"),
+        position_sizing_config=position_config,
+    )
+    proposer = BaselineProposer(
+        CONFIG,
+        sizing_bridge=TradeIdeaPositionSizingBridge(sizing_config, position_sizer=sizer),
+    )
+
+    idea = proposer.propose(snapshot_of(make_series(GOLDEN_CROSS)))[0]
+
+    assert idea.sizing_recommendation.quantity is not None
+    assert idea.sizing_recommendation.notional is not None
+    assert "regime=BULL_QUIET regime_factor=1.0800" in idea.sizing_recommendation.rationale
+    assert "kelly_factor=0.6500 (kelly_enabled=true)" in idea.sizing_recommendation.rationale
+    assert "budget_cap=applied" in idea.sizing_recommendation.rationale
+    sizing_inputs = next(item for item in idea.data_used if item.startswith("sizing:BTC-USD"))
+    assert "regime=BULL_QUIET" in sizing_inputs
+    assert "kelly_factor=0.6500" in sizing_inputs
+    assert "budget_cap_applied=true" in sizing_inputs
 
 
 def test_internal_naive_snapshot_as_of_produces_aware_expiry() -> None:

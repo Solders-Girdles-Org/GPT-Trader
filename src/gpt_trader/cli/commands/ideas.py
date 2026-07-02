@@ -12,7 +12,7 @@ import asyncio
 import hashlib
 import json
 from argparse import ArgumentParser, Namespace
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
@@ -35,6 +35,7 @@ from gpt_trader.cli.commands.ideas_input import (
 )
 from gpt_trader.cli.response import CliError, CliErrorCode, CliResponse, RawCliOutput
 from gpt_trader.errors import ValidationError
+from gpt_trader.features.intelligence.regime import RegimeConfig
 from gpt_trader.features.trade_ideas import (
     DEFAULT_TIME_IN_FORCE,
     DEFAULT_VENUE_ORDER_TYPE,
@@ -52,14 +53,21 @@ from gpt_trader.features.trade_ideas import (
     MarketSnapshotBuildRequest,
     PaperFillReconciler,
     PolicyViolationError,
+    Proposer,
+    RegimeAwareProposer,
+    RegimeAwareProposerConfig,
     ReplayReport,
     ReplayRunnerConfig,
     TradeDirection,
     TradeIdeaListQuery,
     TradeIdeaListResult,
     TradeIdeaListSortKey,
+    TradeIdeaPositionSizingBridge,
     TradeIdeaReplayRunner,
     TradeIdeaService,
+    TradeIdeaSizingConfig,
+    TradeIdeaSizingContext,
+    TradeIdeaSizingOutput,
     TradeIdeaState,
     UnknownTradeIdeaError,
     canonical_granularity,
@@ -101,6 +109,7 @@ BUDGET_FIELDS = (
     "gain_retention_floor_pct",
     "allow_futures_leverage",
     "allow_naked_shorts",
+    "account_equity",
 )
 
 
@@ -152,6 +161,33 @@ def register(subparsers: Any) -> None:
         help="Audit reason",
     )
     propose_baseline.set_defaults(handler=_handle_propose_baseline, subcommand="propose-baseline")
+
+    propose_regime_aware = ideas_subparsers.add_parser(
+        "propose-regime-aware",
+        help="Generate regime-aware proposals from a local market snapshot fixture",
+        description=(
+            "Generate deterministic RegimeAwareProposer trade ideas from a local JSON "
+            "market snapshot and persist them through the audited trade-idea service. "
+            "This command reads no broker, account, credential, canary, or preflight data."
+        ),
+    )
+    _add_common_options(propose_regime_aware)
+    _add_actor_options(propose_regime_aware, default_description="regime-aware proposer id")
+    propose_regime_aware.add_argument(
+        "--snapshot",
+        type=Path,
+        required=True,
+        help="Read a local MarketSnapshot JSON fixture",
+    )
+    propose_regime_aware.add_argument(
+        "--reason",
+        default="Regime-aware proposer generated idea from local snapshot",
+        help="Audit reason",
+    )
+    propose_regime_aware.set_defaults(
+        handler=_handle_propose_regime_aware,
+        subcommand="propose-regime-aware",
+    )
 
     snapshot = ideas_subparsers.add_parser(
         "snapshot",
@@ -451,6 +487,70 @@ def register(subparsers: Any) -> None:
     )
     baseline.set_defaults(handler=_handle_replay_baseline, subcommand="replay baseline")
 
+    regime_aware = replay_subparsers.add_parser(
+        "regime-aware",
+        help="Replay the regime-aware proposer over candle history",
+        description=(
+            "Feed a local OHLCV candle fixture to the deterministic regime-aware proposer "
+            "and summarize replay scoring. This command is broker-free and read-only."
+        ),
+    )
+    _add_output_options(regime_aware)
+    regime_aware.add_argument(
+        "--file",
+        type=Path,
+        required=True,
+        help="JSON fixture with a top-level candles array of OHLCV bars",
+    )
+    regime_aware.add_argument("--symbol", required=True, help="Symbol represented by the candles")
+    regime_aware.add_argument(
+        "--granularity",
+        required=True,
+        help="Candle granularity, for example ONE_HOUR, 1H, or 1D",
+    )
+    regime_aware.add_argument(
+        "--source",
+        default="fixture:candles",
+        help="Source label stamped into point-in-time replay snapshots",
+    )
+    regime_aware.add_argument(
+        "--min-history",
+        type=_positive_int_value,
+        help=(
+            "Minimum historical candles before evaluating snapshots "
+            "(default: max(short-window, long-window) + crossover-lookback)"
+        ),
+    )
+    regime_aware.add_argument("--short-window", type=_positive_int_value, default=10)
+    regime_aware.add_argument("--long-window", type=_positive_int_value, default=50)
+    regime_aware.add_argument("--crossover-lookback", type=_positive_int_value, default=3)
+    regime_aware.add_argument(
+        "--risk-per-idea-pct",
+        type=_non_negative_decimal_value,
+        default=Decimal("2"),
+    )
+    regime_aware.add_argument(
+        "--entry-band-pct",
+        type=_positive_decimal_value,
+        default=Decimal("1"),
+    )
+    regime_aware.add_argument(
+        "--reward-multiple",
+        type=_positive_decimal_value,
+        default=Decimal("2"),
+    )
+    regime_aware.add_argument("--expiry-hours", type=_positive_int_value, default=48)
+    regime_aware.add_argument("--expected-hold", default="5-15 days")
+    regime_aware.add_argument(
+        "--price-precision",
+        type=_positive_decimal_value,
+        default=Decimal("0.01"),
+    )
+    regime_aware.set_defaults(
+        handler=_handle_replay_regime_aware,
+        subcommand="replay regime-aware",
+    )
+
     closeout = ideas_subparsers.add_parser(
         "closeout",
         help="Record or inspect terminal closeout attribution",
@@ -698,6 +798,14 @@ def register(subparsers: Any) -> None:
         "--allow-naked-shorts",
         choices=("true", "false"),
         help="Whether naked shorts are permitted",
+    )
+    budget_set.add_argument(
+        "--account-equity",
+        type=_non_negative_decimal_value,
+        help=(
+            "Operator-attested account equity; denominator for the "
+            "max_open_notional_pct approval gate"
+        ),
     )
     budget_set.set_defaults(handler=_handle_budget_set, subcommand="budget set")
 
@@ -951,18 +1059,38 @@ def _default_replay_min_history(config: BaselineProposerConfig) -> int:
     return max(config.short_window, config.long_window) + config.crossover_lookback
 
 
-def _resolve_replay_min_history(args: Namespace, config: BaselineProposerConfig) -> int:
-    minimum_history = _default_replay_min_history(config)
+def _default_regime_replay_min_history(
+    config: BaselineProposerConfig,
+    regime_config: RegimeConfig,
+) -> int:
+    return max(
+        _default_replay_min_history(config),
+        regime_config.long_ema_period + regime_config.min_regime_ticks,
+    )
+
+
+def _resolve_replay_min_history(
+    args: Namespace,
+    config: BaselineProposerConfig,
+    *,
+    minimum_history: int | None = None,
+    minimum_context: str | None = None,
+) -> int:
+    required_min_history = (
+        minimum_history if minimum_history is not None else _default_replay_min_history(config)
+    )
     requested_min_history = cast(int | None, args.min_history)
     if requested_min_history is None:
-        return minimum_history
-    if requested_min_history < minimum_history:
+        return required_min_history
+    if requested_min_history < required_min_history:
+        context = f", {minimum_context}" if minimum_context is not None else ""
         raise CandleInputError(
             (
                 "--min-history must be at least "
-                f"{minimum_history} for short-window={config.short_window}, "
+                f"{required_min_history} for short-window={config.short_window}, "
                 f"long-window={config.long_window}, "
                 f"crossover-lookback={config.crossover_lookback}"
+                f"{context}"
             ),
             field="min_history",
         )
@@ -1007,28 +1135,73 @@ def _handle_propose(args: Namespace) -> CliResponse:
     return _success(command, args, payload, text, warnings=warning_messages)
 
 
+class _LazyBudgetSizingBridge(TradeIdeaPositionSizingBridge):
+    """Defer the budget read (and its seed-on-first-use side effect) until a
+    candidate actually needs sizing, so no-signal baseline runs stay read-only."""
+
+    def __init__(self, service: TradeIdeaService) -> None:
+        self._budget_service = service
+        self._delegate: TradeIdeaPositionSizingBridge | None = None
+
+    def recommend(self, context: TradeIdeaSizingContext) -> TradeIdeaSizingOutput:
+        if self._delegate is None:
+            budget = self._budget_service.current_budget()
+            # Operator-attested equity must denominate sizing the same way the
+            # approval gate uses it; otherwise max_loss percentages are computed
+            # against the bridge's default equity while approve() compares them
+            # to caps on the attested account.
+            if budget.account_equity is not None:
+                sizing_config = TradeIdeaSizingConfig(
+                    equity=budget.account_equity,
+                    risk_budget=budget,
+                )
+            else:
+                sizing_config = TradeIdeaSizingConfig(risk_budget=budget)
+            self._delegate = TradeIdeaPositionSizingBridge(sizing_config)
+        return self._delegate.recommend(context)
+
+
 def _handle_propose_baseline(args: Namespace) -> CliResponse:
-    command = "ideas propose-baseline"
-    proposer = BaselineProposer()
+    return _handle_propose_from_snapshot(
+        args,
+        "ideas propose-baseline",
+        lambda service: BaselineProposer(sizing_bridge=_LazyBudgetSizingBridge(service)),
+    )
+
+
+def _handle_propose_regime_aware(args: Namespace) -> CliResponse:
+    return _handle_propose_from_snapshot(
+        args,
+        "ideas propose-regime-aware",
+        lambda service: RegimeAwareProposer(sizing_bridge=_LazyBudgetSizingBridge(service)),
+    )
+
+
+def _handle_propose_from_snapshot(
+    args: Namespace,
+    command: str,
+    proposer_factory: Callable[[TradeIdeaService], Proposer],
+) -> CliResponse:
     try:
         snapshot = _load_market_snapshot(args.snapshot)
+        service = _service(args)
+        proposer = proposer_factory(service)
         ideas = proposer.propose(snapshot)
         if not ideas:
-            payload = _baseline_payload(snapshot, proposer.proposer_id, [])
+            payload = _proposer_payload(snapshot, proposer.proposer_id, [])
             text = _status_line(command, "OK", "0 proposals")
             return _success(command, args, payload, text, was_noop=True)
 
-        service = _service(args)
         proposal_batch = tuple(ideas)
         service.validate_new_proposals(proposal_batch)
         previews = [service.approval_violations(idea, actor_type=ActorType.HUMAN) for idea in ideas]
-        actor_id = _baseline_actor_id(args, proposer.proposer_id)
+        actor_id = _proposer_actor_id(args, proposer.proposer_id)
         views = service.propose_batch(
             proposal_batch,
             actor_id=actor_id,
             actor_type=ActorType.AI,
             reason=args.reason,
-            evidence=_baseline_evidence(args.snapshot, snapshot, proposer.proposer_id),
+            evidence=_proposer_evidence(args.snapshot, snapshot, proposer.proposer_id),
         )
     except SnapshotInputError as error:
         return _input_error(command, args, error)
@@ -1036,14 +1209,14 @@ def _handle_propose_baseline(args: Namespace) -> CliResponse:
         return _mapped_error(command, args, error)
 
     proposed = [
-        _baseline_proposed_summary(view, violations)
+        _proposer_proposed_summary(view, violations)
         for view, violations in zip(views, previews, strict=True)
     ]
-    payload = _baseline_payload(snapshot, proposer.proposer_id, proposed)
+    payload = _proposer_payload(snapshot, proposer.proposer_id, proposed)
     warnings = [
         warning for proposal in proposed for warning in proposal["approval_preview"]["warnings"]
     ]
-    text = _baseline_text(command, proposed)
+    text = _proposer_text(command, proposed)
     return _success(command, args, payload, text, warnings=warnings)
 
 
@@ -1198,12 +1371,12 @@ def _handle_resubmit(args: Namespace) -> CliResponse:
     return _success(command, args, payload, text, warnings=warning_messages)
 
 
-def _baseline_actor_id(args: Namespace, proposer_id: str) -> str:
+def _proposer_actor_id(args: Namespace, proposer_id: str) -> str:
     explicit_actor = getattr(args, "actor", None)
     return resolve_trade_idea_actor_id(explicit_actor or proposer_id)
 
 
-def _baseline_evidence(
+def _proposer_evidence(
     snapshot_path: Path,
     snapshot: MarketSnapshot,
     proposer_id: str,
@@ -1216,7 +1389,7 @@ def _baseline_evidence(
     )
 
 
-def _baseline_proposed_summary(view: Any, violations: list[str]) -> dict[str, Any]:
+def _proposer_proposed_summary(view: Any, violations: list[str]) -> dict[str, Any]:
     warning_messages = [f"would fail approval: {violation}" for violation in violations]
     return {
         **_view_summary(view),
@@ -1228,7 +1401,7 @@ def _baseline_proposed_summary(view: Any, violations: list[str]) -> dict[str, An
     }
 
 
-def _baseline_payload(
+def _proposer_payload(
     snapshot: MarketSnapshot,
     proposer_id: str,
     proposed: list[dict[str, Any]],
@@ -1245,7 +1418,7 @@ def _baseline_payload(
     }
 
 
-def _baseline_text(command: str, proposed: list[dict[str, Any]]) -> str:
+def _proposer_text(command: str, proposed: list[dict[str, Any]]) -> str:
     lines = [_status_line(command, "OK", f"{len(proposed)} proposals")]
     for proposal in proposed:
         lines.append(
@@ -1398,22 +1571,26 @@ def _handle_export_ticket(args: Namespace) -> CliResponse | RawCliOutput:
         return _mapped_error(command, args, error)
 
 
+def _replay_baseline_config_from_args(args: Namespace) -> BaselineProposerConfig:
+    return BaselineProposerConfig(
+        short_window=args.short_window,
+        long_window=args.long_window,
+        crossover_lookback=args.crossover_lookback,
+        risk_per_idea_pct=args.risk_per_idea_pct,
+        entry_band_pct=args.entry_band_pct,
+        reward_multiple=args.reward_multiple,
+        expiry_hours=args.expiry_hours,
+        expected_hold=args.expected_hold,
+        price_precision=args.price_precision,
+    )
+
+
 def _handle_replay_baseline(args: Namespace) -> CliResponse:
     command = "ideas replay baseline"
     try:
         _validate_replay_granularity(args.granularity)
         candles = _load_candle_fixture(args.file)
-        proposer_config = BaselineProposerConfig(
-            short_window=args.short_window,
-            long_window=args.long_window,
-            crossover_lookback=args.crossover_lookback,
-            risk_per_idea_pct=args.risk_per_idea_pct,
-            entry_band_pct=args.entry_band_pct,
-            reward_multiple=args.reward_multiple,
-            expiry_hours=args.expiry_hours,
-            expected_hold=args.expected_hold,
-            price_precision=args.price_precision,
-        )
+        proposer_config = _replay_baseline_config_from_args(args)
         min_history = _resolve_replay_min_history(args, proposer_config)
         report = TradeIdeaReplayRunner(
             BaselineProposer(proposer_config),
@@ -1425,7 +1602,42 @@ def _handle_replay_baseline(args: Namespace) -> CliResponse:
         return _mapped_error(command, args, error)
 
     payload = report.to_dict()
-    text = _replay_report_text(report)
+    text = _replay_report_text(report, command=command)
+    return _success(command, args, payload, text, was_noop=report.ideas_proposed == 0)
+
+
+def _handle_replay_regime_aware(args: Namespace) -> CliResponse:
+    command = "ideas replay regime-aware"
+    try:
+        _validate_replay_granularity(args.granularity)
+        candles = _load_candle_fixture(args.file)
+        proposer_config = _replay_baseline_config_from_args(args)
+        regime_config = RegimeConfig()
+        min_history = _resolve_replay_min_history(
+            args,
+            proposer_config,
+            minimum_history=_default_regime_replay_min_history(proposer_config, regime_config),
+            minimum_context=(
+                f"regime-long-ema={regime_config.long_ema_period}, "
+                f"min-regime-ticks={regime_config.min_regime_ticks}"
+            ),
+        )
+        report = TradeIdeaReplayRunner(
+            RegimeAwareProposer(
+                RegimeAwareProposerConfig(
+                    baseline_config=proposer_config,
+                    regime_config=regime_config,
+                ),
+            ),
+            config=ReplayRunnerConfig(source=args.source, min_history=min_history),
+        ).run_series(symbol=args.symbol, granularity=args.granularity, candles=candles)
+    except CandleInputError as error:
+        return _input_error(command, args, error)
+    except Exception as error:
+        return _mapped_error(command, args, error)
+
+    payload = report.to_dict()
+    text = _replay_report_text(report, command=command)
     return _success(command, args, payload, text, was_noop=report.ideas_proposed == 0)
 
 
@@ -1764,10 +1976,13 @@ def _handle_reconcile_paper_fills(args: Namespace) -> CliResponse:
 def _handle_budget_show(args: Namespace) -> CliResponse:
     command = "ideas budget show"
     try:
-        budget = _service(args).current_budget()
+        service = _service(args)
+        budget = service.current_budget()
+        budget_headroom = service.budget_headroom()
     except Exception as error:
         return _mapped_error(command, args, error)
     payload = budget.to_dict()
+    payload["headroom"] = budget_headroom
     text = _budget_text(payload)
     return _success(command, args, payload, text)
 
@@ -2403,12 +2618,12 @@ def _budget_text(payload: dict[str, Any]) -> str:
     return "\n".join(f"{key}: {value}" for key, value in payload.items())
 
 
-def _replay_report_text(report: ReplayReport) -> str:
+def _replay_report_text(report: ReplayReport, *, command: str = "ideas replay baseline") -> str:
     average_return_r = report.average_return_r
     return "\n".join(
         [
             _status_line(
-                "ideas replay baseline",
+                command,
                 "OK",
                 (
                     f"{report.symbol} {report.granularity}, "

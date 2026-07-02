@@ -6,7 +6,10 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
+from tests.unit.gpt_trader.features.trade_ideas.conftest import (
+    attest_account_equity,
+    build_trade_idea,
+)
 
 from gpt_trader.features.trade_ideas import (
     ActorType,
@@ -24,10 +27,12 @@ from gpt_trader.features.trade_ideas import (
 
 @pytest.fixture
 def service(tmp_path: Path) -> TradeIdeaService:
-    return TradeIdeaService(
+    built = TradeIdeaService(
         tmp_path / "trade_ideas",
         now_factory=lambda: datetime(2026, 6, 12, 10, 0, tzinfo=UTC),
     )
+    attest_account_equity(built)
+    return built
 
 
 def _write_closeout_payload(
