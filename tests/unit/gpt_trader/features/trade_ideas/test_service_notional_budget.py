@@ -81,6 +81,17 @@ def test_approval_fails_closed_without_independent_equity_source(
     assert service.get(candidate.decision_id).state is TradeIdeaState.PROPOSED
 
 
+def test_approval_budget_context_is_read_only(
+    service: TradeIdeaService,
+) -> None:
+    # Building a budget context (used by render-only ticket exports) must not
+    # seed risk_budget.jsonl on a root that has never negotiated a budget.
+    context = service.approval_budget_context()
+
+    assert context.account_equity_snapshot is None
+    assert not (service.audit_log.path.parent / "risk_budget.jsonl").exists()
+
+
 def test_attested_budget_equity_overrides_record_inferred_equity(
     service: TradeIdeaService,
 ) -> None:
