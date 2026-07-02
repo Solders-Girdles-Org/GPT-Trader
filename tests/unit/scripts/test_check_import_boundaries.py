@@ -270,7 +270,8 @@ def test_cross_slice_allowlist_is_frozen_topology() -> None:
             ("live_trade", "intelligence"),
             ("live_trade", "strategy_tools"),
             ("live_trade", "trade_ideas"),
-            # PositionSizer bridge enriches trade-idea proposal records.
+            # RegimeAwareProposer overlays regime state; PositionSizer bridge
+            # enriches sizing on trade-idea proposal records.
             ("trade_ideas", "intelligence"),
             ("optimize", "live_trade"),
             ("strategy_tools", "trade_ideas"),
@@ -282,7 +283,9 @@ def test_trade_ideas_allowed_prefixes_are_frozen() -> None:
     assert check_import_boundaries.TRADE_IDEAS_ALLOWED_IMPORT_PREFIXES == (
         "gpt_trader.core",
         "gpt_trader.errors",
-        # PositionSizer bridge adds deterministic sizing metadata pre-approval.
+        # Regime-aware proposer reads MarketRegimeDetector; PositionSizer
+        # bridge adds deterministic sizing metadata pre-approval.
+        "gpt_trader.features.intelligence.regime",
         "gpt_trader.features.intelligence.sizing",
         "gpt_trader.features.trade_ideas",
     )

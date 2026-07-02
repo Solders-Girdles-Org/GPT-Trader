@@ -126,9 +126,11 @@ _MONITORING_FEATURES_RULE = ImportRule(
 TRADE_IDEAS_ALLOWED_IMPORT_PREFIXES: tuple[str, ...] = (
     "gpt_trader.core",
     "gpt_trader.errors",
-    # Architecture rationale: the default-off PositionSizer bridge enriches
-    # trade-idea records with deterministic sizing metadata before human
-    # approval; it does not call broker, order, or live-trading layers.
+    # Architecture rationale: the default-off regime-aware proposer and
+    # PositionSizer bridge enrich trade-idea records from the intelligence
+    # slice (MarketRegimeDetector state, deterministic sizing metadata) before
+    # human approval; they do not call broker, order, or live-trading layers.
+    "gpt_trader.features.intelligence.regime",
     "gpt_trader.features.intelligence.sizing",
     "gpt_trader.features.trade_ideas",
 )
@@ -163,7 +165,8 @@ CROSS_SLICE_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset(
         ("live_trade", "strategy_tools"),
         # engines/strategy.py trade-idea proposal workflow service.
         ("live_trade", "trade_ideas"),
-        # PositionSizer bridge enriches trade-idea proposal records.
+        # RegimeAwareProposer overlays regime state; PositionSizer bridge
+        # enriches sizing on trade-idea proposal records.
         ("trade_ideas", "intelligence"),
         # walk_forward/batch_runner reuse strategy protocol and baseline types.
         ("optimize", "live_trade"),
