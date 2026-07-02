@@ -100,8 +100,9 @@ async def process_symbol(
     }
     engine._status_reporter.update_strategy(active_strats, [decision_record])
 
-    await handle_decision(
-        engine,
+    # Route through the engine method (a thin delegate to handle_decision) so
+    # overrides/monkeypatches of the class seam keep gating live decisions.
+    await engine._handle_decision(
         symbol=symbol,
         decision=decision,
         price=price,
