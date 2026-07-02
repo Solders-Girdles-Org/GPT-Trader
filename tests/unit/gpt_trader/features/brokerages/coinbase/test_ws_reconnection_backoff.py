@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-import gpt_trader.features.brokerages.coinbase.ws as ws_module
+import gpt_trader.utilities.backoff_policy as backoff_policy_module
 from gpt_trader.features.brokerages.coinbase.ws import calculate_backoff_with_jitter
 
 
@@ -84,7 +84,7 @@ class TestCalculateBackoffWithJitter:
 
     def test_jitter_uses_random_uniform(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that jitter uses random.uniform for deterministic testing."""
-        monkeypatch.setattr(ws_module.random, "uniform", lambda a, b: 0.5)
+        monkeypatch.setattr(backoff_policy_module.random, "uniform", lambda a, b: 0.5)
 
         base = 10.0
         jitter_pct = 0.25
