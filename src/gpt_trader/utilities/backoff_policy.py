@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import random
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 
 @dataclass(frozen=True)
@@ -41,7 +41,33 @@ def evaluate_backoff_delay(
     return BackoffDecision(attempt=attempt, delay_seconds=float(delay), capped=capped)
 
 
+def backoff_delay_with_jitter(
+    attempt: int,
+    *,
+    base_seconds: float,
+    max_seconds: float,
+    multiplier: float,
+    jitter_pct: float,
+) -> float:
+    """Exponential backoff delay with symmetric jitter (0-indexed attempts).
+
+    Grows ``base_seconds * multiplier**attempt`` capped at ``max_seconds``,
+    then applies ``random.uniform`` jitter of +/- ``jitter_pct`` (floored at
+    0.1s) to prevent thundering herd on reconnection.
+    """
+    delay = base_seconds * (multiplier**attempt)
+    delay = min(delay, max_seconds)
+
+    if jitter_pct > 0:
+        jitter_range = delay * jitter_pct
+        jitter = random.uniform(-jitter_range, jitter_range)
+        delay = max(0.1, delay + jitter)
+
+    return delay
+
+
 __all__ = [
     "BackoffDecision",
+    "backoff_delay_with_jitter",
     "evaluate_backoff_delay",
 ]
