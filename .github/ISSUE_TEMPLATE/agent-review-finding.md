@@ -1,7 +1,7 @@
 ---
 name: Agent review finding
 about: Promote a validated recurring-review finding for agent implementation
-labels: codex
+labels: agent-review
 ---
 
 <!-- gpt-trader-agent-finding-id: replace-with-stable-id -->

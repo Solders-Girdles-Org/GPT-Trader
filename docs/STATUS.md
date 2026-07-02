@@ -12,8 +12,8 @@ backlog, or any decision. When a stage description elsewhere disagrees with
 observed code, this doc wins until the other is reconciled.
 
 Verify file/function/issue references before relying on them; they reflect the
-dated snapshot below. The next work is the live GitHub issue queue
-(`triage:build-now`), never a list copied here.
+dated snapshot below. The next work is the live GitHub issue queue,
+never a list copied here.
 
 ## Snapshot (2026-07-01)
 

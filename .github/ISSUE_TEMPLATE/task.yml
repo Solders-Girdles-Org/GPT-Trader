@@ -1,0 +1,66 @@
+name: Task
+description: A bounded unit of work — build, fix, or clean up
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What needs to change and why it matters.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: >-
+        Commands, file paths, or links that ground the problem. At least one
+        concrete anchor an implementer can reproduce.
+      placeholder: |
+        - `uv run pytest ...`: current output
+        - `src/gpt_trader/...`: the code in question
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Affected paths, and what is explicitly out of scope.
+      value: |
+        Affected paths:
+        -
+
+        Out of scope:
+        - Live trading or broker/account-capability changes unless explicitly approved
+    validations:
+      required: true
+  - type: dropdown
+    id: touches-trading-execution
+    attributes:
+      label: Touches trading execution
+      description: >-
+        Anything on the order-submission or execution-enablement path requires
+        a decision gate (docs/DIRECTION.md).
+      options:
+        - "false"
+        - "true"
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Checkboxes an implementer can verify mechanically.
+      placeholder: |
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Suggested verification
+      description: Commands that prove the change works.
+      placeholder: |
+        - `uv run pytest tests/unit -n auto -q`
+        - `make ci-required`
+    validations:
+      required: true
