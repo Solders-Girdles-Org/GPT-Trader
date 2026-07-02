@@ -670,6 +670,38 @@ jobs:
       - name: Run contract tests
         run: uv run pytest tests/contract -v
 
+  dependency-audit:
+    name: Dependency Vulnerability Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        # astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        # actions/setup-python@v5
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version-file: ".python-version"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Export locked requirements
+        run: uv export --frozen --all-extras --no-emit-project --no-hashes -o requirements-audit.txt
+
+      - name: Audit dependencies (pip-audit)
+        # --no-deps: the uv export is already a complete pinned closure
+        run: uv run pip-audit -r requirements-audit.txt --disable-pip --no-deps --strict
+
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest

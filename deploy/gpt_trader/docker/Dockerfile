@@ -98,7 +98,7 @@ CMD ["run", "--profile", "prod"]
 # Stage 6: Security scanner (optional tooling layer).
 FROM production AS security
 USER root
-RUN pip install --no-cache-dir safety bandit
-RUN safety check --json \
+RUN pip install --no-cache-dir pip-audit bandit
+RUN pip-audit --strict \
     && bandit -r /app/src -f json -o /tmp/bandit-report.json
 USER trader

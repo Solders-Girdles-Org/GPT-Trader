@@ -18,7 +18,6 @@ dependencies = [
     "pandas>=2.3.3,<3.0.0",
     # Transitive security fixes (pin minimum versions for CVE patches)
     "urllib3>=2.6.0,<3.0.0",   # GHSA-gm62-xv2j-4w53, GHSA-2xpw-w6gg-jr37
-    "filelock>=3.20.3,<4.0.0", # GHSA-w853-jp5j-5j7f
 ]
 
 [project.optional-dependencies]
@@ -81,6 +80,9 @@ dev = [
     # Security scanning
     "pip-audit>=2.9.0,<3.0.0",
     "bandit>=1.7.9,<2.0.0",
+    # Transitive security fix: only dev tooling pulls filelock (pre-commit,
+    # pip-audit), so the CVE floor lives here instead of runtime deps.
+    "filelock>=3.20.3,<4.0.0", # GHSA-w853-jp5j-5j7f
 ]
 
 [tool.black]
