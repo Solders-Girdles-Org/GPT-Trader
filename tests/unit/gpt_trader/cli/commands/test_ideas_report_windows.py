@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -9,6 +10,7 @@ from typing import Any
 import pytest
 
 from gpt_trader.features.trade_ideas import (
+    ActorType,
     AuditIntegrityError,
     CloseoutResolution,
     MaxLoss,
@@ -16,6 +18,7 @@ from gpt_trader.features.trade_ideas import (
 )
 from gpt_trader.features.trade_ideas.report import build_trade_idea_track_record_report
 from gpt_trader.features.trade_ideas.service import TradeIdeaService
+from tests.unit.gpt_trader.cli.commands.conftest import attest_account_equity
 from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
 
 
@@ -38,6 +41,7 @@ def test_windowed_report_ignores_lifecycle_after_cutoff(tmp_path: Path) -> None:
     idea = _idea("trade-window-late-fill")
     service.propose(idea, actor_id="idea-generator-v1")
     current_time[0] = datetime(2026, 6, 1, 12, 0, tzinfo=UTC)
+    attest_account_equity(service)
     service.approve(idea.decision_id, actor_id="rj", reason="Risk verified")
     service.record_submission(idea.decision_id, actor_id="operator", venue="manual")
     service.record_fill(idea.decision_id, actor_id="operator", venue="manual")
@@ -85,6 +89,7 @@ def test_windowed_report_uses_cutoff_for_approval_readiness(tmp_path: Path) -> N
         root,
         now_factory=lambda: datetime(2026, 5, 20, 12, 0, tzinfo=UTC),
     )
+    attest_account_equity(service)
     service.propose(
         _idea(
             "trade-window-cutoff-readiness",
@@ -102,6 +107,46 @@ def test_windowed_report_uses_cutoff_for_approval_readiness(tmp_path: Path) -> N
 
     assert report["quality"]["approval_ready_count"] == 1
     assert report["quality"]["approval_policy_violation_counts"] == {}
+
+
+def test_report_readiness_uses_active_budget_not_defaults(tmp_path: Path) -> None:
+    root = tmp_path / "ideas"
+    service = TradeIdeaService(
+        root,
+        now_factory=lambda: datetime(2026, 5, 20, 12, 0, tzinfo=UTC),
+    )
+    attest_account_equity(service)
+    service.propose(
+        _idea(
+            "trade-active-budget-readiness",
+            expires_at=datetime(2026, 6, 5, 12, 0, tzinfo=UTC),
+        ),
+        actor_id="idea-generator-v1",
+    )
+    # Tighten the open-notional cap below the idea's share of attested equity
+    # (6075 of 20000 ≈ 30.4%): approve() would refuse, so the report must too.
+    current = service.current_budget()
+    service.update_budget(
+        replace(
+            current,
+            version=current.version + 1,
+            max_open_notional_pct=Decimal("20"),
+            reason="Tighten cap below the proposed idea's exposure",
+        ),
+        ActorType.HUMAN,
+        "rj",
+    )
+
+    report = build_trade_idea_track_record_report(
+        service,
+        now=datetime(2026, 7, 1, 12, 0, tzinfo=UTC),
+    )
+
+    assert report["quality"]["approval_ready_count"] == 0
+    assert any(
+        "max_open_notional_pct" in violation
+        for violation in report["quality"]["approval_policy_violation_counts"]
+    )
 
 
 def test_windowed_report_loads_record_version_for_last_in_window_event(

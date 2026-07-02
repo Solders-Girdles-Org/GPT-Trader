@@ -105,6 +105,7 @@ BUDGET_FIELDS = (
     "gain_retention_floor_pct",
     "allow_futures_leverage",
     "allow_naked_shorts",
+    "account_equity",
 )
 
 
@@ -702,6 +703,14 @@ def register(subparsers: Any) -> None:
         "--allow-naked-shorts",
         choices=("true", "false"),
         help="Whether naked shorts are permitted",
+    )
+    budget_set.add_argument(
+        "--account-equity",
+        type=_non_negative_decimal_value,
+        help=(
+            "Operator-attested account equity; denominator for the "
+            "max_open_notional_pct approval gate"
+        ),
     )
     budget_set.set_defaults(handler=_handle_budget_set, subcommand="budget set")
 
@@ -1784,10 +1793,13 @@ def _handle_reconcile_paper_fills(args: Namespace) -> CliResponse:
 def _handle_budget_show(args: Namespace) -> CliResponse:
     command = "ideas budget show"
     try:
-        budget = _service(args).current_budget()
+        service = _service(args)
+        budget = service.current_budget()
+        budget_headroom = service.budget_headroom()
     except Exception as error:
         return _mapped_error(command, args, error)
     payload = budget.to_dict()
+    payload["headroom"] = budget_headroom
     text = _budget_text(payload)
     return _success(command, args, payload, text)
 

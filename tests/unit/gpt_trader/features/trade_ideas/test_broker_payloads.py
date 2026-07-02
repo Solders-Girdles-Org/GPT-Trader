@@ -6,11 +6,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
+from tests.unit.gpt_trader.features.trade_ideas.conftest import (
+    attest_account_equity,
+    build_trade_idea,
+)
 
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.trade_ideas import (
-    DEFAULT_RISK_BUDGET,
     InvalidTransitionError,
     PolicyViolationError,
     TimeHorizon,
@@ -23,10 +25,12 @@ from gpt_trader.features.trade_ideas import (
 
 @pytest.fixture
 def service(tmp_path: Path) -> TradeIdeaService:
-    return TradeIdeaService(
+    built = TradeIdeaService(
         tmp_path / "trade_ideas",
         now_factory=lambda: datetime(2026, 6, 12, 10, 0, tzinfo=UTC),
     )
+    attest_account_equity(built)
+    return built
 
 
 def _mapping(value: object) -> Mapping[str, object]:
@@ -77,7 +81,7 @@ def test_export_broker_ticket_payload_for_approved_idea(service: TradeIdeaServic
     client_order_id = _text(venue_request["client_order_id"])
     assert client_order_id.startswith(f"gpt-trader-coinbase-{idea.decision_id}-")
     assert venue_payload["order_side"] == "buy"
-    assert policy_budget_snapshot["risk_budget"] == DEFAULT_RISK_BUDGET.to_dict()
+    assert policy_budget_snapshot["risk_budget"] == service.current_budget().to_dict()
     assert approval_event["actor_id"] == "rj"
     assert provenance["terminal_event"] is None
 
@@ -142,6 +146,7 @@ def test_export_broker_ticket_payload_is_stable_only_for_fixed_export_time(
         return current_time
 
     service = TradeIdeaService(tmp_path / "trade_ideas", now_factory=now)
+    attest_account_equity(service)
     idea = build_trade_idea(decision_id="trade-export-time-sensitive-hash")
     service.propose(idea, actor_id="idea-generator-v1")
     service.approve(idea.decision_id, actor_id="rj", reason="Risk verified")
@@ -257,6 +262,7 @@ def test_export_broker_ticket_refuses_approved_idea_stale_at_export_time(
         return current_time
 
     service = TradeIdeaService(tmp_path / "trade_ideas", now_factory=now)
+    attest_account_equity(service)
     idea = build_trade_idea(
         decision_id="trade-stale-at-export",
         time_horizon=TimeHorizon(
@@ -289,6 +295,7 @@ def test_export_broker_ticket_policy_violations_use_export_time(
         return current_time
 
     service = TradeIdeaService(tmp_path / "trade_ideas", now_factory=now)
+    attest_account_equity(service)
     idea = build_trade_idea(
         decision_id="trade-terminal-stale-policy-snapshot",
         time_horizon=TimeHorizon(

@@ -4,17 +4,22 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
+from tests.unit.gpt_trader.features.trade_ideas.conftest import (
+    attest_account_equity,
+    build_trade_idea,
+)
 
 from gpt_trader.features.trade_ideas import AuditAction, TradeIdeaService
 
 
 @pytest.fixture
 def service(tmp_path: Path) -> TradeIdeaService:
-    return TradeIdeaService(
+    built = TradeIdeaService(
         tmp_path / "trade_ideas",
         now_factory=lambda: datetime(2026, 6, 12, 10, 0, tzinfo=UTC),
     )
+    attest_account_equity(built)
+    return built
 
 
 def test_audit_query_preserves_append_order_for_tied_timestamps(
@@ -49,6 +54,7 @@ def test_audit_query_pages_non_monotonic_timestamps_in_append_order(tmp_path: Pa
         tmp_path / "trade_ideas",
         now_factory=lambda: current_time[0],
     )
+    attest_account_equity(service)
     idea = build_trade_idea()
     service.propose(idea, actor_id="idea-generator-v1")
     current_time[0] = datetime(2026, 6, 12, 10, 1, tzinfo=UTC)
