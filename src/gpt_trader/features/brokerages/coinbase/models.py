@@ -194,33 +194,38 @@ _STATUS_MAP = {
 }
 
 
-def _order_configuration_fields(payload: dict) -> dict:
-    """Flatten the single nested Advanced Trade ``order_configuration`` entry.
+def _order_configuration_variant(
+    payload: dict,
+) -> tuple[OrderType | None, TimeInForce | None, dict]:
+    """Select the single Advanced Trade ``order_configuration`` variant.
 
     Advanced Trade responses carry size/price under a variant key such as
-    ``limit_limit_gtc`` instead of at the top level.
+    ``limit_limit_gtc`` or ``market_market_ioc`` instead of at the top level,
+    and the key itself encodes the order type (prefix) and time-in-force
+    (suffix). Derive all three from the same entry so they cannot diverge.
     """
     configuration = payload.get("order_configuration")
     if not isinstance(configuration, dict):
-        return {}
-    for value in configuration.values():
-        if isinstance(value, dict):
-            return value
-    return {}
-
-
-def _order_type_from_configuration(payload: dict) -> OrderType | None:
-    configuration = payload.get("order_configuration")
-    if not isinstance(configuration, dict):
-        return None
-    for key in configuration:
+        return None, None, {}
+    for key, fields in configuration.items():
+        if not isinstance(fields, dict):
+            continue
+        otype: OrderType | None = None
         if key.startswith("stop_limit"):
-            return OrderType.STOP_LIMIT
-        if key.startswith("market"):
-            return OrderType.MARKET
-        if key.startswith(("limit", "sor_limit")):
-            return OrderType.LIMIT
-    return None
+            otype = OrderType.STOP_LIMIT
+        elif key.startswith("market"):
+            otype = OrderType.MARKET
+        elif key.startswith(("limit", "sor_limit")):
+            otype = OrderType.LIMIT
+        tif: TimeInForce | None = None
+        if key.endswith("_ioc"):
+            tif = TimeInForce.IOC
+        elif key.endswith("_fok"):
+            tif = TimeInForce.FOK
+        elif key.endswith(("_gtc", "_gtd")):
+            tif = TimeInForce.GTC
+        return otype, tif, fields
+    return None, None, {}
 
 
 def to_order(payload: dict) -> Order:
@@ -229,7 +234,7 @@ def to_order(payload: dict) -> Order:
     if isinstance(payload.get("success_response"), dict):
         payload = {**payload, **payload["success_response"]}
 
-    config_fields = _order_configuration_fields(payload)
+    config_type, config_tif, config_fields = _order_configuration_variant(payload)
 
     status = _STATUS_MAP.get(str(payload.get("status", "")).lower(), OrderStatus.SUBMITTED)
     side = OrderSide.BUY if str(payload.get("side", "")).lower() == "buy" else OrderSide.SELL
@@ -243,14 +248,17 @@ def to_order(payload: dict) -> Order:
     elif otype_str in ("stop_limit",):
         otype = OrderType.STOP_LIMIT
     else:
-        otype = _order_type_from_configuration(payload) or OrderType.LIMIT
+        otype = config_type or OrderType.LIMIT
 
-    tif = TimeInForce.GTC
     tif_str = str(payload.get("time_in_force", "")).lower()
     if tif_str in ("ioc", "immediate_or_cancel"):
         tif = TimeInForce.IOC
     elif tif_str in ("fok", "fill_or_kill"):
         tif = TimeInForce.FOK
+    elif not tif_str:
+        tif = config_tif or TimeInForce.GTC
+    else:
+        tif = TimeInForce.GTC
 
     submitted = (
         payload.get("created_at") or payload.get("submitted_at") or payload.get("created_time")
@@ -259,11 +267,15 @@ def to_order(payload: dict) -> Order:
 
     raw_quantity = quantity_from(payload, default=None)
     if raw_quantity is None:
+        # Quote-sized market orders carry only quote_size (quote currency
+        # units) in their configuration; the executed base quantity in
+        # filled_size is the only faithful base-unit fallback for them.
         fallback_size = (
             payload.get("size")
             or payload.get("contracts")
             or payload.get("position_quantity")
             or config_fields.get("base_size")
+            or payload.get("filled_size")
             or "0"
         )
         raw_quantity = Decimal(str(fallback_size))

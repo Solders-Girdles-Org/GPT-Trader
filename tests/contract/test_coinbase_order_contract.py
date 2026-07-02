@@ -46,6 +46,25 @@ def test_get_order_translates_historical_order(coinbase_service, transport):
     assert order.submitted_at == datetime(2026, 6, 30, 18, 45, 12, tzinfo=UTC)
 
 
+def test_get_order_quote_sized_market_uses_filled_base_size(coinbase_service, transport):
+    order_id = "e5f6a7b8-c9d0-4122-8033-445566778899"
+    transport.route_fixture(
+        "GET", f"{ORDERS_HISTORICAL_PATH}/{order_id}", "order_historical_quote_sized"
+    )
+
+    order = coinbase_service.get_order(order_id)
+
+    assert order is not None
+    assert order.type == OrderType.MARKET
+    assert order.tif == TimeInForce.IOC
+    assert order.status == OrderStatus.FILLED
+    # Quote-sized orders have no base_size; quantity must fall back to the
+    # executed base amount instead of reporting a zero-size order.
+    assert order.quantity == Decimal("0.00149")
+    assert order.filled_quantity == Decimal("0.00149")
+    assert order.avg_fill_price == Decimal("67114.09")
+
+
 def test_get_order_returns_none_for_unknown_order(coinbase_service, transport):
     # No route registered: the transport answers 404, which the client maps
     # to NotFoundError and the service translates to None.
@@ -132,3 +151,33 @@ def test_place_limit_order_round_trip(coinbase_service, transport):
     assert order.quantity == Decimal("0.005")
     assert order.price == Decimal("65000.00")
     assert order.status == OrderStatus.SUBMITTED
+    assert order.tif == TimeInForce.GTC  # inferred from limit_limit_gtc
+
+
+def test_place_market_order_reports_ioc_tif(coinbase_service, transport):
+    transport.route_fixture("GET", PRODUCTS_PATH, "products")
+    transport.route_fixture("POST", ORDERS_PATH, "order_create_market_success")
+
+    assert coinbase_service.get_product("ETH-USD") is not None
+
+    order = coinbase_service.place_order(
+        symbol="ETH-USD",
+        side=OrderSide.SELL,
+        order_type=OrderType.MARKET,
+        quantity=Decimal("0.25"),
+        client_id="gpt-trader-contract-2",
+    )
+
+    (request,) = transport.requests_for("POST", ORDERS_PATH)
+    assert request.body is not None
+    assert request.body["order_configuration"]["market_market_ioc"]["base_size"] == "0.25"
+
+    # Create-order responses omit time_in_force; the fulfillment policy must
+    # be inferred from the market_market_ioc configuration key.
+    assert order.id == "d4e5f6a7-b8c9-4011-8899-aabbccddee11"
+    assert order.symbol == "ETH-USD"
+    assert order.side == OrderSide.SELL
+    assert order.type == OrderType.MARKET
+    assert order.tif == TimeInForce.IOC
+    assert order.quantity == Decimal("0.25")
+    assert order.price is None
