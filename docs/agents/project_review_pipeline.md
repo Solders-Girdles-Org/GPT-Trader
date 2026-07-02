@@ -48,7 +48,7 @@ it as a second queue.
 | Scout candidate | Local JSON packet with `schema_version: "gpt-trader.agent-finding.v1"` | Promoter dry-run body for human review | `uv run python scripts/maintenance/project_review_issue_promoter.py --packet <packet>` |
 | Promoted finding | GitHub issue with the hidden `finding_id` marker and routing labels | Packet details rendered into the issue body or refresh comments | `project_review_issue_promoter.py` plus GitHub issue state |
 | Implementation | GitHub issue or direct owner-routed package, then a PR | PR body links issue/finding/package source | PR checks and review state |
-| Review feedback | GitHub review thread, check output, or a bounded feedback packet copied into issue/PR comments | Short fix packet for the active executor | PR review/check evidence; `codex-review-feedback` label when it becomes queue work |
+| Review feedback | GitHub review thread, check output, or a bounded feedback packet copied into issue/PR comments | Short fix packet for the active executor | PR review/check evidence; a follow-up issue when it becomes queue work |
 | Review deliverable | Intended `review_artifacts/*.csv` or `review_artifacts/*.xlsx` file | PR body summary of provenance and purpose | `.gitignore` policy plus `git status` review |
 
 The packet is canonical only before promotion. After promotion, the GitHub issue
@@ -206,14 +206,16 @@ instead of creating a duplicate.
 
 ## Stage 4: Queue
 
-GitHub issues are the durable queue. These labels are routing signals:
+GitHub issues are the durable queue. Labels mark exceptions only (the full
+model is owned by [CONTRIBUTING.md](../../CONTRIBUTING.md#issue-labels)); the
+promoter emits:
 
 | Label | Meaning |
 | --- | --- |
 | `agent-review` | Finding came from the recurring GPT-Trader review lane |
 | `agent-ready` | Finding passed promotion gates, has no decision/blocker gate, and is ready for implementation |
 | `decision-needed` | Requires an explicit decision packet and agent recommendation before implementation or execution |
-| `codex-review-feedback` | Follow-up from Codex review comments or checks |
+| `blocked` | The packet names `routing.blocked_by` dependencies |
 
 The promoter can create missing labels with `--create-labels`. If labels are
 missing and that flag is not used, it keeps routing in the issue body and omits
