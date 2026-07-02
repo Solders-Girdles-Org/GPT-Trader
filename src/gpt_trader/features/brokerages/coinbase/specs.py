@@ -19,7 +19,11 @@ from typing import Any
 import yaml
 
 from gpt_trader.utilities.logging_patterns import get_logger
-from gpt_trader.utilities.quantization import quantize_price_side_aware
+from gpt_trader.utilities.quantization import (
+    quantize_price_side_aware,
+    quantize_size,
+    quantize_size_up,
+)
 
 logger = get_logger(__name__, component="coinbase_specs")
 
@@ -274,22 +278,6 @@ class ValidationResult:
     reason: str | None = None
     adjusted_quantity: Decimal | None = None
     adjusted_price: Decimal | None = None
-
-
-def quantize_size(size: Decimal, step_size: Decimal) -> Decimal:
-    """Floor size to the exchange step size."""
-    if step_size is None or step_size == 0:
-        return size
-    q = (size / step_size).to_integral_value(rounding=ROUND_DOWN)
-    return (q * step_size).quantize(step_size)
-
-
-def quantize_size_up(size: Decimal, step_size: Decimal) -> Decimal:
-    """Ceil size to the next exchange step size."""
-    if step_size is None or step_size == 0:
-        return size
-    q = (size / step_size).to_integral_value(rounding=ROUND_UP)
-    return (q * step_size).quantize(step_size)
 
 
 def validate_order(

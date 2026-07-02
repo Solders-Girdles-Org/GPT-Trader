@@ -23,9 +23,9 @@ from gpt_trader.app.runtime.fingerprint import (
     write_startup_config_fingerprint,
 )
 from gpt_trader.config.types import Profile
+from gpt_trader.core.protocols import BrokerProtocol
 from gpt_trader.features.brokerages.coinbase.market_data_service import MarketDataService
 from gpt_trader.features.brokerages.coinbase.utilities import ProductCatalog
-from gpt_trader.features.brokerages.core.protocols import BrokerProtocol
 from gpt_trader.features.brokerages.factory import create_brokerage
 from gpt_trader.persistence.event_store import EventStore
 from gpt_trader.persistence.orders_store import OrdersStore

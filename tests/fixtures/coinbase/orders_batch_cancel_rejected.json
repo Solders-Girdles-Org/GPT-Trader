@@ -1,0 +1,9 @@
+{
+  "results": [
+    {
+      "success": false,
+      "failure_reason": "UNKNOWN_CANCEL_ORDER",
+      "order_id": "a8f7e6d5-c4b3-42a1-9080-7f6e5d4c3b2a"
+    }
+  ]
+}

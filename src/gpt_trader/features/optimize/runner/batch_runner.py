@@ -16,7 +16,7 @@ from gpt_trader.backtesting.simulation.broker import SimulatedBroker
 from gpt_trader.backtesting.types import BacktestResult, SimulationConfig
 from gpt_trader.core import OrderSide, OrderType
 from gpt_trader.features.live_trade.strategies.base import StrategyProtocol
-from gpt_trader.features.live_trade.strategies.perps_baseline.strategy import Action, Decision
+from gpt_trader.features.live_trade.strategies.baseline.strategy import Action, Decision
 from gpt_trader.features.optimize.objectives.base import ObjectiveFunction
 from gpt_trader.utilities.logging_patterns import get_logger
 

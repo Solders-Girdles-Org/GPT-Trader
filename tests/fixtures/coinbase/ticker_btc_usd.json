@@ -1,0 +1,24 @@
+{
+  "trades": [
+    {
+      "trade_id": "34b080bf-fcfd-445a-832b-46b5ddc65601",
+      "product_id": "BTC-USD",
+      "price": "67120.99",
+      "size": "0.00524316",
+      "time": "2026-06-30T20:04:59.123456Z",
+      "side": "BUY",
+      "exchange": "CBE"
+    },
+    {
+      "trade_id": "7f3a2b1c-9d8e-4f5a-b6c7-d8e9f0a1b2c3",
+      "product_id": "BTC-USD",
+      "price": "67119.50",
+      "size": "0.01000000",
+      "time": "2026-06-30T20:04:58.998877Z",
+      "side": "SELL",
+      "exchange": "CBE"
+    }
+  ],
+  "best_bid": "67119.01",
+  "best_ask": "67121.57"
+}

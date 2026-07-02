@@ -33,8 +33,8 @@ from gpt_trader.backtesting.types import FeeTier, SimulationConfig
 from gpt_trader.core import OrderSide, OrderType
 from gpt_trader.features.brokerages.coinbase.client.client import CoinbaseClient
 from gpt_trader.features.live_trade.factory import create_strategy
-from gpt_trader.features.live_trade.strategies.perps_baseline import Action
-from gpt_trader.features.live_trade.strategies.perps_baseline.strategy import SpotStrategy
+from gpt_trader.features.live_trade.strategies.baseline import Action
+from gpt_trader.features.live_trade.strategies.baseline.strategy import SpotStrategy
 from gpt_trader.utilities.logging_patterns import get_logger
 
 logger = get_logger(__name__, component="backtest_runner")

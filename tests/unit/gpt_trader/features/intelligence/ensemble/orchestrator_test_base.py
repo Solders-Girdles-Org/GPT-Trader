@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any
 
 from gpt_trader.core import Product
-from gpt_trader.features.live_trade.strategies.perps_baseline import Action, Decision
+from gpt_trader.features.live_trade.strategies.baseline import Action, Decision
 
 
 class MockStrategy:

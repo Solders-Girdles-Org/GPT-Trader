@@ -12,7 +12,7 @@ Use this folder for AI-focused navigation aids and generated inventories.
 - [Codebase map](CODEBASE_MAP.md)
 - [Reasoning artifacts](reasoning_artifacts.md)
 - [Recurring project review pipeline](project_review_pipeline.md)
-- Scratch logs: [Project regrounding 2026-06-28](scratch_logs/project_regrounding_20260628.md), [runtime architecture refactor 2026-06-29](scratch_logs/runtime_architecture_refactor_20260629.md)
+- Scratch logs: [Project regrounding 2026-06-28](../../var/agents/scratch_logs/project_regrounding_20260628.md), [runtime architecture refactor 2026-06-29](../../var/agents/scratch_logs/runtime_architecture_refactor_20260629.md)
 - [Glossary](glossary.md)
 - [CLI conventions](conventions.md)
 - [Canonical sources: doctrine & generated-artifact scope](canonical_sources.md)
