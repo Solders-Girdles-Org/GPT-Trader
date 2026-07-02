@@ -94,7 +94,8 @@ tests/
 ### Current Metrics
 
 - **Pass Target**: 100% for selected suites
-- **Coverage Baseline**: ~73%
+- **Coverage Baseline**: 82.6% branch coverage over `src/gpt_trader` (measured 2026-07-01 via `make cov` with all extras installed)
+- **Live number**: the CI **Unit Tests (Core)** job uploads `coverage.json` as the `coverage-json` artifact on every run — prefer that artifact over the snapshot above as it ages
 
 ## Writing Tests
 

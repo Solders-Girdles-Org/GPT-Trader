@@ -110,9 +110,10 @@ cannot provide. The metadata block and reachability are enforced by
 Profiles are config snapshots, not execution approval. Live profiles
 (`canary`, `prod`) only run after the gates in
 [Live Operations](production.md) and [Direction](DIRECTION.md) are satisfied with
-recorded human approval. Whether `canary`/`prod` remain live-operation assets is
-an open decision
-([prod-canary-profile-meaning](decisions/prod-canary-profile-meaning.md)).
+recorded human approval. `canary`/`prod` remain live-operation assets under
+that gating — accepted in
+[prod-canary-profile-meaning](decisions/prod-canary-profile-meaning.md); the
+profile name itself is never execution approval.
 
 | Profile | Broker / data | Role |
 |---------|---------------|------|

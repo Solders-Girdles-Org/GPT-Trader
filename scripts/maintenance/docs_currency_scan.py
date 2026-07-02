@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
+import yaml
+
 Status = Literal["ok", "missing", "stale", "uncertain"]
 
 PATTERNS: list[tuple[str, str, re.Pattern[str]]] = [
@@ -129,64 +131,41 @@ DEPRECATED_MARKERS = (
 # Docs whose purpose is to catalog removals: naming a removed module, path, or
 # env var here is correct guidance, not drift, so every such reference is treated
 # as expected rather than missing/stale.
+# Root-level markdown that must stay current alongside docs/ (they carry the
+# same class of command/path/module references).
+ROOT_DOC_FILES = ("README.md", "AGENTS.md", "CONTRIBUTING.md")
 REMOVAL_REGISTRY_DOCS = ("DEPRECATIONS.md",)
 # Docs that carry an old->new migration table for known-removed identifiers. Only
 # references matching a DEPRECATED_MARKER are exempted here, so unrelated drift in
 # these docs is still reported.
 MIGRATION_GUIDANCE_DOCS = ("ARCHITECTURE.md",)
 # Narrow suppressions for known false-positive missing/stale findings the scanner
-# cannot classify from context alone: git/tool flags quoted in prose, placeholder
-# example identifiers, and identifiers named only in historical decision records.
-# Keyed by (source_doc, item). Self-policing: the scanner tests fail if an entry
-# no longer matches a missing/stale finding, so suppressions cannot rot silently.
-# Add an entry ONLY for a genuine false positive, with a one-line reason.
-CURRENCY_SUPPRESSIONS: dict[tuple[str, str], str] = {
-    ("docs/DEVELOPMENT_GUIDELINES.md", "--branch"): "git branch flag quoted in prose",
-    ("docs/INFORMATION_ARCHITECTURE.md", "--ignored"): "git flag example, not a gpt-trader flag",
-    (
-        "docs/agents/scratch_logs/project_regrounding_20260628.md",
-        "--decorate",
-    ): "git log flag quoted in a scratch log",
-    (
-        "docs/agents/scratch_logs/project_regrounding_20260628.md",
-        "--oneline",
-    ): "git log flag quoted in a scratch log",
-    (
-        "docs/decisions/intx-default-derivatives-venue.md",
-        "--hidden",
-    ): "example flag quoted in a decision record",
-    (
-        "docs/decisions/intx-default-derivatives-venue.md",
-        "PERPS_ALLOWLIST",
-    ): "removed INTX env var cited as history in a decision record",
-    (
-        "docs/decisions/remove-tui-subsystem.md",
-        "scripts/build_tui_css.py",
-    ): "removed TUI build script cited as history in a decision record",
-    (
-        "docs/decisions/remove-tui-subsystem.md",
-        "src/gpt_trader/tui/",
-    ): "removed TUI package cited as history in a decision record",
-    (
-        "docs/decisions/remove-tui-subsystem.md",
-        "--tui",
-    ): "removed TUI run flag cited as history in a decision record",
-    (
-        "docs/decisions/remove-tui-subsystem.md",
-        "--demo",
-    ): "removed TUI run flag cited as history in a decision record",
-    (
-        "docs/DEPRECATIONS.md",
-        "--tui",
-    ): "removed TUI run flag cited as history in the removal registry",
-    (
-        "docs/DEPRECATIONS.md",
-        "--demo",
-    ): "removed TUI run flag cited as history in the removal registry",
-    ("docs/naming.md", "--kebab-case"): "naming-style example, not a CLI flag",
-    ("docs/testing.md", "gpt_trader.api"): "placeholder module name in a prose example",
-    ("docs/testing.md", "gpt_trader.module"): "placeholder module name in a prose example",
-}
+# cannot classify from context alone live in config/agents/docs_currency_suppressions.yaml
+# (keyed by doc + item, each with a one-line reason). Self-policing: the scanner
+# fails if an entry no longer matches a missing/stale finding, so suppressions
+# cannot rot silently.
+_SUPPRESSIONS_PATH = (
+    Path(__file__).resolve().parents[2] / "config" / "agents" / "docs_currency_suppressions.yaml"
+)
+
+
+def _load_suppressions(path: Path = _SUPPRESSIONS_PATH) -> dict[tuple[str, str], str]:
+    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    entries = payload.get("suppressions") or []
+    loaded: dict[tuple[str, str], str] = {}
+    for entry in entries:
+        doc = str(entry["doc"])
+        item = str(entry["item"])
+        reason = str(entry["reason"])
+        key = (doc, item)
+        if key in loaded:
+            raise ValueError(f"duplicate suppression entry: {key}")
+        loaded[key] = reason
+    return loaded
+
+
+CURRENCY_SUPPRESSIONS: dict[tuple[str, str], str] = _load_suppressions()
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -669,7 +648,8 @@ def verify_item(state: ScanState, ext: ExtractedItem) -> VerificationResult:
 def scan_docs(
     repo_root: Path, *, fetch_help: bool = True
 ) -> tuple[list[Path], list[ExtractedItem], list[tuple[ExtractedItem, VerificationResult]]]:
-    doc_files = sorted((repo_root / "docs").rglob("*.md"))
+    root_docs = [repo_root / name for name in ROOT_DOC_FILES if (repo_root / name).exists()]
+    doc_files = sorted([*root_docs, *(repo_root / "docs").rglob("*.md")])
     state = load_state(repo_root, fetch_help=fetch_help)
     extracted: list[ExtractedItem] = []
     for doc in doc_files:
@@ -850,11 +830,14 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  [{result.status}] {ext.source_doc} :: `{ext.item}` — {result.notes}")
             print(
                 "Fix the reference in the owning doc, or — if it is a genuine false positive — "
-                "add a justified entry to CURRENCY_SUPPRESSIONS in "
-                "scripts/maintenance/docs_currency_scan.py."
+                "add a justified entry to "
+                "config/agents/docs_currency_suppressions.yaml."
             )
         if orphaned_suppressions:
-            print(f"\nFAIL: {len(orphaned_suppressions)} unused CURRENCY_SUPPRESSIONS entries:")
+            print(
+                f"\nFAIL: {len(orphaned_suppressions)} unused suppression entries "
+                "(config/agents/docs_currency_suppressions.yaml):"
+            )
             for source_doc, item in sorted(orphaned_suppressions):
                 print(f"  {source_doc} :: `{item}`")
             print(

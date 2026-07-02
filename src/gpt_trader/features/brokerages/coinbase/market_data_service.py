@@ -2,7 +2,7 @@ import threading
 from dataclasses import dataclass
 from datetime import datetime
 
-from gpt_trader.features.brokerages.core.protocols import TickerFreshnessProvider
+from gpt_trader.core.protocols import TickerFreshnessProvider
 from gpt_trader.utilities.datetime_helpers import normalize_to_utc
 from gpt_trader.utilities.time_provider import Clock, SystemClock
 

@@ -21,7 +21,7 @@ from gpt_trader.app.container import (
     set_application_container,
 )
 from gpt_trader.features.brokerages.mock import DeterministicBroker
-from gpt_trader.features.live_trade.strategies.perps_baseline import PerpsStrategyConfig
+from gpt_trader.features.live_trade.strategies.baseline import PerpsStrategyConfig
 from gpt_trader.persistence.event_store import EventStore
 
 if TYPE_CHECKING:

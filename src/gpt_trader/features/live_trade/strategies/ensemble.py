@@ -35,7 +35,7 @@ from gpt_trader.features.live_trade.signals.protocol import (
 )
 from gpt_trader.features.live_trade.signals.trend import TrendSignal, TrendSignalConfig
 from gpt_trader.features.live_trade.strategies.base import BaseStrategy, MarketDataContext
-from gpt_trader.features.live_trade.strategies.perps_baseline import Action, Decision
+from gpt_trader.features.live_trade.strategies.baseline import Action, Decision
 
 if TYPE_CHECKING:
     from gpt_trader.features.live_trade.strategies.ensemble_profile import EnsembleProfile

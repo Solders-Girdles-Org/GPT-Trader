@@ -1,8 +1,8 @@
 # Event JSONL: accepted fallback or import-only historical data
 
 ---
-status: proposed
-date: 2026-06-28
+status: accepted
+date: 2026-07-02
 deciders: rj
 supersedes:
 superseded-by:
@@ -23,13 +23,24 @@ historical data.
 
 ## Decision
 
-_Pending owner._
+**Option B — JSONL is import-only historical data.** Accepted 2026-07-02 by rj.
+
+The precondition (no live path depends on JSONL writes) was verified at
+acceptance: `EventStore` (`src/gpt_trader/persistence/event_store.py`) persists
+exclusively via SQLite (`events.db`) with an in-memory cache — no JSONL write
+path exists. The remaining JSONL surfaces on the event side are all read-only
+fallbacks used solely when a storage directory predates `events.db`:
+`src/gpt_trader/monitoring/daily_report/loaders.py`,
+`scripts/monitoring/export_metrics.py`, and
+`scripts/monitoring/perps_dashboard.py`. That is exactly the
+import-only-historical shape this option prescribes; those readers stay
+supported as import paths.
 
 ## Consequences
 
-Affects the event-store write path and the remaining compatibility inventory in
-`docs/DEPRECATIONS.md`. Option B removes a shim but requires confirming no live
-path depends on JSONL writes.
+No code change required; this ratifies the current state and closes the open
+question in the compatibility inventory (`docs/DEPRECATIONS.md`, which records
+JSONL as import-only). Any future JSONL write path would need a new decision.
 
 ## Safety boundary
 

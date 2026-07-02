@@ -1,0 +1,64 @@
+# Narrow suppressions for known false-positive missing/stale findings the
+# docs currency scanner (scripts/maintenance/docs_currency_scan.py) cannot
+# classify from context alone: git/tool flags quoted in prose, placeholder
+# example identifiers, and identifiers named only in historical decision
+# records.
+#
+# Self-policing: the scanner fails when an entry no longer matches a live
+# missing/stale finding, so suppressions cannot rot silently. Add an entry
+# ONLY for a genuine false positive, with a one-line reason.
+suppressions:
+  - doc: docs/DEVELOPMENT_GUIDELINES.md
+    item: "--branch"
+    reason: git branch flag quoted in prose
+  - doc: docs/INFORMATION_ARCHITECTURE.md
+    item: "--ignored"
+    reason: git flag example, not a gpt-trader flag
+  - doc: docs/decisions/intx-default-derivatives-venue.md
+    item: "--hidden"
+    reason: example flag quoted in a decision record
+  - doc: docs/decisions/intx-default-derivatives-venue.md
+    item: PERPS_ALLOWLIST
+    reason: removed INTX env var cited as history in a decision record
+  - doc: docs/decisions/remove-tui-subsystem.md
+    item: scripts/build_tui_css.py
+    reason: removed TUI build script cited as history in a decision record
+  - doc: docs/decisions/remove-tui-subsystem.md
+    item: src/gpt_trader/tui/
+    reason: removed TUI package cited as history in a decision record
+  - doc: docs/decisions/remove-tui-subsystem.md
+    item: "--tui"
+    reason: removed TUI run flag cited as history in a decision record
+  - doc: docs/decisions/remove-tui-subsystem.md
+    item: "--demo"
+    reason: removed TUI run flag cited as history in a decision record
+  - doc: docs/DEPRECATIONS.md
+    item: "--tui"
+    reason: removed TUI run flag cited as history in the removal registry
+  - doc: docs/DEPRECATIONS.md
+    item: "--demo"
+    reason: removed TUI run flag cited as history in the removal registry
+  - doc: docs/naming.md
+    item: "--kebab-case"
+    reason: naming-style example, not a CLI flag
+  - doc: docs/testing.md
+    item: gpt_trader.api
+    reason: placeholder module name in a prose example
+  - doc: docs/testing.md
+    item: gpt_trader.module
+    reason: placeholder module name in a prose example
+  - doc: AGENTS.md
+    item: "--squash"
+    reason: gh pr merge flag quoted in prose
+  - doc: AGENTS.md
+    item: "--delete-branch"
+    reason: gh pr merge flag quoted in prose
+  - doc: AGENTS.md
+    item: "--fill"
+    reason: gh pr create flag quoted in prose
+  - doc: CONTRIBUTING.md
+    item: "--all-files"
+    reason: pre-commit flag quoted in prose
+  - doc: README.md
+    item: "--all-files"
+    reason: pre-commit flag quoted in prose
