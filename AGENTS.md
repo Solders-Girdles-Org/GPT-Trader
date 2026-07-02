@@ -84,6 +84,19 @@ gh pr create --fill
 # gh pr merge --squash --delete-branch
 ```
 
+Merge mechanics that repeatedly bite agents (`agent-pr-ready` detects all three):
+
+- **Prefer independent PRs over stacks.** Branch auto-delete on merge can close
+  a child PR whose base branch just vanished. Recovery: restore the deleted
+  branch from the merge SHA, reopen the child, retarget it. If you must stack,
+  merge base-first.
+- **Strict up-to-date serializes batch merges.** Every merge to `main` flips
+  other green PRs to BEHIND; run `gh pr update-branch <pr>` and let CI re-run
+  rather than treating stale green as mergeable.
+- **The protection contract is machine-checked.** `scripts/ci/check_branch_protection.py`
+  owns the expected required checks/settings; drift between it and live GitHub
+  settings surfaces as an `agent-pr-ready` warning.
+
 ## Trading-safety boundary
 
 Existing live profiles and broker adapters are implementation assets, **not**

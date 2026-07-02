@@ -107,7 +107,10 @@ source of truth remains `.github/workflows/*.yml` plus GitHub branch protection.
 Current `main` branch protection requires only the named `CI` contexts listed in
 the first row below, with strict up-to-date checks and conversation resolution
 enabled. Selected context-specific lanes self-skip by changed path while keeping
-those check names stable.
+those check names stable. The expected protection settings are machine-checked:
+`uv run python scripts/ci/check_branch_protection.py` (also surfaced as an
+`agent-pr-ready` advisory) fails when live GitHub settings drift from the
+contract this table describes.
 
 | Check / workflow job | Tier | Trigger | Blocking status | Why it exists |
 | --- | --- | --- | --- | --- |

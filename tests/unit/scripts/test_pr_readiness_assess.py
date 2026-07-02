@@ -202,6 +202,42 @@ def test_behind_base_is_blocker() -> None:
     assert any("behind" in finding.message.lower() for finding in report.findings)
 
 
+def test_stacked_pr_base_branch_is_warning() -> None:
+    state = PullRequestState(
+        number=6,
+        head_oid="abc",
+        merge_state_status="CLEAN",
+        review_decision="",
+        checks=(CheckStatus("Unit Tests (Core)", "SUCCESS", required=True),),
+        threads=(),
+        protection=_protection(),
+        base_ref_name="feature/parent-branch",
+    )
+    report = assess_readiness(state)
+
+    assert report.ready is True  # warning, not blocker
+    stacked = [finding for finding in report.findings if "Stacked PR" in finding.message]
+    assert len(stacked) == 1
+    assert stacked[0].severity == "warning"
+    assert "feature/parent-branch" in stacked[0].message
+    assert "restore the deleted branch" in stacked[0].message
+
+
+def test_main_based_pr_has_no_stacked_warning() -> None:
+    state = PullRequestState(
+        number=7,
+        head_oid="abc",
+        merge_state_status="CLEAN",
+        review_decision="",
+        checks=(CheckStatus("Unit Tests (Core)", "SUCCESS", required=True),),
+        threads=(),
+        protection=_protection(),
+    )
+    report = assess_readiness(state)
+
+    assert not any("Stacked PR" in finding.message for finding in report.findings)
+
+
 def test_required_review_missing_is_blocker() -> None:
     state = PullRequestState(
         number=5,

@@ -42,6 +42,7 @@ import argparse
 import json
 import re
 import subprocess
+import sys
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -69,9 +70,15 @@ _SEVERITY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("low", re.compile(r"\bP3\b|\bminor\b|\bnit\b", re.IGNORECASE)),
 )
 
+_DEFAULT_BASE_BRANCH = "main"
+
 # mergeStateStatus values that mean "not mergeable right now", with guidance.
 _BLOCKING_MERGE_STATES = {
-    "BEHIND": "Branch is behind the base; update/rebase so it is current.",
+    "BEHIND": (
+        "Branch is behind the base; run `gh pr update-branch <pr>` (or rebase onto the "
+        "base) and let CI re-run. Strict up-to-date serializes batch merges, so this is "
+        "expected after every merge to the base."
+    ),
     "DIRTY": "Branch has merge conflicts with the base.",
     "BLOCKED": "Branch protection is blocking the merge (see findings below).",
     "DRAFT": "Pull request is a draft; mark it ready for review before merging.",
@@ -314,6 +321,17 @@ def assess_readiness(
             Finding(
                 severity,
                 _describe_unresolved(unresolved, state.protection.conversation_resolution),
+            )
+        )
+
+    if state.base_ref_name != _DEFAULT_BASE_BRANCH:
+        findings.append(
+            Finding(
+                "warning",
+                f"Stacked PR: base branch is '{state.base_ref_name}', not "
+                f"'{_DEFAULT_BASE_BRANCH}'. Merging the base PR with branch auto-delete "
+                "can close this PR (recovery: restore the deleted branch, reopen, "
+                "retarget). Merge the base first, or re-slice the PRs to be independent.",
             )
         )
 
@@ -1115,6 +1133,35 @@ def apply_artifact_freshness(
     report.ready = not any(finding.severity == "blocker" for finding in report.findings)
 
 
+def apply_protection_drift(
+    report: ReadinessReport,
+    protection_raw: dict[str, Any] | None,
+    base_ref_name: str,
+) -> None:
+    """Advisory check of live branch protection against the expected contract.
+
+    The expected contract lives in scripts/ci/check_branch_protection.py and is
+    defined for the default branch only. Drift is always a warning: it never
+    flips readiness on its own.
+    """
+    if base_ref_name != _DEFAULT_BASE_BRANCH:
+        return
+    try:
+        if str(PROJECT_ROOT) not in sys.path:
+            sys.path.insert(0, str(PROJECT_ROOT))
+        from scripts.ci.check_branch_protection import assess_protection_drift
+    except ImportError as error:
+        report.findings.append(
+            Finding("warning", f"Branch-protection drift check unavailable: {error}")
+        )
+        return
+    drift = assess_protection_drift(protection_raw)
+    if drift:
+        _remove_clean_mergeable_info(report.findings)
+    for item in drift:
+        report.findings.append(Finding("warning", f"Branch protection drift: {item}"))
+
+
 def _process_summary(result: subprocess.CompletedProcess[str]) -> str:
     text = "\n".join(part for part in (result.stdout, result.stderr) if part)
     lines = [line.strip() for line in text.splitlines() if line.strip()]
@@ -1234,7 +1281,8 @@ def main(argv: list[str] | None = None) -> int:
             verify=not args.skip_artifact_verify,
             head_oid=str(pr_payload.get("headRefOid") or "") or None,
         )
-        protection = parse_branch_protection(fetch_branch_protection(repo, base_ref_name))
+        protection_raw = fetch_branch_protection(repo, base_ref_name)
+        protection = parse_branch_protection(protection_raw)
         head_committed_at, head_pushed_at = fetch_head_commit_timestamps(repo, pr)
         state = parse_pr_state(
             pr_payload,
@@ -1255,6 +1303,7 @@ def main(argv: list[str] | None = None) -> int:
         require_current_head_review_signal=args.require_current_head_review_signal,
     )
     apply_artifact_freshness(report, freshness)
+    apply_protection_drift(report, protection_raw, base_ref_name)
     print(_render(args.format, state, report))
     return 1 if (args.exit_on_not_ready and not report.ready) else 0
 
