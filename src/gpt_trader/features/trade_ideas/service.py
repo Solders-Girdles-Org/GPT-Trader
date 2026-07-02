@@ -260,6 +260,10 @@ class TradeIdeaService:
 
     # -- budget ----------------------------------------------------------
 
+    def peek_budget(self) -> RiskBudget:
+        """Return the active budget without seeding the log (read-only paths)."""
+        return self._budget_log.current() or DEFAULT_RISK_BUDGET
+
     def current_budget(self) -> RiskBudget:
         """Return the active budget, seeding the accepted defaults on first use."""
         budget = self._budget_log.current()
@@ -332,7 +336,7 @@ class TradeIdeaService:
         account_equity_snapshot = self._account_equity_snapshot(
             # Non-mutating read: building a budget context (e.g. during a
             # render-only ticket export) must not seed risk_budget.jsonl.
-            budget_equity=(self._budget_log.current() or DEFAULT_RISK_BUDGET).account_equity,
+            budget_equity=self.peek_budget().account_equity,
             open_ideas=open_ideas,
             closeouts=closeouts,
         )

@@ -10,7 +10,6 @@ from typing import Any
 
 from gpt_trader.features.trade_ideas.artifacts import stable_artifact_id
 from gpt_trader.features.trade_ideas.audit import ActorType, AuditAction
-from gpt_trader.features.trade_ideas.budget import DEFAULT_RISK_BUDGET
 from gpt_trader.features.trade_ideas.closeout import CloseoutResolution
 from gpt_trader.features.trade_ideas.eligibility import evaluate_eligibility
 from gpt_trader.features.trade_ideas.models import ConfidenceLabel
@@ -300,7 +299,10 @@ def _quality_summary(
         approval = policy.approval_violations(
             idea,
             actor_type=ActorType.HUMAN,
-            budget=DEFAULT_RISK_BUDGET,
+            # Active budget via a non-mutating read, so readiness matches what
+            # approve() would decide under tightened caps without the report
+            # seeding risk_budget.jsonl.
+            budget=service.peek_budget(),
             open_approved_count=0,
             now=now,
             review_started_at=None,
