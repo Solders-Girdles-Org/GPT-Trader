@@ -10,7 +10,6 @@ Supports:
 """
 
 import json
-import random
 import threading
 import time
 from collections.abc import Callable
@@ -34,6 +33,7 @@ from gpt_trader.config.constants import (
 )
 from gpt_trader.features.brokerages.coinbase.client.constants import WS_BASE_URL
 from gpt_trader.features.brokerages.coinbase.ws_events import EventDispatcher
+from gpt_trader.utilities.backoff_policy import backoff_delay_with_jitter
 from gpt_trader.utilities.logging_patterns import get_logger
 
 logger = get_logger(__name__, component="coinbase_websocket")
@@ -46,35 +46,14 @@ def calculate_backoff_with_jitter(
     multiplier: float = WS_RECONNECT_BACKOFF_MULTIPLIER,
     jitter_pct: float = WS_RECONNECT_JITTER_PCT,
 ) -> float:
-    """
-    Calculate exponential backoff delay with jitter.
-
-    Uses exponential growth with configurable jitter to prevent
-    thundering herd on reconnection.
-
-    Args:
-        attempt: Current attempt number (0-indexed).
-        base_seconds: Base delay in seconds.
-        max_seconds: Maximum delay cap.
-        multiplier: Exponential growth multiplier.
-        jitter_pct: Jitter as fraction (0.25 = ±25%).
-
-    Returns:
-        Delay in seconds with jitter applied.
-    """
-    # Calculate base exponential delay
-    delay = base_seconds * (multiplier**attempt)
-
-    # Cap at maximum
-    delay = min(delay, max_seconds)
-
-    # Apply jitter (±jitter_pct)
-    if jitter_pct > 0:
-        jitter_range = delay * jitter_pct
-        jitter = random.uniform(-jitter_range, jitter_range)
-        delay = max(0.1, delay + jitter)  # Ensure positive delay
-
-    return delay
+    """WS reconnect backoff: canonical jittered-backoff math bound to WS defaults."""
+    return backoff_delay_with_jitter(
+        attempt,
+        base_seconds=base_seconds,
+        max_seconds=max_seconds,
+        multiplier=multiplier,
+        jitter_pct=jitter_pct,
+    )
 
 
 class SequenceGuard:

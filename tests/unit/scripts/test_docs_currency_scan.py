@@ -292,7 +292,7 @@ def test_main_fail_on_exits_nonzero_for_unused_suppression(monkeypatch, capsys) 
 
     assert scan.main(["--fail-on", "missing,stale", "--skip-help"]) == 1
     output = capsys.readouterr().out
-    assert "unused CURRENCY_SUPPRESSIONS" in output
+    assert "unused suppression entries" in output
     assert "docs/x.md :: `REMOVED_REFERENCE`" in output
 
 
