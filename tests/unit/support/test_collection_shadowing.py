@@ -9,8 +9,12 @@ required CI lane can false-pass on code its own guard tests reject (PR #1145:
 the Linux core lane reported green while the Windows lane failed
 ``test_cross_slice_allowlist_is_frozen_topology`` on the same commit).
 
-This test lives directly under ``tests/unit/`` — not in a subdirectory — so it
-cannot itself be shadowed unless ``tests`` or ``unit`` is excluded outright.
+This guard protects every directory under ``tests/`` except its own ancestors:
+if ``tests``, ``unit``, or ``support`` were ever added to ``norecursedirs``,
+the guard itself would be shadowed and could not fire. It lives in
+``tests/unit/support/`` because the test-hygiene gate requires that layout;
+do not move it into ``tests/unit/scripts/``, the directory it exists to
+protect.
 """
 
 from __future__ import annotations
