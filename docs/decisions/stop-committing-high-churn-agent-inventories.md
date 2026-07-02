@@ -36,9 +36,14 @@ demand — executed 2026-07-01 with owner approval.
 - **Option A — Extend the `optional_files` precedent to the remaining
   high-churn groups.** Gitignore `var/agents/testing/index.json` and
   `testing/markers.json` (and evaluate `reasoning/*.md`); consumers run
-  `uv run agent-regenerate` on demand. Trade-off: hosted or read-only agents
-  lose pre-baked context in a fresh checkout and must regenerate (the scheduled
-  refresh package still ships them).
+  `uv run agent-regenerate` on demand. This includes the validator contract:
+  `scripts/agents/agent_artifacts.py` currently hard-requires
+  `testing/index.json` with a positive `total_tests`
+  (`validate` fails on a fresh checkout if the file is absent), so its
+  per-resource expectations must become absent-tolerant for `optional_files`
+  while still validating content when the files are present. Trade-off: hosted
+  or read-only agents lose pre-baked context in a fresh checkout and must
+  regenerate (the scheduled refresh package still ships them).
 - **Option B — Keep committing, but decouple from the PR loop.** Keep the trees
   committed, drop them from `agent-regenerate --verify`'s default surface, and
   let only the scheduled refresh workflow reconcile them via its automation
@@ -57,10 +62,10 @@ the only option that removes the churn rather than hiding it._
 ## Consequences
 
 Fill in when accepted. Expected shape for Option A: gitignore + `optional_files`
-registration for the affected groups, freshness gate shrinks to the remaining
+registration for the affected groups, absent-tolerant validation in
+`agent_artifacts.py` for those groups, freshness gate shrinks to the remaining
 committed set, and the measured share of commits touching `var/agents` drops
-from ~55% to under 15%. Follow-up work will be filed as a GitHub issue linked
-here.
+from ~55% to under 15%. Follow-up work is tracked in issue #1130.
 
 ## Safety boundary
 
