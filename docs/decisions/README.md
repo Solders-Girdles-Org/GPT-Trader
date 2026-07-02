@@ -68,6 +68,7 @@ markers. Regenerating cannot drift from the files.
 <!-- BEGIN GENERATED DECISION INDEX -->
 | Date | Decision | Status |
 |------|----------|--------|
+| 2026-07-02 | [Account snapshot command — wire a real provider or remove it](account-snapshot-wire-or-remove.md) | proposed |
 | 2026-07-01 | [Remove the unwired account manager and strategy-dev lab](remove-unwired-account-manager-and-strategy-lab.md) | accepted |
 | 2026-06-30 | [Remove the TUI subsystem](remove-tui-subsystem.md) | accepted |
 | 2026-06-28 | [Adopt a measured-outcome operating rubric](adopt-measured-outcome-rubric.md) | proposed |
