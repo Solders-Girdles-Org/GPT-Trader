@@ -14,9 +14,13 @@ Generated `var/agents/**` inventories are derived truth, but the committed
 subset still dominates repo churn: 103 of 181 commits since 2026-06-01 touched
 `var/agents`, and the 2026-07-01 gitignore pass
 ([canonical_sources.md](../agents/canonical_sources.md)) barely moved the rate
-(19 of 35 commits since). The file-touch breakdown since 2026-07-01 is
-`testing/**` 41, `reasoning/*.md` 26, `configuration` 10 — the `testing`
-inventory regenerates whenever tests change, which is nearly every PR.
+(19 of 35 commits since). The ongoing driver is `testing/**`: 41 file-touches
+since 2026-07-01, all committed JSON, because the inventory regenerates
+whenever tests change — which is nearly every PR. (`reasoning/` shows 26
+touches in the same window, but 22 of those are the one-time removal of the
+already-gitignored `*.{json,dot}` machine forms during the 2026-07-01 pass
+itself; the committed `reasoning/*.md` summaries account for only 4.)
+`configuration` adds 10.
 
 The cost compounds with the merge gate: strict up-to-date branch protection
 means every merge to `main` invalidates other green PRs, and each rebase of a
@@ -35,7 +39,9 @@ demand — executed 2026-07-01 with owner approval.
 
 - **Option A — Extend the `optional_files` precedent to the remaining
   high-churn groups.** Gitignore `var/agents/testing/index.json` and
-  `testing/markers.json` (and evaluate `reasoning/*.md`); consumers run
+  `testing/markers.json` — the measured churn driver. (`reasoning/*.md` shows
+  only 4 post-pass touches, so decommitting those curated summaries is not
+  evidence-driven; keep them committed unless churn reappears.) Consumers run
   `uv run agent-regenerate` on demand. This includes the validator contract:
   `scripts/agents/agent_artifacts.py` currently hard-requires
   `testing/index.json` with a positive `total_tests`
