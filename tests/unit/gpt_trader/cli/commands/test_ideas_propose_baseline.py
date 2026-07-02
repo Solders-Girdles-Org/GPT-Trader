@@ -161,6 +161,38 @@ def test_propose_baseline_sizes_against_current_budget(
     assert latest["max_loss"]["percent_of_account"] != "2"
 
 
+def test_propose_baseline_sizes_with_attested_account_equity(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = tmp_path / "ideas"
+    service = TradeIdeaService(root)
+    service.update_budget(
+        RiskBudget.from_dict(
+            {
+                **DEFAULT_RISK_BUDGET.to_dict(),
+                "version": 2,
+                "account_equity": "1000",
+            }
+        ),
+        actor_type=ActorType.HUMAN,
+        actor_id="rj",
+    )
+    snapshot_path = _write_snapshot(tmp_path / "snapshot.json", _snapshot_payload())
+
+    exit_code, response = _propose_baseline(capsys, root, snapshot_path)
+
+    assert exit_code == 0
+    proposal = response["data"]["proposed"][0]
+    latest = json.loads(
+        (root / "records" / proposal["decision_id"] / "latest.json").read_text(encoding="utf-8")
+    )
+    # Sizing must be denominated by the attested equity the approval gate
+    # uses, not the bridge's default $10,000.
+    sizing_inputs = next(item for item in latest["data_used"] if item.startswith("sizing:"))
+    assert "equity=1000" in sizing_inputs
+    assert proposal["approval_preview"]["violations"] == []
+
+
 def test_propose_baseline_no_signal_is_noop(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

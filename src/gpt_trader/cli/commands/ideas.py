@@ -1030,9 +1030,19 @@ class _LazyBudgetSizingBridge(TradeIdeaPositionSizingBridge):
 
     def recommend(self, context: TradeIdeaSizingContext) -> TradeIdeaSizingOutput:
         if self._delegate is None:
-            self._delegate = TradeIdeaPositionSizingBridge(
-                TradeIdeaSizingConfig(risk_budget=self._budget_service.current_budget())
-            )
+            budget = self._budget_service.current_budget()
+            # Operator-attested equity must denominate sizing the same way the
+            # approval gate uses it; otherwise max_loss percentages are computed
+            # against the bridge's default equity while approve() compares them
+            # to caps on the attested account.
+            if budget.account_equity is not None:
+                sizing_config = TradeIdeaSizingConfig(
+                    equity=budget.account_equity,
+                    risk_budget=budget,
+                )
+            else:
+                sizing_config = TradeIdeaSizingConfig(risk_budget=budget)
+            self._delegate = TradeIdeaPositionSizingBridge(sizing_config)
         return self._delegate.recommend(context)
 
 
