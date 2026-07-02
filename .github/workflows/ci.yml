@@ -674,6 +674,8 @@ jobs:
     name: Dependency Vulnerability Audit
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
     if: always()
     needs: changes
     steps:
