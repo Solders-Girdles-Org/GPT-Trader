@@ -70,19 +70,24 @@ uv run local-ci --profile quick         # faster loop (skips readiness + artifac
 
 ## Merge discipline
 
-`main` is protected and merge is **not** part of packaging. Open the PR, then stop
-until the change is explicitly routed for merge. Before merging: re-read
-current-head review/reaction signals, resolve every review thread, and confirm
-generated artifacts are fresh. **Green CI is not sufficient** — run
-`uv run agent-pr-ready`, which reconciles real mergeability against green checks.
+`main` is protected. Merging carries standing operator approval (2026-07-02):
+no per-PR sign-off is needed once the readiness gate passes. Before merging:
+re-read current-head review/reaction signals, resolve every review thread, and
+confirm generated artifacts are fresh. **Green CI is not sufficient** — run
+`uv run agent-pr-ready`, which reconciles real mergeability against green
+checks, and merge only when it reports ready.
 
 ```bash
 git switch -c <branch>
 git push -u origin HEAD
 gh pr create --fill
-# Merge only once explicitly approved and all threads are resolved:
-# gh pr merge --squash --delete-branch
+# Merge once agent-pr-ready reports ready and all threads are resolved:
+gh pr merge --squash --delete-branch
 ```
+
+Standing approval covers PR merges only — live order submission and execution
+enablement still require recorded human approval (see the trading-safety
+boundary below and [docs/DIRECTION.md](docs/DIRECTION.md)).
 
 Merge mechanics that repeatedly bite agents (`agent-pr-ready` detects all three):
 
