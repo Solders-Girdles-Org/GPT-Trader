@@ -155,6 +155,22 @@ def test_regime_aware_proposer_suppresses_crisis_signal() -> None:
     assert proposer.propose(snapshot) == []
 
 
+def test_regime_downgraded_confidence_feeds_sizing() -> None:
+    # A bearish overlay downgrades visible confidence to LOW; sizing must use
+    # that post-overlay decision confidence, not the baseline's MEDIUM.
+    snapshot = snapshot_of(make_series(GOLDEN_CROSS, last_volume="5000"))
+    factory, _detectors = scripted_factory(regime_state(RegimeType.BEAR_QUIET))
+    proposer = RegimeAwareProposer(CONFIG, detector_factory=factory)
+
+    ideas = proposer.propose(snapshot)
+
+    assert len(ideas) == 1
+    idea = ideas[0]
+    assert idea.confidence.label is ConfidenceLabel.LOW
+    sizing_inputs = next(item for item in idea.data_used if item.startswith("sizing:"))
+    assert "decision_confidence=0.3500" in sizing_inputs
+
+
 def test_decision_id_covers_full_proposer_configuration() -> None:
     # Two runs differing only in an output-affecting knob (suppression policy,
     # baseline band) must not collide on decision_id in the same ideas root.

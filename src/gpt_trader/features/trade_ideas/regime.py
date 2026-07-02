@@ -88,8 +88,18 @@ class RegimeAwareProposer:
 
     def propose(self, snapshot: MarketSnapshot) -> list[TradeIdea]:
         states = self._regime_states(snapshot)
+
+        def overlay_label(symbol: str, confidence: Confidence) -> Confidence:
+            # Adjust only the label so sizing uses the post-overlay
+            # decision-confidence; _enrich_idea appends the rationale once.
+            state = states.get(symbol, RegimeState.unknown())
+            return Confidence(
+                label=_regime_confidence(confidence, state).label,
+                rationale=confidence.rationale,
+            )
+
         ideas: list[TradeIdea] = []
-        for idea in self._baseline.propose(snapshot):
+        for idea in self._baseline.propose(snapshot, confidence_overlay=overlay_label):
             state = states.get(idea.instrument, RegimeState.unknown())
             # UNKNOWN means the detector has not warmed up (long EMA plus
             # persistence ticks); a "regime-aware" idea with a 0.0-confidence

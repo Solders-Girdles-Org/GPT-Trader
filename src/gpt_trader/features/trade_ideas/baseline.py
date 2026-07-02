@@ -10,6 +10,7 @@ outscore this on the same replayed snapshots, it is noise.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -33,6 +34,9 @@ from gpt_trader.features.trade_ideas.sizing import (
     TradeIdeaSizingContext,
 )
 from gpt_trader.features.trade_ideas.snapshot import MarketSnapshot, SymbolSeries
+
+# Per-run hook letting wrapping proposers adjust confidence before sizing.
+ConfidenceOverlay = Callable[[str, Confidence], Confidence]
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,16 +82,25 @@ class BaselineProposer:
     def proposer_id(self) -> str:
         return f"baseline-ma-{self._config.short_window}-{self._config.long_window}"
 
-    def propose(self, snapshot: MarketSnapshot) -> list[TradeIdea]:
+    def propose(
+        self,
+        snapshot: MarketSnapshot,
+        *,
+        confidence_overlay: ConfidenceOverlay | None = None,
+    ) -> list[TradeIdea]:
         ideas: list[TradeIdea] = []
         for series in snapshot.series:
-            idea = self._propose_for_series(snapshot, series)
+            idea = self._propose_for_series(snapshot, series, confidence_overlay=confidence_overlay)
             if idea is not None:
                 ideas.append(idea)
         return ideas
 
     def _propose_for_series(
-        self, snapshot: MarketSnapshot, series: SymbolSeries
+        self,
+        snapshot: MarketSnapshot,
+        series: SymbolSeries,
+        *,
+        confidence_overlay: ConfidenceOverlay | None = None,
     ) -> TradeIdea | None:
         config = self._config
         as_of = _utc_aware(snapshot.as_of)
@@ -138,6 +151,11 @@ class BaselineProposer:
                 else "Crossover lacks volume confirmation; treat as a weaker signal"
             ),
         )
+        # Overlays (e.g. the regime-aware proposer) must adjust the visible
+        # confidence BEFORE sizing so the decision-confidence factor and the
+        # persisted confidence label agree.
+        if confidence_overlay is not None:
+            confidence = confidence_overlay(series.symbol, confidence)
         sizing = self._sizing_bridge.recommend(
             TradeIdeaSizingContext(
                 symbol=series.symbol,
