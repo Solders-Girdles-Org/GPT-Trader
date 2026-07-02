@@ -168,11 +168,14 @@ class PaperCycleRunner:
         self._service = service
         self._cycle_root = cycle_root
         self._proposers = tuple(proposers)
-        self._executor = PaperIdeaExecutor(service, broker)
         self._broker = broker
         self._execute_approved = execute_approved
         self._actor_id = actor_id
         self._now_factory = now_factory or (lambda: datetime.now(UTC))
+        # The executor must share the turn's clock: with an injected clock
+        # (deterministic or historical turns) a wall-clock expiry check would
+        # refuse ideas the rest of the turn still considers live.
+        self._executor = PaperIdeaExecutor(service, broker, now_factory=self._now_factory)
 
     def run(self, snapshot_provider: SnapshotProvider) -> PaperCycleResult:
         """Run one turn; append exactly one manifest row whatever happens."""
@@ -297,7 +300,9 @@ class PaperCycleRunner:
         # recorded, the trade is unresolved and the same ongoing signal must
         # not pyramid a second position onto it.
         busy_instruments: dict[str, tuple[str, str]] = {}
+        known_decision_ids: set[str] = set()
         for view in self._service.list_views():
+            known_decision_ids.add(view.idea.decision_id)
             if view.state in _OPEN_STATES:
                 busy_instruments[view.idea.instrument] = (
                     view.idea.decision_id,
@@ -311,6 +316,18 @@ class PaperCycleRunner:
         admitted = []
         skipped: list[dict[str, str]] = []
         for idea in candidates:
+            # Deterministic proposers emit the same decision_id for the same
+            # snapshot, so a rerun over a saved snapshot must skip
+            # idempotently rather than fail the turn on a duplicate id.
+            if idea.decision_id in known_decision_ids:
+                skipped.append(
+                    {
+                        "instrument": idea.instrument,
+                        "reason": "decision id already recorded (idempotent rerun)",
+                        "existing_decision_id": idea.decision_id,
+                    }
+                )
+                continue
             busy = busy_instruments.get(idea.instrument)
             if busy is not None:
                 existing_decision_id, reason = busy
@@ -323,6 +340,7 @@ class PaperCycleRunner:
                 )
                 continue
             admitted.append(idea)
+            known_decision_ids.add(idea.decision_id)
             busy_instruments[idea.instrument] = (
                 idea.decision_id,
                 "instrument already has an open idea",

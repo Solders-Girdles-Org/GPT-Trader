@@ -24,7 +24,10 @@ from tests.unit.gpt_trader.features.idea_execution.conftest import (
     snapshot_provider,
 )
 
+from gpt_trader.features.brokerages.mock import DeterministicBroker
+from gpt_trader.features.idea_execution import PaperCycleRunner
 from gpt_trader.features.trade_ideas import (
+    DEFAULT_RISK_BUDGET,
     ActorType,
     MarketSnapshot,
     TimeHorizon,
@@ -72,6 +75,25 @@ class TestProposeLeg:
         (skip,) = proposer_turn.skipped_open_instruments
         assert skip["instrument"] == "BTC-USD"
         assert skip["existing_decision_id"] == first.proposer_turns[0].proposed_decision_ids[0]
+
+    def test_rerun_over_resolved_idea_skips_duplicate_id_idempotently(
+        self, cycle_service: TradeIdeaService, tmp_path: Path
+    ) -> None:
+        # The deterministic proposer emits the same decision_id for the same
+        # snapshot; a rerun after the prior idea resolved (cancelled here)
+        # must skip instead of failing the turn on a duplicate id.
+        runner = make_cycle_runner(cycle_service, tmp_path)
+        provider = snapshot_provider(snapshot(crossover_series("BTC-USD")))
+        first = runner.run(provider)
+        (decision_id,) = first.proposer_turns[0].proposed_decision_ids
+        cycle_service.reject(decision_id, actor_id="test-operator", reason="not this one")
+
+        second = runner.run(provider)
+        (proposer_turn,) = second.proposer_turns
+        assert proposer_turn.proposal_count == 0
+        (skip,) = proposer_turn.skipped_open_instruments
+        assert skip["reason"] == "decision id already recorded (idempotent rerun)"
+        assert skip["existing_decision_id"] == decision_id
 
     def test_filled_idea_awaiting_closeout_blocks_reproposal(
         self, cycle_service: TradeIdeaService, tmp_path: Path
@@ -257,6 +279,48 @@ class TestExecuteApprovedLeg:
         (skip,) = result.execution.skipped
         assert skip["decision_id"] == decision_id
         assert "state changed to cancelled" in skip["reason"]
+
+    def test_executor_uses_the_turn_clock_not_the_wall_clock(self, tmp_path: Path) -> None:
+        # A historical/offline turn runs entirely on the injected clock: an
+        # idea live at the turn's own time must execute even when its expiry
+        # is in the wall-clock past.
+        turn_time = CYCLE_NOW - timedelta(days=400)
+        historical_service = TradeIdeaService(tmp_path / "ideas", now_factory=lambda: turn_time)
+        historical_service.update_budget(
+            replace(
+                DEFAULT_RISK_BUDGET,
+                version=2,
+                account_equity=Decimal("25000"),
+                reason="test: attest scratch equity",
+            ),
+            actor_type=ActorType.HUMAN,
+            actor_id="test-operator",
+        )
+        decision_id = "trade-20250529-cycle-clock"
+        idea = replace(
+            build_cycle_idea(decision_id),
+            time_horizon=TimeHorizon(
+                expected_hold="3-10 days",
+                expires_at=turn_time + timedelta(days=7),
+            ),
+        )
+        historical_service.propose(idea, actor_id="test-proposer")
+        historical_service.approve(decision_id, actor_id="test-operator", reason="test approval")
+
+        runner = PaperCycleRunner(
+            historical_service,
+            cycle_root=tmp_path / "cycle",
+            proposers=[],
+            broker=DeterministicBroker(),
+            now_factory=lambda: turn_time,
+        )
+        result = runner.run(
+            snapshot_provider(
+                snapshot(crossover_series("BTC-USD", as_of=turn_time), as_of=turn_time)
+            )
+        )
+        (executed,) = result.execution.executed
+        assert executed["decision_id"] == decision_id
 
 
 class TestExpirySweep:
