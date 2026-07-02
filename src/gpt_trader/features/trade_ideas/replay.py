@@ -181,6 +181,9 @@ class ReplayReport:
             "average_return_r": (
                 str(self.average_return_r) if self.average_return_r is not None else None
             ),
+            "eligibility_checked": self.eligibility_checked,
+            "eligibility_passed": self.eligibility_passed,
+            "eligibility_pass_rate": str(self.eligibility_pass_rate),
             "ideas": [idea.to_dict() for idea in self.ideas],
         }
 

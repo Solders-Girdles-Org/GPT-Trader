@@ -235,21 +235,29 @@ def test_replay_tournament_computes_eligibility_pass_rate() -> None:
         proposer_id = "mixed-eligibility"
 
         def propose(self, snapshot: MarketSnapshot) -> list[TradeIdea]:
+            horizon = TimeHorizon(
+                expected_hold="1-4 hours",
+                expires_at=snapshot.as_of + timedelta(hours=4),
+            )
+            # Asymmetric 3:1 split so an inverted eligible/ineligible
+            # calculation (0.25) cannot masquerade as the correct 0.75.
             return [
                 scoreable_idea(
-                    decision_id="trade-20260612-eligible",
-                    time_horizon=TimeHorizon(
-                        expected_hold="1-4 hours",
-                        expires_at=snapshot.as_of + timedelta(hours=4),
-                    ),
+                    decision_id="trade-20260612-eligible-a",
+                    time_horizon=horizon,
+                ),
+                scoreable_idea(
+                    decision_id="trade-20260612-eligible-b",
+                    time_horizon=horizon,
+                ),
+                scoreable_idea(
+                    decision_id="trade-20260612-eligible-c",
+                    time_horizon=horizon,
                 ),
                 scoreable_idea(
                     decision_id="trade-20260612-missing-data-used",
                     data_used=(),
-                    time_horizon=TimeHorizon(
-                        expected_hold="1-4 hours",
-                        expires_at=snapshot.as_of + timedelta(hours=4),
-                    ),
+                    time_horizon=horizon,
                 ),
             ]
 
@@ -265,8 +273,12 @@ def test_replay_tournament_computes_eligibility_pass_rate() -> None:
         ),
     )
 
-    assert report.rankings[0].eligibility_pass_rate == Decimal("0.5")
-    assert report.to_dict()["rankings"][0]["eligibility_pass_rate"] == "0.5"
+    assert report.rankings[0].eligibility_pass_rate == Decimal("0.75")
+    assert report.to_dict()["rankings"][0]["eligibility_pass_rate"] == "0.75"
+    report_payload = report.reports[0].to_dict()
+    assert report_payload["eligibility_checked"] == 4
+    assert report_payload["eligibility_passed"] == 3
+    assert report_payload["eligibility_pass_rate"] == "0.75"
 
 
 def test_replay_runner_config_rejects_non_positive_min_history() -> None:
