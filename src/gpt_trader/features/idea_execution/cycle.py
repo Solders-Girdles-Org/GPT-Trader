@@ -229,6 +229,14 @@ class PaperCycleRunner:
         expired_decision_ids = tuple(view.idea.decision_id for view in expired_views)
         row["expired_decision_ids"] = list(expired_decision_ids)
 
+        # Capture the execution candidates before the proposer leg: the
+        # approval CLI does not take the cycle lock, so an idea approved while
+        # this turn is running must wait for the next turn — approval lands
+        # between turns, never inside one.
+        approved_before_turn = tuple(
+            view.idea.decision_id for view in self._service.list_views(TradeIdeaState.APPROVED)
+        )
+
         proposer_turns: list[ProposerTurn] = []
         for proposer in self._proposers:
             turn = self._run_proposer(proposer, snapshot, snapshot_reference)
@@ -236,7 +244,7 @@ class PaperCycleRunner:
             row["proposers"] = [item.to_dict() for item in proposer_turns]
 
         execution = (
-            self._execute_approved_ideas(snapshot)
+            self._execute_approved_ideas(snapshot, approved_before_turn)
             if self._execute_approved
             else ExecutionTurn(enabled=False)
         )
@@ -280,26 +288,41 @@ class PaperCycleRunner:
     ) -> ProposerTurn:
         candidates = proposer.propose(snapshot)
 
-        open_instruments = {
-            view.idea.instrument: view.idea.decision_id
-            for view in self._service.list_views()
-            if view.state in _OPEN_STATES
-        }
+        # An instrument is busy while an idea for it is open, and also while a
+        # filled trade awaits closeout attribution: until the outcome is
+        # recorded, the trade is unresolved and the same ongoing signal must
+        # not pyramid a second position onto it.
+        busy_instruments: dict[str, tuple[str, str]] = {}
+        for view in self._service.list_views():
+            if view.state in _OPEN_STATES:
+                busy_instruments[view.idea.instrument] = (
+                    view.idea.decision_id,
+                    "instrument already has an open idea",
+                )
+            elif view.state is TradeIdeaState.FILLED and view.closeout_attribution is None:
+                busy_instruments.setdefault(
+                    view.idea.instrument,
+                    (view.idea.decision_id, "instrument has a filled idea awaiting closeout"),
+                )
         admitted = []
         skipped: list[dict[str, str]] = []
         for idea in candidates:
-            existing_decision_id = open_instruments.get(idea.instrument)
-            if existing_decision_id is not None:
+            busy = busy_instruments.get(idea.instrument)
+            if busy is not None:
+                existing_decision_id, reason = busy
                 skipped.append(
                     {
                         "instrument": idea.instrument,
-                        "reason": "instrument already has an open idea",
+                        "reason": reason,
                         "existing_decision_id": existing_decision_id,
                     }
                 )
                 continue
             admitted.append(idea)
-            open_instruments[idea.instrument] = idea.decision_id
+            busy_instruments[idea.instrument] = (
+                idea.decision_id,
+                "instrument already has an open idea",
+            )
 
         proposed_decision_ids: tuple[str, ...] = ()
         if admitted:
@@ -326,14 +349,29 @@ class PaperCycleRunner:
             skipped_open_instruments=tuple(skipped),
         )
 
-    def _execute_approved_ideas(self, snapshot: MarketSnapshot) -> ExecutionTurn:
+    def _execute_approved_ideas(
+        self,
+        snapshot: MarketSnapshot,
+        approved_before_turn: tuple[str, ...],
+    ) -> ExecutionTurn:
         marks = {
             series.symbol: series.candles[-1].close for series in snapshot.series if series.candles
         }
         executed: list[dict[str, Any]] = []
         skipped: list[dict[str, str]] = []
-        for view in self._service.list_views(TradeIdeaState.APPROVED):
-            decision_id = view.idea.decision_id
+        for decision_id in approved_before_turn:
+            view = self._service.get(decision_id)
+            if view.state is not TradeIdeaState.APPROVED:
+                # The state moved while the turn was running (for example a
+                # human cancelled it); the lane would refuse it anyway, so
+                # record the observation instead of attempting execution.
+                skipped.append(
+                    {
+                        "decision_id": decision_id,
+                        "reason": f"state changed to {view.state.value} during the turn",
+                    }
+                )
+                continue
             mark = marks.get(view.idea.instrument)
             if mark is None:
                 skipped.append(
