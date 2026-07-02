@@ -5,7 +5,7 @@ import pytest
 from gpt_trader.features.intelligence.ensemble.models import StrategyVote
 from gpt_trader.features.intelligence.ensemble.voting import WeightedMajorityVoting
 from gpt_trader.features.intelligence.regime.models import RegimeState, RegimeType
-from gpt_trader.features.live_trade.strategies.perps_baseline import Action, Decision
+from gpt_trader.features.live_trade.strategies.baseline import Action, Decision
 
 
 @pytest.fixture

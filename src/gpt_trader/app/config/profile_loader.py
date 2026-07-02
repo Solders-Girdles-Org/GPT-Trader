@@ -477,7 +477,7 @@ class ProfileLoader:
             Dictionary of kwargs for BotConfig constructor
         """
         from gpt_trader.app.config.bot_config import BotRiskConfig
-        from gpt_trader.features.live_trade.strategies.perps_baseline import (
+        from gpt_trader.features.live_trade.strategies.baseline import (
             PerpsStrategyConfig,
         )
 

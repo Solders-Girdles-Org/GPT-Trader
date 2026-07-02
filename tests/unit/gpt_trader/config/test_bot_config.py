@@ -122,7 +122,7 @@ class TestProfileStrategyHydration:
         kwargs = loader.to_bot_config_kwargs(schema, Profile.DEV)
 
         assert "strategy" in kwargs
-        from gpt_trader.features.live_trade.strategies.perps_baseline import (
+        from gpt_trader.features.live_trade.strategies.baseline import (
             PerpsStrategyConfig,
         )
 

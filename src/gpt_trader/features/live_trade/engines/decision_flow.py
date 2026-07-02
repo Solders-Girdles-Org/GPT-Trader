@@ -14,7 +14,7 @@ from decimal import Decimal
 from typing import Any
 
 from gpt_trader.core import Position
-from gpt_trader.features.live_trade.strategies.perps_baseline import Action, Decision
+from gpt_trader.features.live_trade.strategies.baseline import Action, Decision
 from gpt_trader.features.strategy_tools import StrategySignalContext
 from gpt_trader.features.trade_ideas import ProductType
 from gpt_trader.monitoring.alert_types import AlertSeverity

@@ -8,7 +8,7 @@ Strategies follow a common interface and receive market data from the trading en
 
 ```
 strategies/
-├── perps_baseline/     # Perpetuals baseline strategy
+├── baseline/           # Baseline MA/RSI strategy (spot-first)
 ├── mean_reversion/     # Mean reversion strategy
 ├── regime_switcher/    # Regime switching strategy
 ├── ensemble.py         # Signal ensemble strategy
@@ -39,7 +39,7 @@ class StrategyProtocol(Protocol):
 
 | Strategy | Market | Description |
 |----------|--------|-------------|
-| `perps_baseline` | Perpetuals | Moving average crossover baseline |
+| `perps_baseline` (module: `baseline/`) | Spot/CFM | Moving average crossover baseline |
 | `mean_reversion` | Spot/CFM | Z-score mean reversion |
 | `regime_switcher` | Spot/CFM | Regime-based strategy selection |
 

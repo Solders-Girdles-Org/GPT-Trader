@@ -117,7 +117,7 @@ from gpt_trader.features.live_trade.lifecycle import (
     EngineState,
     LifecycleStateMachine,
 )
-from gpt_trader.features.live_trade.strategies.perps_baseline import (
+from gpt_trader.features.live_trade.strategies.baseline import (
     Action,
     Decision,
 )

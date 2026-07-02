@@ -15,7 +15,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
 
 from gpt_trader.core import Balance
-from gpt_trader.features.brokerages.core.protocols import BrokerProtocol
+from gpt_trader.core.protocols import BrokerProtocol
 from gpt_trader.features.live_trade.execution.broker_executor import BrokerExecutor
 from gpt_trader.features.live_trade.execution.guards.api_health import ApiHealthGuard
 from gpt_trader.features.live_trade.execution.guards.cache import GuardStateCache
