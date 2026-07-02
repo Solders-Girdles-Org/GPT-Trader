@@ -85,6 +85,12 @@ class RegimeAwareProposer:
         ideas: list[TradeIdea] = []
         for idea in self._baseline.propose(snapshot):
             state = states.get(idea.instrument, RegimeState.unknown())
+            # UNKNOWN means the detector has not warmed up (long EMA plus
+            # persistence ticks); a "regime-aware" idea with a 0.0-confidence
+            # overlay would be self-contradictory, so treat it as unready
+            # rather than persisting a proposal.
+            if state.regime is RegimeType.UNKNOWN:
+                continue
             if state.regime in self._config.suppressed_regimes:
                 continue
             ideas.append(self._enrich_idea(snapshot, idea, state))

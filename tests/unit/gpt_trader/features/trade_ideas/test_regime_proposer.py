@@ -154,6 +154,18 @@ def test_regime_aware_proposer_suppresses_crisis_signal() -> None:
     assert proposer.propose(snapshot) == []
 
 
+def test_regime_aware_proposer_treats_unknown_regime_as_unready() -> None:
+    # A detector that has not warmed up returns UNKNOWN; the proposer must not
+    # persist a "regime-aware" idea carrying a 0.0-confidence overlay.
+    snapshot = snapshot_of(make_series(GOLDEN_CROSS))
+    baseline = BaselineProposer(CONFIG.baseline_config)
+    factory, _detectors = scripted_factory(RegimeState.unknown())
+    proposer = RegimeAwareProposer(CONFIG, detector_factory=factory)
+
+    assert len(baseline.propose(snapshot)) == 1
+    assert proposer.propose(snapshot) == []
+
+
 def test_replay_runner_scores_regime_aware_proposer_on_historical_candles() -> None:
     def candle(
         offset_hours: int,

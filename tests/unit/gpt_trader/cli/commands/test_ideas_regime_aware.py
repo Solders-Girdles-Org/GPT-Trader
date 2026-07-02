@@ -12,7 +12,9 @@ from gpt_trader.cli.response import CliErrorCode
 
 AS_OF = datetime(2035, 6, 12, 0, 0, tzinfo=UTC)
 REPLAY_AS_OF = datetime(2026, 6, 12, 12, 0, tzinfo=UTC)
-GOLDEN_CROSS = ["100"] * 50 + ["102", "104", "106"]
+# 57 flat candles: the regime detector warms at long_ema_period (50) and then
+# needs min_regime_ticks (5) to leave UNKNOWN before the 3-candle crossover.
+GOLDEN_CROSS = ["100"] * 57 + ["102", "104", "106"]
 
 
 def _run_json(capsys: pytest.CaptureFixture[str], argv: list[str]) -> tuple[int, dict[str, Any]]:
