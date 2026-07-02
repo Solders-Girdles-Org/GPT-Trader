@@ -1,7 +1,7 @@
 # Five-role runtime composition — trade-idea spine, recorder and executor as separate arms
 
 ---
-status: proposed
+status: accepted
 date: 2026-07-02
 deciders: rj
 supersedes:
@@ -78,27 +78,28 @@ rails lifecycle is CI-gated as of PR #1142 (`make stage1-smoke`).
 
 ## Decision
 
-_Open. Recommendation: Option A — it is the only shape that satisfies all
-three forcing properties, it subsumes rather than contradicts the accepted
-risk-vocabulary and no-second-brain decisions, and it converts convergence
-into individually shippable extractions instead of a rewrite._
+Accepted: Option A — five in-process roles around the trade-idea spine:
+recorder, proposers, approval/policy, executor, and accountant.
+
+This is the target shape for convergence because it keeps observation
+independent from execution, requires decisions to be explainable from recorded
+data, and makes execution consume freshness-annotated data rather than own
+ingestion. This decision authorizes architecture direction only; it does not
+authorize live execution or any autonomy change.
 
 ## Consequences
 
-Fill in when accepted. Expected shape for Option A:
-
-- Sequencing (each step ships alone, loop stays green under the Stage 1 rails
-  smoke): paper executor for APPROVED ideas as a **new component** (not more
-  `TradingEngine`); recorder extraction (success test: execution halted,
-  recording continues); strategies converge onto the `Proposer` snapshot
-  contract; risk unification per #1120 lands in the accountant; persistent,
-  audited autonomy-level state consumed by all roles.
-- Roles are in-process components with clear ownership — no daemons/IPC; only
-  the recorder boundary is kept process-capable.
-- `features/live_trade` shrinks as seams move out; its direct decide→submit
-  path is retired (or explicitly fenced as legacy) after proposer parity.
-- Follow-up work is filed as GitHub issues per step; none is authorized to
-  start by this record alone.
+- M1 starts with a paper executor for APPROVED ideas as a new component, not
+  more `TradingEngine`.
+- The executor introduction is paper-only; live broker adapters remain
+  structurally unreachable from that lane.
+- Later steps extract the recorder, converge strategies onto the `Proposer`
+  snapshot contract, land #1120 in the accountant, and add persistent audited
+  autonomy-level state.
+- `features/live_trade` shrinks as seams move out; the direct decide→submit
+  path is retired or fenced as legacy after proposer parity.
+- Each step is filed and reviewed separately, and the Stage 1 smoke stays
+  green.
 
 ## Safety boundary
 
