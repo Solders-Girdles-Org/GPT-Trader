@@ -87,6 +87,7 @@ def test_windowed_report_uses_cutoff_for_approval_readiness(tmp_path: Path) -> N
         root,
         now_factory=lambda: datetime(2026, 5, 20, 12, 0, tzinfo=UTC),
     )
+    attest_account_equity(service)
     service.propose(
         _idea(
             "trade-window-cutoff-readiness",
