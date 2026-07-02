@@ -492,6 +492,8 @@ jobs:
     name: Unit Tests (Core)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     env:
       GPT_TRADER_STRICT_CONTAINER: "1"
       PYTHONWARNINGS: default
@@ -517,7 +519,55 @@ jobs:
         run: uv sync --all-extras --dev
 
       - name: Run unit tests
-        run: uv run pytest tests/unit -n auto -q
+        # Report path must be absolute (some tests change the process cwd) and
+        # outside the repo root (tests/conftest.py pytest_sessionfinish runs
+        # cleanup_workspace.py --apply, which deletes a root-level coverage.json).
+        run: uv run pytest tests/unit -n auto -q --cov=src/gpt_trader --cov-report="json:$PWD/var/results/coverage/coverage.json"
+
+      - name: Upload coverage artifact
+        if: always()
+        # actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: coverage-json
+          path: var/results/coverage/coverage.json
+          retention-days: 30
+          if-no-files-found: ignore
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      GPT_TRADER_STRICT_CONTAINER: "1"
+      PYTHONWARNINGS: default
+    steps:
+      # actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        # astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        # actions/setup-python@v5
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version-file: ".python-version"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      # Mock-broker suite: tests/integration/conftest.py forces MOCK_BROKER=1,
+      # so this needs no secrets. Advisory lane (not branch-protection required).
+      - name: Run integration tests
+        run: uv run pytest -o addopts= -m "integration and not slow and not real_api" tests/integration -q
 
   windows-unit-tests:
     name: Windows Unit Tests (Portability)
