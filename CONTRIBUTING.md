@@ -92,27 +92,30 @@ Before branching, make sure to:
 7. **Push to your fork** (`git push origin feature/amazing-feature`)
 8. **Open a Pull Request**
 
-## Issue Labeling for AI Routing
+## Issue Labels
 
-Issue labels drive repository issue routing for agents and humans. Keep them consistent and machine-friendly:
+Labels mark **exceptions, not categories**. An unlabeled open issue is ordinary
+ready work — specified well enough to pick up, sequenced by conversation with
+the owner, not by taxonomy. The full label set:
 
-- **Type label (required):** one of `bug`, `enhancement`, `architecture`, `chore`, `documentation`, `tests`, `ci`, or `security`.
-- **Area label(s) (required, 1–2):** one or two labels from the active domain set, e.g. `trade-ideas`, `live-trade`, `cli`, `mcp`, `reporting`, `runtime`, `monitoring`, `audit`, `closeout`, `broker-neutral`, `trading-safety`, or `coinbase`.
-- **Optional detail labels:** use tags like `persistence`, `reliability`, `packaging`, `deploy`, `developer-experience`, `tech-debt`, etc. as needed.
-- **Agent routing labels:** routing signals for the agent workflow; the detailed pipeline lives in [the agent review pipeline](docs/agents/project_review_pipeline.md#stage-4-queue).
-  - `agent-review` — produced by the recurring GPT-Trader agent review lane
-  - `agent-ready` — validated and ready for agent implementation (no decision/blocker gate)
-  - `decision-needed` — requires an explicit decision packet and agent recommendation before implementation (the single decision-gate label; `needs-human-decision` was retired 2026-07-01)
-  - `codex-review-feedback` — follow-up from Codex review comments or checks
-  - `claw-candidate` — candidate for Claw implementation
-- **Triage labels:** applied after an issue is sorted into the current queue shape.
-  - `triage:build-now` — core spine; build now, unblocks other work
-  - `triage:build-next` — valuable; build after the now-spine lands
-  - `triage:blocked` — valuable but sequenced behind a dependency
-  - `triage:defer` — premature or scope-creep; revisit later
-- **`codex` label:** routing signal for the agent-review / Codex workflow. Issues in this lane (e.g. the `agent-review-finding` template) are **exempt** from the Type/Area requirements above — `codex` alone is sufficient.
+| Label | Meaning |
+| --- | --- |
+| `agent-ready` | Validated, self-contained spec; an agent can execute it without further human input |
+| `decision-needed` | Requires an explicit decision packet and owner call before implementation |
+| `blocked` | Sequenced behind a named dependency (name it in the issue body) |
+| `trading-safety` | Touches trading safety controls or the execution boundary ([docs/DIRECTION.md](docs/DIRECTION.md)) |
+| `agent-review` | Provenance: produced by the recurring agent review lane |
+| `bug`, `enhancement`, `documentation`, `duplicate`, `dependencies` | GitHub/Dependabot defaults |
 
-For this repository, status/priority labels are intentionally deferred until they solve a real need. The default issue templates should already include the intended label shape so no extra manual steps are needed at issue creation.
+Deferred work is **closed with a comment**, not labeled: closed issues are the
+searchable archive, and reopening is cheap. Do not add labels beyond this set
+without first retiring this model — label taxonomies decay (the 45-label
+predecessor, including the `triage:*` scheduler, was retired 2026-07-02 because
+it had stopped being applied).
+
+Use the **Task** issue form when filing new work: it carries the same
+Summary / Evidence / Scope / Acceptance / Verification structure the agent
+promoter emits, so hand-written and promoted issues share one contract.
 
 ## Quality Standards
 
