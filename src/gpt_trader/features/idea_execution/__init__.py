@@ -14,22 +14,34 @@ Lane contract (enforced in code, not convention):
 - **APPROVED ideas only.** Ideas in any other workflow state, or past their
   ``expires_at``, are refused with ``IdeaNotExecutableError``.
 - Lifecycle facts are recorded only through ``TradeIdeaService`` so every
-  action lands on the append-only audit log with a system actor.
+  action lands on the append-only audit log with a system actor, under the
+  dedicated ``paper`` audit venue.
+- **At-most-once.** ``execute`` records the submission before touching the
+  broker; a crash in between leaves the idea SUBMITTED, which admission
+  refuses, so the same idea can never be placed twice.
 
 Live order submission remains gated by docs/DIRECTION.md and recorded human
 approval; nothing in this slice weakens that boundary.
 """
 
 from gpt_trader.features.idea_execution.executor import (
+    DEFAULT_PAPER_EXECUTION_ACTOR_ID,
     PAPER_BROKER_TYPES,
+    PAPER_EXECUTION_VENUE,
     IdeaNotExecutableError,
+    PaperExecutionError,
+    PaperExecutionResult,
     PaperIdeaExecutor,
     PaperOnlyLaneError,
 )
 
 __all__ = [
+    "DEFAULT_PAPER_EXECUTION_ACTOR_ID",
     "PAPER_BROKER_TYPES",
+    "PAPER_EXECUTION_VENUE",
     "IdeaNotExecutableError",
+    "PaperExecutionError",
+    "PaperExecutionResult",
     "PaperIdeaExecutor",
     "PaperOnlyLaneError",
 ]

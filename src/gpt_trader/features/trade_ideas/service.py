@@ -91,7 +91,7 @@ OPEN_BUDGET_EXPOSURE_STATES = frozenset(
         TradeIdeaState.SUBMITTED,
     }
 )
-_AUDIT_VENUES = frozenset({TicketVenue.COINBASE, TicketVenue.MANUAL})
+_AUDIT_VENUES = frozenset({TicketVenue.COINBASE, TicketVenue.MANUAL, TicketVenue.PAPER})
 _CONFIDENCE_RANK = {
     ConfidenceLabel.LOW: 0,
     ConfidenceLabel.MEDIUM: 1,

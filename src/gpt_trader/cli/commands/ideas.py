@@ -1,8 +1,10 @@
 """Trade-idea CLI commands.
 
 This module is an operator-facing adapter over ``TradeIdeaService``. It never
-submits, modifies, or cancels broker orders; submission and fill commands only
-append audit records for tickets executed elsewhere.
+submits, modifies, or cancels live broker orders; ``mark-submitted`` and
+``mark-filled`` only append audit records for tickets executed elsewhere, and
+``execute-paper`` drives the paper-only execution lane, whose types make live
+brokers structurally unreachable.
 """
 
 from __future__ import annotations
@@ -35,6 +37,11 @@ from gpt_trader.cli.commands.ideas_input import (
 )
 from gpt_trader.cli.response import CliError, CliErrorCode, CliResponse, RawCliOutput
 from gpt_trader.errors import ValidationError
+from gpt_trader.features.brokerages.mock import DeterministicBroker
+from gpt_trader.features.idea_execution import (
+    DEFAULT_PAPER_EXECUTION_ACTOR_ID,
+    PaperIdeaExecutor,
+)
 from gpt_trader.features.intelligence.regime import RegimeConfig
 from gpt_trader.features.trade_ideas import (
     DEFAULT_TIME_IN_FORCE,
@@ -873,6 +880,33 @@ def register(subparsers: Any) -> None:
         handler=_handle_reconcile_paper_fills,
         subcommand="reconcile-paper-fills",
     )
+
+    execute_paper = ideas_subparsers.add_parser(
+        "execute-paper",
+        help="Execute an APPROVED idea against the offline deterministic paper broker",
+        description=(
+            "Machine leg of the Stage 1 paper lane: place a simulated market order "
+            "for an approved idea (client_order_id = decision id) and record the "
+            "submission and fill through TradeIdeaService. Only the deterministic "
+            "paper broker is reachable from this command; it never contacts a live "
+            "broker or account."
+        ),
+    )
+    _add_common_options(execute_paper)
+    _add_actor_options(
+        execute_paper,
+        default_description=f"{DEFAULT_PAPER_EXECUTION_ACTOR_ID} unless --actor is provided",
+    )
+    execute_paper.add_argument("decision_id", help="Trade idea decision identifier")
+    execute_paper.add_argument(
+        "--mark",
+        type=_positive_decimal_value,
+        help=(
+            "Mark price for the idea's instrument on the deterministic broker "
+            "(default: the broker's built-in mark)"
+        ),
+    )
+    execute_paper.set_defaults(handler=_handle_execute_paper, subcommand="execute-paper")
 
     budget = ideas_subparsers.add_parser("budget", help="Inspect or update risk budget")
     budget_subparsers = budget.add_subparsers(dest="budget_command", required=True)
@@ -2246,6 +2280,36 @@ def _handle_reconcile_paper_fills(args: Namespace) -> CliResponse:
         _paper_reconciliation_text(command, payload),
         was_noop=not args.apply or payload["recorded_count"] == 0,
     )
+
+
+def _paper_execution_actor_id(args: Namespace) -> str:
+    explicit_actor = getattr(args, "actor", None)
+    return resolve_trade_idea_actor_id(explicit_actor or DEFAULT_PAPER_EXECUTION_ACTOR_ID)
+
+
+def _handle_execute_paper(args: Namespace) -> CliResponse:
+    command = "ideas execute-paper"
+    decision_id_error = _decision_id_error(command, args, args.decision_id)
+    if decision_id_error is not None:
+        return decision_id_error
+    try:
+        service = _service(args)
+        broker = DeterministicBroker()
+        if args.mark is not None:
+            broker.set_mark(service.get(args.decision_id).idea.instrument, args.mark)
+        result = PaperIdeaExecutor(service, broker).execute(
+            args.decision_id,
+            actor_id=_paper_execution_actor_id(args),
+        )
+    except Exception as error:
+        return _mapped_error(command, args, error)
+    text = _status_line(
+        command,
+        "OK",
+        f"decision={result.decision_id} state={result.final_state} "
+        f"order={result.order_id} fill_price={result.fill_price}",
+    )
+    return _success(command, args, result.to_dict(), text)
 
 
 def _handle_budget_show(args: Namespace) -> CliResponse:
