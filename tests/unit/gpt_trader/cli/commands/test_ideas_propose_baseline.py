@@ -111,12 +111,13 @@ def test_propose_baseline_persists_generated_proposal(
     assert proposal["decision_id"].startswith("trade-20350612-btcusd-")
     assert proposal["state"] == "proposed"
     assert proposal["record_hash"]
+    # Sized proposals carry a notional, so on an unattested root the preview
+    # surfaces the fail-closed equity gate instead of a missing-notional gap.
     assert proposal["approval_preview"]["violations"] == [
-        "sizing_recommendation.notional is required to verify "
-        "max_open_notional_pct budget exposure"
+        "account_equity_snapshot is required to verify " "max_open_notional_pct budget exposure"
     ]
     assert proposal["approval_preview"]["warnings"] == [
-        "would fail approval: sizing_recommendation.notional is required to verify "
+        "would fail approval: account_equity_snapshot is required to verify "
         "max_open_notional_pct budget exposure"
     ]
     assert response["warnings"] == proposal["approval_preview"]["warnings"]
