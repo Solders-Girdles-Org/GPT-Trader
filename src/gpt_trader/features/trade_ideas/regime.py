@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Protocol
@@ -74,6 +74,7 @@ class RegimeAwareProposer:
         self._baseline = BaselineProposer(self._config.baseline_config)
         self._detector_factory = detector_factory
         self._config_fingerprint = _regime_config_fingerprint(self._config.regime_config)
+        self._identity_fingerprint = _proposer_config_fingerprint(self._config)
 
     @property
     def proposer_id(self) -> str:
@@ -138,9 +139,12 @@ class RegimeAwareProposer:
         return enriched
 
     def _decision_id(self, as_of: datetime, symbol: str) -> str:
+        # The digest must cover every output-affecting knob (baseline config,
+        # suppression policy, detector config): two differently configured runs
+        # over the same snapshot must never collide on decision_id.
         digest = hashlib.sha256(
             (
-                f"{self.proposer_id}|{symbol}|{as_of.isoformat()}|" f"{self._config_fingerprint}"
+                f"{self.proposer_id}|{symbol}|{as_of.isoformat()}|" f"{self._identity_fingerprint}"
             ).encode()
         ).hexdigest()[:8]
         symbol_slug = symbol.lower().replace("-", "")
@@ -156,6 +160,20 @@ def _detect_series_regime(detector: RegimeDetector, series: SymbolSeries) -> Reg
 
 def _regime_config_fingerprint(config: RegimeConfig) -> str:
     payload = json.dumps(config.to_dict(), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+
+
+def _proposer_config_fingerprint(config: RegimeAwareProposerConfig) -> str:
+    baseline = config.baseline_config
+    payload = json.dumps(
+        {
+            "baseline": {spec.name: str(getattr(baseline, spec.name)) for spec in fields(baseline)},
+            "regime": config.regime_config.to_dict(),
+            "suppressed_regimes": [regime.name for regime in config.suppressed_regimes],
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
 
 

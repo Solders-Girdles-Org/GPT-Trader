@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -152,6 +153,39 @@ def test_regime_aware_proposer_suppresses_crisis_signal() -> None:
 
     assert len(baseline.propose(snapshot)) == 1
     assert proposer.propose(snapshot) == []
+
+
+def test_decision_id_covers_full_proposer_configuration() -> None:
+    # Two runs differing only in an output-affecting knob (suppression policy,
+    # baseline band) must not collide on decision_id in the same ideas root.
+    snapshot = snapshot_of(make_series(GOLDEN_CROSS))
+    factory, _detectors = scripted_factory(regime_state(RegimeType.BULL_QUIET))
+
+    default_ids = [
+        idea.decision_id
+        for idea in RegimeAwareProposer(CONFIG, detector_factory=factory).propose(snapshot)
+    ]
+    other_suppression = RegimeAwareProposerConfig(
+        baseline_config=CONFIG.baseline_config,
+        suppressed_regimes=(RegimeType.SIDEWAYS_VOLATILE,),
+    )
+    suppression_ids = [
+        idea.decision_id
+        for idea in RegimeAwareProposer(other_suppression, detector_factory=factory).propose(
+            snapshot
+        )
+    ]
+    wider_band = RegimeAwareProposerConfig(
+        baseline_config=replace(CONFIG.baseline_config, entry_band_pct=Decimal("2")),
+    )
+    band_ids = [
+        idea.decision_id
+        for idea in RegimeAwareProposer(wider_band, detector_factory=factory).propose(snapshot)
+    ]
+
+    assert default_ids and suppression_ids and band_ids
+    assert set(default_ids).isdisjoint(suppression_ids)
+    assert set(default_ids).isdisjoint(band_ids)
 
 
 def test_regime_aware_proposer_treats_unknown_regime_as_unready() -> None:
