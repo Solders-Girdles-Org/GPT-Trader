@@ -101,6 +101,7 @@ BUDGET_FIELDS = (
     "gain_retention_floor_pct",
     "allow_futures_leverage",
     "allow_naked_shorts",
+    "account_equity",
 )
 
 
@@ -698,6 +699,14 @@ def register(subparsers: Any) -> None:
         "--allow-naked-shorts",
         choices=("true", "false"),
         help="Whether naked shorts are permitted",
+    )
+    budget_set.add_argument(
+        "--account-equity",
+        type=_non_negative_decimal_value,
+        help=(
+            "Operator-attested account equity; denominator for the "
+            "max_open_notional_pct approval gate"
+        ),
     )
     budget_set.set_defaults(handler=_handle_budget_set, subcommand="budget set")
 

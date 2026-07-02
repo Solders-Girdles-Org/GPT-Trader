@@ -15,6 +15,7 @@ from gpt_trader.features.trade_ideas import (
     TimeHorizon,
     TradeIdeaService,
 )
+from tests.unit.gpt_trader.cli.commands.conftest import attest_account_equity
 from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
 
 
@@ -113,6 +114,7 @@ def test_report_summarizes_workflow_quality_closeouts_and_profit_loss(
 
     filled = _idea("trade-report-filled")
     service.propose(filled, actor_id="idea-generator-v1")
+    attest_account_equity(service)
     service.approve(filled.decision_id, actor_id="rj", reason="Risk verified")
     service.record_submission(filled.decision_id, actor_id="operator", venue="manual")
     service.record_fill(filled.decision_id, actor_id="operator", venue="manual")
@@ -205,6 +207,7 @@ def test_report_text_includes_monthly_trend_buckets_and_is_read_only(
 
     filled = _idea("trade-report-may-filled")
     service.propose(filled, actor_id="idea-generator-v1")
+    attest_account_equity(service)
     service.approve(filled.decision_id, actor_id="rj", reason="Risk verified")
     service.record_submission(filled.decision_id, actor_id="operator", venue="manual")
     service.record_fill(filled.decision_id, actor_id="operator", venue="manual")
@@ -268,6 +271,7 @@ def test_report_classifies_percent_only_closeout_outcomes_without_amount_totals(
 ) -> None:
     root = tmp_path / "ideas"
     service = _service(root)
+    attest_account_equity(service)
 
     for decision_id, realized_percent in (
         ("trade-report-percent-profit", Decimal("4.5")),

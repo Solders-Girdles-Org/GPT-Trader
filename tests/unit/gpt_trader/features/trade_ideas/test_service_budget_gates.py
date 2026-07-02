@@ -5,10 +5,12 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
+from tests.unit.gpt_trader.features.trade_ideas.conftest import (
+    attest_account_equity,
+    build_trade_idea,
+)
 
 from gpt_trader.features.trade_ideas import (
-    DEFAULT_RISK_BUDGET,
     ActorType,
     AuditAction,
     AuditEvent,
@@ -57,6 +59,7 @@ def _append_legacy_approval(
 def test_approval_refused_when_same_day_loss_budget_is_exhausted(
     service: TradeIdeaService,
 ) -> None:
+    attest_account_equity(service)
     closed = build_trade_idea(decision_id="trade-20260612-closed")
     service.propose(closed, actor_id="idea-generator-v1")
     service.approve(closed.decision_id, actor_id="rj", reason="Risk verified")
@@ -85,6 +88,7 @@ def test_approval_refused_when_same_day_loss_budget_is_exhausted(
 def test_amount_only_closeout_uses_its_own_equity_snapshot(
     service: TradeIdeaService,
 ) -> None:
+    attest_account_equity(service)
     closed = build_trade_idea(
         decision_id="trade-20260612-closed-amount-loss",
         max_loss=MaxLoss(amount=Decimal("100"), percent_of_account=Decimal("1")),
@@ -115,6 +119,7 @@ def test_amount_only_closeout_uses_its_own_equity_snapshot(
 def test_no_trade_expiry_closeout_does_not_consume_daily_loss_budget(
     service: TradeIdeaService,
 ) -> None:
+    attest_account_equity(service)
     expired = build_trade_idea(decision_id="trade-20260612-expired-before-fill")
     service.propose(expired, actor_id="idea-generator-v1")
     service.expire(expired.decision_id, actor_id="expiry-sweep")
@@ -135,6 +140,7 @@ def test_no_trade_expiry_closeout_does_not_consume_daily_loss_budget(
 def test_approval_refused_when_same_day_closeout_loss_is_unavailable(
     service: TradeIdeaService,
 ) -> None:
+    attest_account_equity(service)
     closed = build_trade_idea(decision_id="trade-20260612-closed-unknown-loss")
     service.propose(closed, actor_id="idea-generator-v1")
     service.approve(closed.decision_id, actor_id="rj", reason="Risk verified")
@@ -168,6 +174,7 @@ def test_previous_day_closeout_does_not_consume_current_daily_loss_budget(
         tmp_path / "trade_ideas",
         now_factory=lambda: current_time,
     )
+    attest_account_equity(service)
     closed = build_trade_idea(decision_id="trade-20260611-closed")
     service.propose(closed, actor_id="idea-generator-v1")
     service.approve(closed.decision_id, actor_id="rj", reason="Risk verified")
@@ -191,13 +198,14 @@ def test_previous_day_closeout_does_not_consume_current_daily_loss_budget(
 def test_approval_refused_when_open_notional_budget_would_be_exceeded(
     service: TradeIdeaService,
 ) -> None:
+    attest_account_equity(service)
     first = build_trade_idea(decision_id="trade-20260612-open-1")
     service.propose(first, actor_id="idea-generator-v1")
     service.approve(first.decision_id, actor_id="rj", reason="Risk verified")
     strict_budget = RiskBudget.from_dict(
         {
-            **DEFAULT_RISK_BUDGET.to_dict(),
-            "version": 2,
+            **service.current_budget().to_dict(),
+            "version": service.current_budget().version + 1,
             "max_open_notional_pct": "50",
         }
     )
@@ -216,6 +224,7 @@ def test_approval_refused_when_open_notional_budget_would_be_exceeded(
 def test_filled_idea_without_closeout_still_consumes_open_budget_exposure(
     service: TradeIdeaService,
 ) -> None:
+    attest_account_equity(service)
     filled = build_trade_idea(decision_id="trade-20260612-filled-open")
     service.propose(filled, actor_id="idea-generator-v1")
     service.approve(filled.decision_id, actor_id="rj", reason="Risk verified")
@@ -223,8 +232,8 @@ def test_filled_idea_without_closeout_still_consumes_open_budget_exposure(
     service.record_fill(filled.decision_id, actor_id="operator", venue="manual")
     strict_budget = RiskBudget.from_dict(
         {
-            **DEFAULT_RISK_BUDGET.to_dict(),
-            "version": 2,
+            **service.current_budget().to_dict(),
+            "version": service.current_budget().version + 1,
             "max_open_notional_pct": "50",
         }
     )
@@ -269,6 +278,7 @@ def test_approval_refused_when_open_exposure_max_loss_percent_is_missing(
 def test_open_notional_budget_uses_absolute_signed_notional(
     service: TradeIdeaService,
 ) -> None:
+    attest_account_equity(service)
     signed_open = build_trade_idea(
         decision_id="trade-20260612-signed-open",
         sizing_recommendation=SizingRecommendation(
@@ -281,8 +291,8 @@ def test_open_notional_budget_uses_absolute_signed_notional(
     service.approve(signed_open.decision_id, actor_id="rj", reason="Risk verified")
     strict_budget = RiskBudget.from_dict(
         {
-            **DEFAULT_RISK_BUDGET.to_dict(),
-            "version": 2,
+            **service.current_budget().to_dict(),
+            "version": service.current_budget().version + 1,
             "max_open_notional_pct": "50",
         }
     )
@@ -354,21 +364,24 @@ def test_approval_refused_when_open_exposure_notional_is_missing(
 def test_approval_refused_when_notional_budget_has_zero_equity_snapshot(
     service: TradeIdeaService,
 ) -> None:
-    idea = build_trade_idea(
+    legacy_open = build_trade_idea(
+        decision_id="trade-20260612-legacy-zero-equity",
         max_loss=MaxLoss(amount=Decimal("0"), percent_of_account=Decimal("1")),
-        sizing_recommendation=SizingRecommendation(
-            quantity=Decimal("1"),
-            notional=Decimal("100"),
-            rationale="Fixture notional with zero equity snapshot",
-        ),
     )
-    service.propose(idea, actor_id="idea-generator-v1")
+    service.propose(legacy_open, actor_id="idea-generator-v1")
+    _append_legacy_approval(
+        service,
+        legacy_open,
+        reason="Legacy approval whose max-loss pair implies zero equity",
+    )
+    candidate = build_trade_idea(decision_id="trade-20260612-after-zero-equity")
+    service.propose(candidate, actor_id="idea-generator-v1")
 
     with pytest.raises(PolicyViolationError) as exc_info:
-        service.approve(idea.decision_id, actor_id="rj", reason="Risk verified")
+        service.approve(candidate.decision_id, actor_id="rj", reason="Risk verified")
 
     assert any(
         "account_equity_snapshot must be positive" in violation
         for violation in exc_info.value.violations
     )
-    assert service.get(idea.decision_id).state is TradeIdeaState.PROPOSED
+    assert service.get(candidate.decision_id).state is TradeIdeaState.PROPOSED

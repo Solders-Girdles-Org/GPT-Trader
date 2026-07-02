@@ -290,7 +290,6 @@ class TradeIdeaService:
             now=self._now(),
             review_started_at=self._review_started_at(idea.decision_id),
             budget_context=self.approval_budget_context(
-                candidate=idea,
                 exclude_decision_id=idea.decision_id,
             ),
         )
@@ -298,7 +297,6 @@ class TradeIdeaService:
     def approval_budget_context(
         self,
         *,
-        candidate: TradeIdea | None = None,
         exclude_decision_id: str | None = None,
         now: datetime | None = None,
     ) -> ApprovalBudgetContext:
@@ -332,7 +330,7 @@ class TradeIdeaService:
                 ):
                     closeouts.append(closeout)
         account_equity_snapshot = self._account_equity_snapshot(
-            candidate=candidate,
+            budget_equity=self.current_budget().account_equity,
             open_ideas=open_ideas,
             closeouts=closeouts,
         )
@@ -565,7 +563,6 @@ class TradeIdeaService:
             now=self._now(),
             review_started_at=self._review_started_at(decision_id),
             budget_context=self.approval_budget_context(
-                candidate=idea,
                 exclude_decision_id=decision_id,
             ),
         )
@@ -791,7 +788,6 @@ class TradeIdeaService:
             now=export_time,
             review_started_at=self._review_started_at_from_events(view.events),
             budget_context=self.approval_budget_context(
-                candidate=view.idea,
                 exclude_decision_id=decision_id,
                 now=export_time,
             ),
@@ -1010,10 +1006,18 @@ class TradeIdeaService:
     def _account_equity_snapshot(
         self,
         *,
-        candidate: TradeIdea | None,
+        budget_equity: Decimal | None,
         open_ideas: list[TradeIdea],
         closeouts: list[CloseoutAttribution],
     ) -> Decimal | None:
+        # Equity must come from a source independent of the candidate under
+        # evaluation; a candidate could otherwise inflate max_loss.amount to
+        # fabricate an arbitrarily large denominator for the notional cap.
+        # Precedence: operator-attested budget equity, then records that
+        # already passed human approval. With no independent source the policy
+        # fails closed (None blocks max_open_notional_pct verification).
+        if budget_equity is not None:
+            return budget_equity
         for idea in open_ideas:
             equity = _equity_from_max_loss_amount_percent(
                 amount=idea.max_loss.amount,
@@ -1028,13 +1032,6 @@ class TradeIdeaService:
             )
             if equity is not None:
                 return equity
-        if open_ideas or closeouts:
-            return None
-        if candidate is not None:
-            return _equity_from_max_loss_amount_percent(
-                amount=candidate.max_loss.amount,
-                percent_of_account=candidate.max_loss.percent_of_account,
-            )
         return None
 
     def _latest_audit_events_by_decision_id(self) -> dict[str, AuditEvent]:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -75,12 +76,33 @@ def reconciliation_service(root: Path) -> TradeIdeaService:
     )
 
 
+def attest_account_equity(
+    service: TradeIdeaService,
+    equity: Decimal = Decimal("20000"),
+) -> None:
+    """Record operator-attested equity so the notional approval gate can verify."""
+    current = service.current_budget()
+    if current.account_equity is not None:
+        return
+    service.update_budget(
+        replace(
+            current,
+            version=current.version + 1,
+            account_equity=equity,
+            reason="Operator-attested equity for tests",
+        ),
+        ActorType.HUMAN,
+        "rj",
+    )
+
+
 def approved_idea(
     service: TradeIdeaService,
     *,
     decision_id: str = "trade-20260612-001",
 ) -> str:
     """Propose and approve a default idea, returning its decision id."""
+    attest_account_equity(service)
     idea = build_trade_idea(decision_id=decision_id)
     service.propose(idea, actor_id="idea-generator-v1")
     service.approve(idea.decision_id, actor_id="rj", reason="Risk verified")
