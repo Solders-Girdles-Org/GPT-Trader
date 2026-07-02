@@ -72,6 +72,9 @@ class TradeIdeaSizingOutput:
     data_used: str
     estimated_loss_amount: Decimal
     estimated_loss_pct: Decimal
+    # The cap actually applied: min(proposer max_loss_pct, active budget cap).
+    # Persisted records must cite this, not the raw proposer config value.
+    effective_max_loss_pct: Decimal
 
 
 class TradeIdeaPositionSizingBridge:
@@ -90,6 +93,11 @@ class TradeIdeaPositionSizingBridge:
 
     def recommend(self, context: TradeIdeaSizingContext) -> TradeIdeaSizingOutput:
         decision_confidence = _confidence_score(context.confidence_label)
+        kelly_enabled = self._position_sizer.config.enable_kelly_sizing
+        effective_max_loss_pct = _effective_max_loss_pct(
+            context.max_loss_pct,
+            self._config.risk_budget,
+        )
         result = self._position_sizer.calculate_size(
             symbol=context.symbol,
             current_price=context.current_price,
@@ -117,10 +125,8 @@ class TradeIdeaPositionSizingBridge:
                 result,
                 capped,
                 budget=self._config.risk_budget,
-                effective_max_loss_pct=_effective_max_loss_pct(
-                    context.max_loss_pct,
-                    self._config.risk_budget,
-                ),
+                effective_max_loss_pct=effective_max_loss_pct,
+                kelly_enabled=kelly_enabled,
             ),
         )
         estimated_loss_amount = _estimated_loss_amount(
@@ -141,9 +147,11 @@ class TradeIdeaPositionSizingBridge:
                 equity=self._config.equity,
                 budget=self._config.risk_budget,
                 decision_confidence=decision_confidence,
+                kelly_enabled=kelly_enabled,
             ),
             estimated_loss_amount=estimated_loss_amount,
             estimated_loss_pct=estimated_loss_pct,
+            effective_max_loss_pct=effective_max_loss_pct,
         )
 
 
@@ -253,6 +261,7 @@ def _sizing_rationale(
     *,
     budget: RiskBudget,
     effective_max_loss_pct: Decimal,
+    kelly_enabled: bool,
 ) -> str:
     cap_status = "applied" if capped.budget_cap_applied else "not_applied"
     if not budget.sizing_capped_by_budget:
@@ -264,7 +273,7 @@ def _sizing_rationale(
         f"volatility_factor={result.volatility_factor:.4f}; "
         f"confidence_factor={result.confidence_factor:.4f}; "
         f"kelly_factor={result.kelly_factor:.4f} "
-        f"(kelly_enabled={str(result.kelly_factor != 1.0).lower()}); "
+        f"(kelly_enabled={str(kelly_enabled).lower()}); "
         f"risk_budget_version={budget.version} max_loss_cap={effective_max_loss_pct}% "
         f"budget_cap={cap_status}; {result.reasoning}"
     )
@@ -278,6 +287,7 @@ def _sizing_data_used(
     equity: Decimal,
     budget: RiskBudget,
     decision_confidence: float,
+    kelly_enabled: bool,
 ) -> str:
     cap_fraction = "none" if capped.cap_fraction is None else f"{capped.cap_fraction:.8f}"
     return (
@@ -290,6 +300,7 @@ def _sizing_data_used(
         f"volatility_factor={result.volatility_factor:.4f}:"
         f"confidence_factor={result.confidence_factor:.4f}:"
         f"kelly_factor={result.kelly_factor:.4f}:"
+        f"kelly_enabled={str(kelly_enabled).lower()}:"
         f"risk_budget_version={budget.version}:"
         f"max_loss_cap_pct={_effective_max_loss_pct(context.max_loss_pct, budget)}:"
         f"sizing_capped_by_budget={str(budget.sizing_capped_by_budget).lower()}:"

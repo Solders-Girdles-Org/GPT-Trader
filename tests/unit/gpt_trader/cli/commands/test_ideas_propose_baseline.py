@@ -166,6 +166,8 @@ def test_propose_baseline_no_signal_is_noop(
     assert response["metadata"]["was_noop"] is True
     assert not (root / "records").exists()
     assert not (root / "audit.jsonl").exists()
+    # The budget must not be read or seeded when nothing needed sizing.
+    assert not (root / "risk_budget.jsonl").exists()
 
 
 def test_propose_baseline_duplicate_decision_fails_without_extra_audit(

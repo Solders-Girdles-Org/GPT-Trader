@@ -62,6 +62,8 @@ from gpt_trader.features.trade_ideas import (
     TradeIdeaReplayRunner,
     TradeIdeaService,
     TradeIdeaSizingConfig,
+    TradeIdeaSizingContext,
+    TradeIdeaSizingOutput,
     TradeIdeaState,
     UnknownTradeIdeaError,
     canonical_granularity,
@@ -1009,16 +1011,28 @@ def _handle_propose(args: Namespace) -> CliResponse:
     return _success(command, args, payload, text, warnings=warning_messages)
 
 
+class _LazyBudgetSizingBridge(TradeIdeaPositionSizingBridge):
+    """Defer the budget read (and its seed-on-first-use side effect) until a
+    candidate actually needs sizing, so no-signal baseline runs stay read-only."""
+
+    def __init__(self, service: TradeIdeaService) -> None:
+        self._budget_service = service
+        self._delegate: TradeIdeaPositionSizingBridge | None = None
+
+    def recommend(self, context: TradeIdeaSizingContext) -> TradeIdeaSizingOutput:
+        if self._delegate is None:
+            self._delegate = TradeIdeaPositionSizingBridge(
+                TradeIdeaSizingConfig(risk_budget=self._budget_service.current_budget())
+            )
+        return self._delegate.recommend(context)
+
+
 def _handle_propose_baseline(args: Namespace) -> CliResponse:
     command = "ideas propose-baseline"
     try:
         snapshot = _load_market_snapshot(args.snapshot)
         service = _service(args)
-        proposer = BaselineProposer(
-            sizing_bridge=TradeIdeaPositionSizingBridge(
-                TradeIdeaSizingConfig(risk_budget=service.current_budget())
-            )
-        )
+        proposer = BaselineProposer(sizing_bridge=_LazyBudgetSizingBridge(service))
         ideas = proposer.propose(snapshot)
         if not ideas:
             payload = _baseline_payload(snapshot, proposer.proposer_id, [])

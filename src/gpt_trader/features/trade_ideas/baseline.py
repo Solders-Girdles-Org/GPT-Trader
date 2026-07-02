@@ -120,7 +120,12 @@ class BaselineProposer:
         target = (close + config.reward_multiple * (close - stop_level)).quantize(
             config.price_precision
         )
-        stop_distance_pct = ((close - stop_level) / close * 100).quantize(Decimal("0.01"))
+        # Size against the worst permitted long entry (the top of the entry
+        # zone): a fill at entry_upper is explicitly allowed, so the persisted
+        # risk snapshot must not assume a cheaper fill at the last close.
+        stop_distance_pct = ((entry_upper - stop_level) / entry_upper * 100).quantize(
+            Decimal("0.01")
+        )
 
         volumes = [candle.volume for candle in series.candles[-config.long_window :]]
         average_volume = sum(volumes, Decimal("0")) / Decimal(len(volumes))
@@ -136,10 +141,10 @@ class BaselineProposer:
         sizing = self._sizing_bridge.recommend(
             TradeIdeaSizingContext(
                 symbol=series.symbol,
-                current_price=close,
+                current_price=entry_upper,
                 confidence_label=confidence.label,
-                stop_loss_distance=close - stop_level,
-                take_profit_distance=target - close,
+                stop_loss_distance=entry_upper - stop_level,
+                take_profit_distance=target - entry_upper,
                 max_loss_pct=config.risk_per_idea_pct,
             )
         )
@@ -167,8 +172,9 @@ class BaselineProposer:
                 assumptions=(
                     f"PositionSizer notional {sizing.recommendation.notional} implies "
                     f"an estimated stop-out loss of {sizing.estimated_loss_amount}",
-                    f"Risk budget cap remains {config.risk_per_idea_pct}% per idea",
-                    f"Stop distance is {stop_distance_pct}% from the last close",
+                    f"Risk budget cap remains {sizing.effective_max_loss_pct}% per idea",
+                    f"Sized at the worst permitted entry {entry_upper}; stop distance "
+                    f"is {stop_distance_pct}% from there",
                 ),
             ),
             sizing_recommendation=sizing.recommendation,
