@@ -67,7 +67,11 @@ from gpt_trader.features.trade_ideas.paper_reconciliation import (
     paper_fill_events_from_store_events,
     validate_paper_reconciliation_profile,
 )
-from gpt_trader.features.trade_ideas.policy import ApprovalPolicy, PolicyViolationError
+from gpt_trader.features.trade_ideas.policy import (
+    ApprovalBudgetContext,
+    ApprovalPolicy,
+    PolicyViolationError,
+)
 from gpt_trader.features.trade_ideas.proposer import Proposer
 from gpt_trader.features.trade_ideas.replay import (
     ReplayOutcome,
@@ -137,6 +141,7 @@ __all__ = [
     "TICKET_PAYLOAD_SCHEMA_VERSION",
     "TERMINAL_STATES",
     "ActorType",
+    "ApprovalBudgetContext",
     "ApprovalPolicy",
     "AuditAction",
     "AuditEvent",

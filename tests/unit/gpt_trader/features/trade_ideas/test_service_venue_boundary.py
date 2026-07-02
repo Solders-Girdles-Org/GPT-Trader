@@ -4,7 +4,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
+from tests.unit.gpt_trader.features.trade_ideas.conftest import (
+    attest_account_equity,
+    build_trade_idea,
+)
 
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.trade_ideas import TradeIdeaService, TradeIdeaState
@@ -12,10 +15,12 @@ from gpt_trader.features.trade_ideas import TradeIdeaService, TradeIdeaState
 
 @pytest.fixture
 def service(tmp_path: Path) -> TradeIdeaService:
-    return TradeIdeaService(
+    built = TradeIdeaService(
         tmp_path / "trade_ideas",
         now_factory=lambda: datetime(2026, 6, 12, 10, 0, tzinfo=UTC),
     )
+    attest_account_equity(built)
+    return built
 
 
 def test_manual_venue_submission_and_fill_remain_supported(
@@ -40,6 +45,7 @@ def test_record_submission_rejects_unsupported_venue_before_audit_mutation(
         root,
         now_factory=lambda: datetime(2026, 6, 12, 10, 0, tzinfo=UTC),
     )
+    attest_account_equity(service)
     idea = build_trade_idea()
     service.propose(idea, actor_id="idea-generator-v1")
     service.approve(idea.decision_id, actor_id="rj", reason="Thesis and risk verified")
@@ -63,6 +69,7 @@ def test_record_fill_rejects_unsupported_venue_before_audit_mutation(
         root,
         now_factory=lambda: datetime(2026, 6, 12, 10, 0, tzinfo=UTC),
     )
+    attest_account_equity(service)
     idea = build_trade_idea()
     service.propose(idea, actor_id="idea-generator-v1")
     service.approve(idea.decision_id, actor_id="rj", reason="Thesis and risk verified")

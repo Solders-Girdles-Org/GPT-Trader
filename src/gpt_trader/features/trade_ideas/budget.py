@@ -69,8 +69,18 @@ class RiskBudget:
     allow_futures_leverage: bool
     allow_naked_shorts: bool
     reason: str
+    # Operator-attested account equity used as the denominator for
+    # max_open_notional_pct. Deliberately human-set (versioned in this log)
+    # rather than inferred from idea records, so a candidate idea can never
+    # supply its own denominator. None means notional exposure cannot be
+    # verified from the budget alone.
+    account_equity: Decimal | None = None
 
     def __post_init__(self) -> None:
+        if self.account_equity is not None:
+            _require_finite_decimal(self.account_equity, "account_equity")
+            if self.account_equity <= 0:
+                raise ValueError("account_equity must be positive")
         _require_finite_decimal(self.max_loss_per_idea_pct, "max_loss_per_idea_pct")
         _require_finite_decimal(self.max_daily_loss_pct, "max_daily_loss_pct")
         _require_finite_decimal(self.max_open_notional_pct, "max_open_notional_pct")
@@ -97,6 +107,7 @@ class RiskBudget:
             "allow_futures_leverage": self.allow_futures_leverage,
             "allow_naked_shorts": self.allow_naked_shorts,
             "reason": self.reason,
+            "account_equity": str(self.account_equity) if self.account_equity is not None else None,
         }
 
     @classmethod
@@ -119,6 +130,11 @@ class RiskBudget:
                 payload["allow_naked_shorts"], "allow_naked_shorts"
             ),
             reason=payload.get("reason", ""),
+            account_equity=(
+                Decimal(str(payload["account_equity"]))
+                if payload.get("account_equity") is not None
+                else None
+            ),
         )
 
 

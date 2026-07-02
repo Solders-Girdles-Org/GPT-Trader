@@ -4,7 +4,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
+from tests.unit.gpt_trader.features.trade_ideas.conftest import (
+    attest_account_equity,
+    build_trade_idea,
+)
 
 from gpt_trader.features.trade_ideas import (
     AuditIntegrityError,
@@ -55,6 +58,7 @@ def test_approval_count_ignores_unaudited_latest_for_nonapproved_records(
         root,
         now_factory=lambda: datetime(2026, 6, 12, 10, 0, tzinfo=UTC),
     )
+    attest_account_equity(service)
     bad = build_trade_idea(decision_id="trade-20260612-bad-needs-changes")
     service.propose(bad, actor_id="idea-generator-v1")
     service.request_changes(bad.decision_id, actor_id="rj", reason="Tighten invalidation")

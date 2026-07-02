@@ -10,7 +10,6 @@ from typing import Any
 
 from gpt_trader.features.trade_ideas.artifacts import stable_artifact_id
 from gpt_trader.features.trade_ideas.audit import ActorType, AuditAction
-from gpt_trader.features.trade_ideas.budget import DEFAULT_RISK_BUDGET
 from gpt_trader.features.trade_ideas.closeout import CloseoutResolution
 from gpt_trader.features.trade_ideas.eligibility import evaluate_eligibility
 from gpt_trader.features.trade_ideas.models import ConfidenceLabel
@@ -61,7 +60,7 @@ def build_trade_idea_track_record_report(
         for event in view.events:
             event_counts[_ACTION_KEYS[event.action]] += 1
 
-    quality = _quality_summary(views, now=report_cutoff)
+    quality = _quality_summary(service, views, now=report_cutoff)
     workflow = _workflow_summary(views, event_counts, state_counts)
     closeouts = _closeout_summary(views)
     monthly = _monthly_summary(views)
@@ -268,7 +267,12 @@ def _filters_payload(
     }
 
 
-def _quality_summary(views: list[TradeIdeaView], *, now: datetime) -> dict[str, Any]:
+def _quality_summary(
+    service: TradeIdeaService,
+    views: list[TradeIdeaView],
+    *,
+    now: datetime,
+) -> dict[str, Any]:
     policy = ApprovalPolicy()
     missing_fields: Counter[str] = Counter()
     eligibility_violations: Counter[str] = Counter()
@@ -295,10 +299,19 @@ def _quality_summary(views: list[TradeIdeaView], *, now: datetime) -> dict[str, 
         approval = policy.approval_violations(
             idea,
             actor_type=ActorType.HUMAN,
-            budget=DEFAULT_RISK_BUDGET,
+            # Active budget via a non-mutating read, so readiness matches what
+            # approve() would decide under tightened caps without the report
+            # seeding risk_budget.jsonl.
+            budget=service.peek_budget(),
             open_approved_count=0,
             now=now,
             review_started_at=None,
+            # Same budget-exposure context the approval path evaluates, so
+            # approval_ready cannot report ready what approve() would refuse.
+            budget_context=service.approval_budget_context(
+                exclude_decision_id=idea.decision_id,
+                now=now,
+            ),
         )
         if not approval:
             approval_ready_count += 1

@@ -107,7 +107,15 @@ def test_propose_baseline_persists_generated_proposal(
     assert proposal["decision_id"].startswith("trade-20350612-btcusd-")
     assert proposal["state"] == "proposed"
     assert proposal["record_hash"]
-    assert proposal["approval_preview"] == {"violations": [], "warnings": []}
+    assert proposal["approval_preview"]["violations"] == [
+        "sizing_recommendation.notional is required to verify "
+        "max_open_notional_pct budget exposure"
+    ]
+    assert proposal["approval_preview"]["warnings"] == [
+        "would fail approval: sizing_recommendation.notional is required to verify "
+        "max_open_notional_pct budget exposure"
+    ]
+    assert response["warnings"] == proposal["approval_preview"]["warnings"]
     assert (root / "records" / proposal["decision_id"] / "latest.json").exists()
     event = json.loads((root / "audit.jsonl").read_text(encoding="utf-8").splitlines()[0])
     assert event["actor_type"] == "ai"
