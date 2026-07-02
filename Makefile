@@ -1,4 +1,4 @@
-.PHONY: dev-up dev-down lint fmt fmt-check lint-fix lint-fmt-fix typecheck docs-audit test-guardrails ci-required test smoke preflight preflight-readiness dash cov clean clean-dry-run scaffold-slice \
+.PHONY: dev-up dev-down lint fmt fmt-check lint-fix lint-fmt-fix typecheck docs-audit test-guardrails ci-required test smoke preflight preflight-readiness dash cov cov-critical clean clean-dry-run scaffold-slice \
 	readiness-window agent-setup agent-impact agent-impact-full agent-health-fast agent-health-full agent-chaos-smoke agent-chaos-week \
 	agent-docs-links canary-liveness canary-liveness-check canary-daily canary-decision-traces \
 	canary-decision-trace-probe canary-runtime-info canary-stop canary-start \
@@ -228,7 +228,18 @@ ops-controls-smoke:
 readiness-window:
 	uv run python scripts/ops/readiness_window.py --profile $(PREFLIGHT_PROFILE) --hours $(READINESS_WINDOW_HOURS)
 
+# Repo-wide coverage over the core unit suite; no gate. Matches the CI
+# "Unit Tests (Core)" job, which uploads the same JSON as the coverage-json
+# artifact. The JSON lives under var/results/coverage/ because the pytest
+# sessionfinish cleanup hook deletes a root-level coverage.json.
 cov:
+	uv run pytest tests/unit -n auto -q \
+		--cov=src/gpt_trader \
+		--cov-report=json:$(CURDIR)/var/results/coverage/coverage.json \
+		--cov-report=term
+
+# Gated coverage over critical slices only (cli, config, coinbase client/utilities).
+cov-critical:
 	uv run pytest -m "not slow and not performance" -q \
 		--cov=src/gpt_trader/cli \
 		--cov=src/gpt_trader/config \
