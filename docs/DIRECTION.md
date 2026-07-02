@@ -80,7 +80,7 @@ The autonomy modes in full:
 A stage is *entered* when its loop is closed and healthy; it is *promoted* when a
 measured track record clears the gate. The graduation model — evidence as a
 **measured outcome over a window** (never "code exists"), with numeric promotion
-gates and an automatic down-ladder — is being adopted in
+gates and an automatic down-ladder — is defined in the accepted
 [adopt-measured-outcome-rubric](decisions/adopt-measured-outcome-rubric.md).
 Build progress is tracked in [STATUS.md](STATUS.md) and the issue tracker;
 graduation is a separate, measured question.

@@ -1,7 +1,7 @@
 # Canonical risk-limit vocabulary — budget vs runtime limits
 
 ---
-status: proposed
+status: accepted
 date: 2026-07-02
 deciders: RJ
 supersedes:
@@ -77,19 +77,18 @@ re-homing these fields later.
 
 ## Decision
 
-*(pending — owner call; recommendation below)*
+**Option A, phased.** Accepted 2026-07-02 by RJ; implementation is tracked in
+[#1120](https://github.com/Solders-Girdles/GPT-Trader/issues/1120).
 
-**Recommendation: Option A**, phased. It matches the accepted direction — the
+The rationale: it matches the accepted direction — the
 budget is *the* lever-handover mechanism, and autonomy stage 2 explicitly pairs
 the "budget envelope" with a "runtime daily-loss breaker", i.e. two enforcement
 points reading one appetite. It also means the open Codex wave is building on
-the vocabulary that stays canonical: **#1091 can merge on top of this proposal
+the vocabulary that stays canonical: **#1091 can merge on top of this decision
 as-is**, because it deepens the budget side; what changes later is the live
 side deriving from it rather than carrying its own numbers.
 
 ## Consequences
-
-If Option A is accepted:
 
 - New derivation seam: engine startup resolves the active `RiskBudget` version
   and seeds `RiskConfig.daily_loss_limit_pct` (from `max_daily_loss_pct`) and
@@ -116,8 +115,10 @@ If Option A is accepted:
   (`docs/naming.md` gains the rule); `max_loss_per_idea_pct` vs
   `max_position_pct_per_symbol` semantics documented in the glossary so
   loss-at-invalidation and notional exposure are never conflated.
-- Follow-up work is filed as issues when the decision lands; the seven open
-  trade-ideas PRs do **not** need rework under this option.
+- Follow-up work is filed:
+  [#1120](https://github.com/Solders-Girdles/GPT-Trader/issues/1120) tracks the
+  implementation; the seven open trade-ideas PRs do **not** need rework under
+  this option.
 
 ## Safety boundary
 

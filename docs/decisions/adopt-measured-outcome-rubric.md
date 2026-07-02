@@ -1,19 +1,19 @@
 # Adopt a measured-outcome operating rubric
 
 ---
-status: proposed
-date: 2026-06-28
+status: accepted
+date: 2026-07-02
 deciders: rj
 supersedes:
 superseded-by:
 ---
 
-> **Open decision.** This carries the former `OPERATING_RUBRIC_V2.md` draft. On
-> acceptance, [DIRECTION.md](../DIRECTION.md) adopts the graduation model below
-> and this record flips to `accepted`. Numbers marked **(tune)** are proposed
-> starting values that encode risk appetite — they are the owner's to set and do
-> not block acceptance of the *structure*. Nothing here authorizes live
-> execution; the boundary stays `human_approved_execution`.
+> **Accepted.** This carries the former `OPERATING_RUBRIC_V2.md` draft.
+> [DIRECTION.md](../DIRECTION.md) adopts the graduation model below. Numbers
+> marked **(tune)** are proposed starting values that encode risk appetite —
+> they are the owner's to set and remain open to tuning without reopening this
+> decision. Nothing here authorizes live execution; the boundary stays
+> `human_approved_execution`.
 
 ## Context
 
@@ -34,7 +34,7 @@ real intelligence" could not surface as a failed criterion.
 
 ## Decision
 
-_Pending owner._ Recommended: **A**.
+**Option A — adopt the measured-outcome model.** Accepted 2026-07-02 by rj.
 
 ## The measured-outcome model (Option A detail)
 
@@ -88,7 +88,7 @@ Restoration is **not** automatic — re-meet the gate over a fresh window plus a
 recorded human decision. This is the operational form of "earned, recorded,
 reversible" and of the "triple-then-zero is the worst outcome" philosophy.
 
-## Consequences if accepted
+## Consequences
 
 - DIRECTION's graduation section references this model; per-stage numeric
   thresholds become owner-set values recorded here.
