@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Offline end-to-end smoke for the Stage 0/1 trade-idea rails.
 
-Drives the real ``gpt-trader ideas`` CLI through the full record lifecycle in
-a scratch ideas root: propose -> (approval blocked without attested equity) ->
-budget attest -> approve -> export-ticket -> mark-submitted -> mark-filled ->
-closeout -> report -> audit verify.
+Drives the real ``gpt-trader ideas`` CLI through both execution legs in a
+scratch ideas root. Manual leg: propose -> (approval blocked without attested
+equity) -> budget attest -> approve -> export-ticket -> mark-submitted ->
+mark-filled -> closeout. Machine leg: propose -> approve -> execute-paper
+(deterministic paper broker, no attestation) -> refused re-execution ->
+closeout. Then: report over both -> audit verify.
 
 This is the "does the project still string together?" gate: unit tests cover
 the parts, this covers the operator-visible loop. It needs no network, broker,
@@ -283,12 +285,104 @@ def run_smoke(ideas_root: Path) -> None:
     )
     _step("closeout record -> attribution captured")
 
+    # --- Machine leg: approved -> paper fill with no manual attestation. ---
+    machine_decision_id = f"trade-{datetime.now(UTC):%Y%m%d}-smoke-002"
+    machine_idea_path = ideas_root / "smoke_idea_machine.json"
+    machine_idea_path.write_text(json.dumps(_build_idea_payload(machine_decision_id)))
+
+    machine_proposed = _run_ideas_cli(
+        ideas_root,
+        "propose",
+        "--file",
+        str(machine_idea_path),
+        "--actor",
+        SMOKE_ACTOR_AI,
+        "--actor-type",
+        "ai",
+        "--reason",
+        "stage1 rails smoke machine leg",
+    )
+    _assert(
+        machine_proposed["data"]["state"] == "proposed",
+        "propose (machine leg)",
+        f"unexpected state {machine_proposed['data']}",
+    )
+    machine_approved = _run_ideas_cli(
+        ideas_root,
+        "approve",
+        machine_decision_id,
+        "--actor",
+        SMOKE_ACTOR_HUMAN,
+        "--reason",
+        "stage1 rails smoke machine-leg approval",
+    )
+    _assert(
+        machine_approved["data"]["state"] == "approved",
+        "approve (machine leg)",
+        f"unexpected state {machine_approved['data']}",
+    )
+    _step("machine leg: propose (ai actor) -> approve (human actor)")
+
+    # Fill at the entry-zone midpoint so the simulated execution is priced
+    # like the idea, not at the broker's arbitrary default mark.
+    executed = _run_ideas_cli(
+        ideas_root,
+        "execute-paper",
+        machine_decision_id,
+        "--mark",
+        "60750",
+    )
+    executed_data = executed["data"]
+    _assert(
+        executed_data["final_state"] == "filled",
+        "execute-paper",
+        f"expected filled, got {executed_data}",
+    )
+    _assert(
+        executed_data["client_order_id"] == machine_decision_id,
+        "execute-paper",
+        f"client_order_id must be the decision id, got {executed_data}",
+    )
+    _assert(
+        executed_data["reconciliation"]["recorded_fill"] is True,
+        "execute-paper",
+        f"fill was not recorded through the reconciler, got {executed_data}",
+    )
+    _step("execute-paper (system actor) -> submitted and filled, no attestation")
+
+    # The lane must refuse to execute the same idea twice.
+    _run_ideas_cli(
+        ideas_root,
+        "execute-paper",
+        machine_decision_id,
+        expect_success=False,
+    )
+    _step("execute-paper again -> refused (no double execution)")
+
+    _run_ideas_cli(
+        ideas_root,
+        "closeout",
+        "record",
+        machine_decision_id,
+        "--resolution",
+        "thesis_target",
+        "--realized-profit-loss-amount",
+        "35",
+        "--realized-profit-loss-percent",
+        "0.14",
+        "--evidence",
+        "stage1 rails smoke machine-leg exit",
+        "--actor",
+        SMOKE_ACTOR_HUMAN,
+    )
+    _step("closeout record (machine leg) -> attribution captured")
+
     report = _run_ideas_cli(ideas_root, "report")
     report_data = report["data"]
     _assert(
-        int(report_data["row_count"]) == 1,
+        int(report_data["row_count"]) == 2,
         "report",
-        f"expected exactly 1 idea, got row_count={report_data.get('row_count')}",
+        f"expected exactly 2 ideas, got row_count={report_data.get('row_count')}",
     )
     closeouts = report_data.get("closeouts", {})
     _assert(
@@ -296,13 +390,13 @@ def run_smoke(ideas_root: Path) -> None:
         "report",
         f"expected full closeout coverage, got {closeouts}",
     )
-    _step("report -> 1 idea, full closeout coverage")
+    _step("report -> 2 ideas, full closeout coverage")
 
     verify = _run_ideas_cli(ideas_root, "audit", "verify")
     _assert(
-        int(verify["data"].get("event_count", 0)) >= 4,
+        int(verify["data"].get("event_count", 0)) >= 8,
         "audit verify",
-        f"expected >=4 chained events, got {verify['data']}",
+        f"expected >=8 chained events, got {verify['data']}",
     )
     _step(f"audit verify -> chain intact ({verify['data']['event_count']} events)")
 
@@ -330,7 +424,10 @@ def _execute(ideas_root: Path) -> int:
     except SmokeStepError as exc:
         print(f"✗ stage1 rails smoke FAILED: {exc}", file=sys.stderr)
         return 1
-    print("✓ stage1 rails smoke OK: proposed -> approved -> filled -> closed, audit chain intact")
+    print(
+        "✓ stage1 rails smoke OK: manual and machine legs "
+        "proposed -> approved -> filled -> closed, audit chain intact"
+    )
     return 0
 
 

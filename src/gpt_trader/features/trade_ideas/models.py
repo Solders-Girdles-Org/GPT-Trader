@@ -59,6 +59,7 @@ class ConfidenceLabel(str, Enum):
 class TicketVenue(str, Enum):
     COINBASE = "coinbase"
     MANUAL = "manual"
+    PAPER = "paper"
     NONE = "none"
 
 
