@@ -74,6 +74,7 @@ markers. Regenerating cannot drift from the files.
 | 2026-07-02 | [Event JSONL: accepted fallback or import-only historical data](event-jsonl-compatibility.md) | accepted |
 | 2026-07-02 | [Five-role runtime composition — trade-idea spine, recorder and executor as separate arms](adopt-five-role-composition.md) | accepted |
 | 2026-07-02 | [Meaning of the prod and canary profiles under the approval ladder](prod-canary-profile-meaning.md) | accepted |
+| 2026-07-02 | [Operator web console — a thin adapter over the trade-idea spine](adopt-operator-web-console.md) | accepted |
 | 2026-07-02 | [Stop committing high-churn generated agent inventories](stop-committing-high-churn-agent-inventories.md) | proposed |
 | 2026-07-01 | [Remove the unwired account manager and strategy-dev lab](remove-unwired-account-manager-and-strategy-lab.md) | accepted |
 | 2026-06-30 | [Remove the TUI subsystem](remove-tui-subsystem.md) | accepted |
