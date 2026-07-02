@@ -10,7 +10,7 @@ from gpt_trader.app.config import BotConfig
 from gpt_trader.app.protocols import EventStoreProtocol
 from gpt_trader.backtesting.validation.decision_logger import DecisionLogger, StrategyDecision
 from gpt_trader.core import OrderSide, OrderType, Product
-from gpt_trader.features.brokerages.core.protocols import ExtendedBrokerProtocol
+from gpt_trader.core.protocols import ExtendedBrokerProtocol
 from gpt_trader.features.live_trade.execution import OrderSubmitter, OrderValidator, StateCollector
 from gpt_trader.features.live_trade.execution.submission_result import (
     OrderSubmissionResult,

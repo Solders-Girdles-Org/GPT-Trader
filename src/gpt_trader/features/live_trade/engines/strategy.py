@@ -17,7 +17,7 @@ import sys
 import threading
 import time
 from collections import deque
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 from importlib import metadata
 from typing import Any
@@ -36,10 +36,23 @@ from gpt_trader.features.live_trade.engines.base import (
     HealthStatus,
 )
 from gpt_trader.features.live_trade.engines.cycle_runner import run_cycle
+from gpt_trader.features.live_trade.engines.decision_flow import (
+    handle_decision,
+    process_symbol,
+)
 from gpt_trader.features.live_trade.engines.equity_calculator import (
     EquityCalculator,
 )
 from gpt_trader.features.live_trade.engines.order_audit import OrderAuditService
+from gpt_trader.features.live_trade.engines.order_guards import (
+    apply_reduce_only_mode,
+    calculate_quantity_and_record,
+    check_degradation_gate,
+    check_mark_staleness,
+    check_reduce_only_request,
+    run_order_validator_guards,
+    run_security_validation,
+)
 from gpt_trader.features.live_trade.engines.order_reconciliation import (
     OrderReconciliationService,
 )
@@ -104,23 +117,20 @@ from gpt_trader.features.live_trade.lifecycle import (
     EngineState,
     LifecycleStateMachine,
 )
-from gpt_trader.features.live_trade.risk.manager import ValidationError
-from gpt_trader.features.live_trade.strategies.perps_baseline import (
+from gpt_trader.features.live_trade.strategies.baseline import (
     Action,
     Decision,
 )
 from gpt_trader.features.strategy_tools import (
-    StrategySignalContext,
     StrategySignalToTradeIdeaAdapter,
     StrategySignalToTradeIdeaAdapterConfig,
 )
-from gpt_trader.features.trade_ideas import ProductType, TradeIdeaService, create_trade_idea_service
+from gpt_trader.features.trade_ideas import TradeIdeaService, create_trade_idea_service
 from gpt_trader.monitoring.alert_types import AlertSeverity
 from gpt_trader.monitoring.feature_seeds import build_feature_seed, summarize_seed_reason
 from gpt_trader.monitoring.health_checks import HealthCheckRunner
 from gpt_trader.monitoring.heartbeat import HeartbeatService
 from gpt_trader.monitoring.metrics_collector import record_histogram, record_trade_blocked
-from gpt_trader.monitoring.profiling import profile_span
 from gpt_trader.monitoring.status_reporter import StatusReporter
 from gpt_trader.persistence.event_store import EventStore
 from gpt_trader.persistence.orders_store import (
@@ -1086,79 +1096,13 @@ class TradingEngine(BaseEngine):
         positions: dict[str, Position],
         equity: Decimal,
     ) -> None:
-        candles: list[Any] = []
-        start_time = time.time()
-
-        if ticker is None:
-            try:
-                ticker = await self._broker_calls(broker.get_ticker, symbol)
-            except Exception as e:
-                logger.error(f"Failed to fetch ticker for {symbol}: {e}")
-                self._connection_status = "DISCONNECTED"
-                return
-
-        if ticker is None or not ticker.get("price"):
-            logger.error(f"No ticker data for {symbol}")
-            self._connection_status = "DISCONNECTED"
-            return
-
-        try:
-            candles_result = await self._broker_calls(
-                broker.get_candles,
-                symbol,
-                granularity="ONE_MINUTE",
-            )
-            if isinstance(candles_result, Exception):
-                logger.warning(f"Failed to fetch candles for {symbol}: {candles_result}")
-            else:
-                candles = candles_result or []
-        except Exception as e:
-            logger.warning(f"Failed to fetch candles for {symbol}: {e}")
-
-        self._last_latency = time.time() - start_time
-        self._connection_status = "CONNECTED"
-
-        price = Decimal(str(ticker.get("price", 0)))
-        logger.info(f"{symbol} price: {price}")
-
-        if self.context.risk_manager is not None:
-            self.context.risk_manager.last_mark_update[symbol] = time.time()
-
-        self._status_reporter.update_price(symbol, price)
-        await self._price_tick_store.record_price_tick_async(symbol, price)
-
-        position_state = self._build_position_state(symbol, positions)
-        with profile_span("strategy_decision", {"symbol": symbol}) as _strat_span:
-            decision = self.strategy.decide(
-                symbol=symbol,
-                current_mark=price,
-                position_state=position_state,
-                recent_marks=self.price_history[symbol],
-                equity=equity,
-                product=None,
-                candles=candles,
-            )
-
-        logger.info(f"Strategy Decision for {symbol}: {decision.action} ({decision.reason})")
-
-        active_strats = getattr(
-            self.strategy, "active_strategies", [self.strategy.__class__.__name__]
-        )
-        decision_record = {
-            "symbol": symbol,
-            "action": decision.action.value,
-            "reason": decision.reason,
-            "confidence": str(decision.confidence),
-            "timestamp": time.time(),
-        }
-        self._status_reporter.update_strategy(active_strats, [decision_record])
-
-        await self._handle_decision(
+        await process_symbol(
+            self,
             symbol=symbol,
-            decision=decision,
-            price=price,
+            broker=broker,
+            ticker=ticker,
+            positions=positions,
             equity=equity,
-            position_state=position_state,
         )
 
     async def _handle_decision(
@@ -1170,324 +1114,14 @@ class TradingEngine(BaseEngine):
         equity: Decimal,
         position_state: dict[str, Any] | None,
     ) -> None:
-        if self._strategy_proposal_adapter is not None:
-            # Proposal-only mode: map the decision into a human-review trade idea
-            # and return before any broker interaction. This is the sole action
-            # taken while the gate is on — no orders are submitted for any action.
-            self._propose_strategy_decision(
-                symbol=symbol,
-                decision=decision,
-                price=price,
-                position_state=position_state,
-            )
-            return
-
-        if decision.action in (Action.BUY, Action.SELL):
-            logger.info(
-                "Executing order",
-                symbol=symbol,
-                action=decision.action.value,
-                operation="order_placement",
-                stage="start",
-            )
-            try:
-                with profile_span(
-                    "order_placement", {"symbol": symbol, "action": decision.action.value}
-                ):
-                    result = await self._validate_and_place_order(
-                        symbol=symbol,
-                        decision=decision,
-                        price=price,
-                        equity=equity,
-                    )
-                if result.blocked:
-                    logger.warning(
-                        "Order blocked",
-                        symbol=symbol,
-                        action=decision.action.value,
-                        reason=result.reason,
-                        operation="order_placement",
-                        stage="blocked",
-                    )
-                elif result.failed:
-                    logger.error(
-                        "Order submission failed",
-                        symbol=symbol,
-                        action=decision.action.value,
-                        reason=result.reason,
-                        error_message=result.error,
-                        operation="order_placement",
-                        stage="failed",
-                    )
-                    failure_detail = result.error or result.reason or "unknown"
-                    await self._notify(
-                        title="Order Submission Failed",
-                        message=(
-                            f"Failed to submit {decision.action.value} order for {symbol}: "
-                            f"{failure_detail}"
-                        ),
-                        severity=AlertSeverity.ERROR,
-                        context={
-                            "symbol": symbol,
-                            "action": decision.action.value,
-                            "reason": result.reason,
-                            "error": result.error,
-                        },
-                    )
-            except Exception as e:
-                logger.error(
-                    "Order placement failed",
-                    symbol=symbol,
-                    action=decision.action.value,
-                    error_message=str(e),
-                    operation="order_placement",
-                    stage="failed",
-                )
-                await self._notify(
-                    title="Order Placement Failed",
-                    message=f"Failed to execute {decision.action} for {symbol}: {e}",
-                    severity=AlertSeverity.ERROR,
-                    context={
-                        "symbol": symbol,
-                        "action": decision.action.value,
-                        "error": str(e),
-                    },
-                )
-        elif decision.action == Action.CLOSE:
-            if position_state is None:
-                logger.info(
-                    "CLOSE signal ignored - no open position",
-                    symbol=symbol,
-                    action=decision.action.value,
-                    operation="order_placement",
-                    stage="skip",
-                )
-                return
-
-            close_order = self._resolve_close_order(position_state)
-            if close_order is None:
-                logger.warning(
-                    "CLOSE signal ignored - invalid position state",
-                    symbol=symbol,
-                    action=decision.action.value,
-                    position_state=position_state,
-                    operation="order_placement",
-                    stage="invalid_position_state",
-                )
-                return
-
-            close_side, close_quantity = close_order
-            logger.info(
-                "Executing close order",
-                symbol=symbol,
-                action=decision.action.value,
-                side=close_side.value,
-                quantity=str(close_quantity),
-                operation="order_placement",
-                stage="start",
-            )
-            try:
-                with profile_span(
-                    "order_placement",
-                    {"symbol": symbol, "action": decision.action.value, "side": close_side.value},
-                ):
-                    result = await self.submit_order(
-                        symbol=symbol,
-                        side=close_side,
-                        price=price,
-                        equity=equity,
-                        quantity_override=close_quantity,
-                        reduce_only=True,
-                        reason=decision.reason,
-                        confidence=decision.confidence,
-                    )
-                if result.blocked:
-                    logger.warning(
-                        "Close order blocked",
-                        symbol=symbol,
-                        action=decision.action.value,
-                        side=close_side.value,
-                        reason=result.reason,
-                        operation="order_placement",
-                        stage="blocked",
-                    )
-                elif result.failed:
-                    logger.error(
-                        "Close order submission failed",
-                        symbol=symbol,
-                        action=decision.action.value,
-                        side=close_side.value,
-                        reason=result.reason,
-                        error_message=result.error,
-                        operation="order_placement",
-                        stage="failed",
-                    )
-                    failure_detail = result.error or result.reason or "unknown"
-                    await self._notify(
-                        title="Close Order Submission Failed",
-                        message=f"Failed to close {symbol}: {failure_detail}",
-                        severity=AlertSeverity.ERROR,
-                        context={
-                            "symbol": symbol,
-                            "action": decision.action.value,
-                            "side": close_side.value,
-                            "reason": result.reason,
-                            "error": result.error,
-                        },
-                    )
-            except Exception as e:
-                logger.error(
-                    "Close order placement failed",
-                    symbol=symbol,
-                    action=decision.action.value,
-                    side=close_side.value,
-                    error_message=str(e),
-                    operation="order_placement",
-                    stage="failed",
-                )
-                await self._notify(
-                    title="Close Order Placement Failed",
-                    message=f"Failed to close {symbol}: {e}",
-                    severity=AlertSeverity.ERROR,
-                    context={
-                        "symbol": symbol,
-                        "action": decision.action.value,
-                        "side": close_side.value,
-                        "error": str(e),
-                    },
-                )
-
-    def _propose_strategy_decision(
-        self,
-        *,
-        symbol: str,
-        decision: Decision,
-        price: Decimal,
-        position_state: dict[str, Any] | None,
-    ) -> None:
-        """Route a live decision into the approval-gated trade-idea workflow.
-
-        Proposal-only: this creates an auditable ``proposed`` trade idea through
-        ``TradeIdeaService.propose()`` and never calls the broker, approves an
-        idea, or submits an order. Only supported buy shapes map to an idea;
-        other actions (sell/close/hold) are recorded as skipped. Any mapping or
-        persistence failure is logged and swallowed so a broken proposal never
-        falls through to direct execution while the gate is on.
-        """
-        assert self._strategy_proposal_adapter is not None
-        assert self._trade_idea_service is not None
-        product_type = self._proposal_product_type(symbol, position_state)
-        if product_type is not ProductType.SPOT:
-            logger.info(
-                "Proposal-only mode: product type is not supported for trade ideas",
-                symbol=symbol,
-                action=decision.action.value,
-                product_type=product_type.value,
-                operation="strategy_proposal",
-                stage="skipped",
-            )
-            return
-        context = StrategySignalContext(
+        await handle_decision(
+            self,
             symbol=symbol,
-            current_mark=price,
-            as_of=datetime.now(UTC),
-            strategy_name=self._proposal_strategy_name(),
-            product_type=product_type,
-            data_source="live-strategy:decision",
+            decision=decision,
+            price=price,
+            equity=equity,
+            position_state=position_state,
         )
-        try:
-            view = self._strategy_proposal_adapter.propose_decision(
-                decision, context, self._trade_idea_service
-            )
-        except Exception as exc:
-            logger.error(
-                "Strategy-signal proposal failed",
-                symbol=symbol,
-                action=decision.action.value,
-                error_type=type(exc).__name__,
-                error_message=str(exc),
-                operation="strategy_proposal",
-                stage="failed",
-            )
-            return
-
-        if view is None:
-            logger.info(
-                "Proposal-only mode: decision not eligible for a trade idea",
-                symbol=symbol,
-                action=decision.action.value,
-                operation="strategy_proposal",
-                stage="skipped",
-            )
-            return
-
-        logger.info(
-            "Strategy decision proposed for human review",
-            symbol=symbol,
-            action=decision.action.value,
-            decision_id=view.idea.decision_id,
-            state=view.state.value,
-            operation="strategy_proposal",
-            stage="proposed",
-        )
-
-    def _proposal_strategy_name(self) -> str:
-        """Best-effort human-readable strategy name recorded on proposed ideas."""
-        active = getattr(self.strategy, "active_strategies", None)
-        if isinstance(active, (list, tuple)):
-            if active:
-                return str(active[0])
-        elif active:
-            return str(active)
-        configured = getattr(self.context.config, "strategy_type", None)
-        if configured:
-            return str(configured)
-        return self.strategy.__class__.__name__
-
-    def _proposal_product_type(
-        self,
-        symbol: str,
-        position_state: dict[str, Any] | None,
-    ) -> ProductType:
-        """Infer the broker-neutral product type before proposing a trade idea.
-
-        The current adapter only supports spot ideas. Returning ``FUTURES`` lets
-        proposal-only mode fail closed for CFM/futures contexts instead of
-        recording a futures signal as a spot idea.
-        """
-        raw_position_type = None
-        if position_state:
-            raw_position_type = position_state.get("product_type")
-        if raw_position_type is not None:
-            normalized = str(getattr(raw_position_type, "value", raw_position_type)).strip().lower()
-            if normalized == ProductType.SPOT.value:
-                return ProductType.SPOT
-            if normalized in {"future", "futures", "perpetual", "perp"}:
-                return ProductType.FUTURES
-            try:
-                return ProductType(normalized)
-            except ValueError:
-                return ProductType.OTHER
-
-        config = self.context.config
-        cfm_symbols = {
-            str(cfm_symbol).strip().upper()
-            for cfm_symbol in getattr(config, "cfm_symbols", [])
-            if str(cfm_symbol).strip()
-        }
-        if symbol.strip().upper() in cfm_symbols:
-            return ProductType.FUTURES
-
-        trading_modes = {
-            str(mode).strip().lower()
-            for mode in getattr(config, "trading_modes", [])
-            if str(mode).strip()
-        }
-        if "cfm" in trading_modes and "spot" not in trading_modes:
-            return ProductType.FUTURES
-        if symbol.strip().upper().endswith("-FUTURES"):
-            return ProductType.FUTURES
-        return ProductType.SPOT
 
     async def _fetch_total_equity(self, positions: dict[str, Position]) -> Decimal | None:
         """Fetch total equity = collateral + unrealized PnL."""
@@ -1797,6 +1431,10 @@ class TradingEngine(BaseEngine):
             decision_trace=trace,
         )
 
+    # Thin delegates to engines/order_guards.py. They are deliberate class
+    # seams: controls_smoke and tests patch these method names to make the
+    # order path deterministic, so _validate_and_place_order must route
+    # through them rather than calling the module functions directly.
     async def _check_degradation_gate(
         self,
         *,
@@ -1806,44 +1444,14 @@ class TradingEngine(BaseEngine):
         trace: OrderDecisionTrace,
         reduce_only_flag: bool,
     ) -> OrderSubmissionResult | None:
-        if self._degradation.is_paused(symbol, is_reduce_only=reduce_only_flag):
-            pause_reason = self._degradation.get_pause_reason(symbol) or "unknown"
-            logger.warning(
-                f"Order blocked: trading paused for {symbol}",
-                symbol=symbol,
-                side=side.value,
-                reason=pause_reason,
-                operation="degradation",
-                stage="order_blocked",
-            )
-            self._emit_trade_gate_blocked(
-                gate="degradation_gate",
-                symbol=symbol,
-                side=side,
-                reason=pause_reason,
-                params={
-                    "pause_reason": pause_reason,
-                    "reduce_only": reduce_only_flag,
-                },
-                decision_id=trace.decision_id,
-            )
-            self._order_submitter.record_rejection(
-                symbol, side.value, Decimal("0"), price, f"paused:{pause_reason}"
-            )
-            await self._notify(
-                title="Order Blocked - Trading Paused",
-                message=f"Cannot place {side.value} order for {symbol}: {pause_reason}",
-                severity=AlertSeverity.WARNING,
-                context={"symbol": symbol, "side": side.value, "reason": pause_reason},
-            )
-            trace.record_outcome("degradation_gate", "blocked", detail=pause_reason)
-            return self._finalize_decision_trace(
-                trace,
-                status=OrderSubmissionStatus.BLOCKED,
-                reason=f"paused:{pause_reason}",
-            )
-        trace.record_outcome("degradation_gate", "passed")
-        return None
+        return await check_degradation_gate(
+            self,
+            symbol=symbol,
+            side=side,
+            price=price,
+            trace=trace,
+            reduce_only_flag=reduce_only_flag,
+        )
 
     def _calculate_quantity_and_record(
         self,
@@ -1855,43 +1463,15 @@ class TradingEngine(BaseEngine):
         quantity_override: Decimal | None,
         trace: OrderDecisionTrace,
     ) -> tuple[Decimal, OrderSubmissionResult | None]:
-        quantity = self._calculate_order_quantity(
-            symbol,
-            price,
-            equity,
-            product=None,
+        return calculate_quantity_and_record(
+            self,
+            symbol=symbol,
+            side=side,
+            price=price,
+            equity=equity,
             quantity_override=quantity_override,
+            trace=trace,
         )
-        trace.quantity = quantity
-
-        if quantity <= 0:
-            logger.warning(f"Calculated quantity is {quantity}, skipping order")
-            trace.record_outcome("sizing", "blocked", detail="quantity_zero")
-            self._emit_trade_gate_blocked(
-                gate="sizing",
-                symbol=symbol,
-                side=side,
-                reason="quantity_zero",
-                params={
-                    "quantity": str(quantity),
-                    "price": str(price),
-                    "equity": str(equity),
-                    "quantity_override": (
-                        str(quantity_override) if quantity_override is not None else None
-                    ),
-                },
-                decision_id=trace.decision_id,
-            )
-            self._order_submitter.record_rejection(
-                symbol, side.value, quantity, price, "quantity_zero"
-            )
-            return quantity, self._finalize_decision_trace(
-                trace,
-                status=OrderSubmissionStatus.BLOCKED,
-                reason="quantity_zero",
-            )
-        trace.record_outcome("sizing", "passed")
-        return quantity, None
 
     async def _check_reduce_only_request(
         self,
@@ -1904,35 +1484,16 @@ class TradingEngine(BaseEngine):
         is_reducing: bool,
         trace: OrderDecisionTrace,
     ) -> OrderSubmissionResult | None:
-        if reduce_only_requested and not is_reducing:
-            logger.warning(
-                "Reduce-only requested without a matching position",
-                symbol=symbol,
-                side=side.value,
-                operation="reduce_only",
-                stage="requested_not_reducing",
-            )
-            trace.record_outcome("reduce_only", "blocked", detail="requested_not_reducing")
-            self._emit_trade_gate_blocked(
-                gate="reduce_only",
-                symbol=symbol,
-                side=side,
-                reason="requested_not_reducing",
-                params={
-                    "reduce_only_requested": reduce_only_requested,
-                    "is_reducing": is_reducing,
-                },
-                decision_id=trace.decision_id,
-            )
-            self._order_submitter.record_rejection(
-                symbol, side.value, quantity, price, "reduce_only_not_reducing"
-            )
-            return self._finalize_decision_trace(
-                trace,
-                status=OrderSubmissionStatus.BLOCKED,
-                reason="reduce_only_not_reducing",
-            )
-        return None
+        return await check_reduce_only_request(
+            self,
+            symbol=symbol,
+            side=side,
+            quantity=quantity,
+            price=price,
+            reduce_only_requested=reduce_only_requested,
+            is_reducing=is_reducing,
+            trace=trace,
+        )
 
     async def _run_security_validation(
         self,
@@ -1944,62 +1505,15 @@ class TradingEngine(BaseEngine):
         equity: Decimal,
         trace: OrderDecisionTrace,
     ) -> OrderSubmissionResult | None:
-        from gpt_trader.security.validate import get_validator
-
-        security_order = {
-            "symbol": symbol,
-            "side": side.value,
-            "quantity": float(quantity),
-            "price": float(price),
-            "type": "MARKET",
-        }
-
-        limits = {}
-        if hasattr(self.context.config, "risk"):
-            risk = self.context.config.risk
-            if risk:
-                max_position_size = 0.05
-                raw_max_position_fraction = getattr(risk, "max_position_pct", None)
-                if raw_max_position_fraction is None:
-                    raw_max_position_fraction = getattr(risk, "position_fraction", None)
-                if raw_max_position_fraction is not None:
-                    try:
-                        max_position_size = float(raw_max_position_fraction)
-                    except (TypeError, ValueError):
-                        max_position_size = 0.05
-                limits["max_position_size"] = max_position_size
-
-                limits["max_leverage"] = float(getattr(risk, "max_leverage", 2.0))
-                limits["max_daily_loss"] = float(getattr(risk, "daily_loss_limit_pct", 0.02))
-
-        security_result = get_validator().validate_order_request(
-            security_order, account_value=float(equity), limits=limits
+        return await run_security_validation(
+            self,
+            symbol=symbol,
+            side=side,
+            quantity=quantity,
+            price=price,
+            equity=equity,
+            trace=trace,
         )
-
-        if not security_result.is_valid:
-            error_msg = f"Security validation failed: {', '.join(security_result.errors)}"
-            logger.error(error_msg)
-            self._order_submitter.record_rejection(
-                symbol,
-                side.value,
-                quantity,
-                price,
-                "security_validation_failed",
-            )
-            await self._notify(
-                title="Security Validation Failed",
-                message=error_msg,
-                severity=AlertSeverity.ERROR,
-                context=security_order,
-            )
-            trace.record_outcome("security_validation", "blocked", detail=error_msg)
-            return self._finalize_decision_trace(
-                trace,
-                status=OrderSubmissionStatus.BLOCKED,
-                reason=error_msg,
-            )
-        trace.record_outcome("security_validation", "passed")
-        return None
 
     async def _apply_reduce_only_mode(
         self,
@@ -2013,147 +1527,17 @@ class TradingEngine(BaseEngine):
         current_pos: Position | dict[str, Any] | None,
         trace: OrderDecisionTrace,
     ) -> tuple[Decimal, OrderSubmissionResult | None]:
-        risk_manager = self.context.risk_manager
-        if risk_manager is None:
-            error_msg = "risk_manager_unavailable"
-            logger.error(
-                "Order blocked - risk manager unavailable",
-                symbol=symbol,
-                side=side.value,
-                operation="reduce_only",
-                stage="missing_risk_manager",
-            )
-            self._emit_trade_gate_blocked(
-                gate="reduce_only",
-                symbol=symbol,
-                side=side,
-                reason=error_msg,
-                params={
-                    "is_reducing": is_reducing,
-                    "reduce_only_flag": reduce_only_flag,
-                },
-                decision_id=trace.decision_id,
-            )
-            self._order_submitter.record_rejection(symbol, side.value, quantity, price, error_msg)
-            await self._notify(
-                title="Order Blocked - Risk Manager Unavailable",
-                message=(
-                    f"Cannot place {side.value} order for {symbol}: "
-                    "risk manager is required for reduce-only enforcement"
-                ),
-                severity=AlertSeverity.ERROR,
-                context={
-                    "symbol": symbol,
-                    "side": side.value,
-                    "reason": error_msg,
-                },
-            )
-            trace.record_outcome("reduce_only", "blocked", detail=error_msg)
-            return quantity, self._finalize_decision_trace(
-                trace,
-                status=OrderSubmissionStatus.BLOCKED,
-                reason=error_msg,
-            )
-
-        daily_pnl_triggered = bool(getattr(risk_manager, "_daily_pnl_triggered", False))
-        reduce_only_mode = risk_manager.is_reduce_only_mode()
-        reduce_only_active = reduce_only_mode or daily_pnl_triggered
-        reduce_only_clamped = False
-        current_qty: Decimal | None = None
-        if reduce_only_active and is_reducing and current_pos is not None:
-            if hasattr(current_pos, "quantity"):
-                current_qty = abs(current_pos.quantity)
-            elif isinstance(current_pos, dict):
-                current_qty = abs(Decimal(str(current_pos.get("quantity", 0))))
-            else:
-                current_qty = Decimal("0")
-
-            if current_qty is not None and quantity > current_qty:
-                logger.warning(
-                    f"Reduce-only: clamping order from {quantity} to {current_qty} "
-                    f"to prevent position flip for {symbol}"
-                )
-                quantity = current_qty
-                trace.quantity = quantity
-                reduce_only_clamped = True
-
-            if quantity <= 0:
-                logger.info(f"Reduce-only: no position to reduce for {symbol}, skipping order")
-                trace.record_outcome(
-                    "reduce_only",
-                    "blocked",
-                    detail="reduce_only_empty_position",
-                )
-                self._emit_trade_gate_blocked(
-                    gate="reduce_only",
-                    symbol=symbol,
-                    side=side,
-                    reason="reduce_only_empty_position",
-                    params={
-                        "quantity": str(quantity),
-                        "current_qty": str(current_qty) if current_qty is not None else None,
-                        "reduce_only_mode": reduce_only_mode,
-                        "daily_pnl_triggered": daily_pnl_triggered,
-                    },
-                    decision_id=trace.decision_id,
-                )
-                self._order_submitter.record_rejection(
-                    symbol, side.value, quantity, price, "reduce_only_empty_position"
-                )
-                return quantity, self._finalize_decision_trace(
-                    trace,
-                    status=OrderSubmissionStatus.BLOCKED,
-                    reason="reduce_only_empty_position",
-                )
-
-        order_for_check = {
-            "symbol": symbol,
-            "side": side.value,
-            "quantity": float(quantity),
-            "reduce_only": reduce_only_flag,
-        }
-
-        if not risk_manager.check_order(order_for_check):
-            error_msg = (
-                f"Order blocked by risk manager: "
-                f"reduce_only_mode={reduce_only_mode}, "
-                f"daily_pnl_triggered={daily_pnl_triggered}"
-            )
-            logger.warning(error_msg)
-            self._emit_trade_gate_blocked(
-                gate="reduce_only",
-                symbol=symbol,
-                side=side,
-                reason="reduce_only_mode_blocked",
-                params={
-                    "reduce_only_mode": reduce_only_mode,
-                    "daily_pnl_triggered": daily_pnl_triggered,
-                    "reduce_only_flag": reduce_only_flag,
-                    "is_reducing": is_reducing,
-                },
-                decision_id=trace.decision_id,
-            )
-            await self._notify(
-                title="Order Blocked - Reduce Only Mode",
-                message=f"Cannot open new {side.value} position for {symbol} while in reduce-only mode",
-                severity=AlertSeverity.WARNING,
-                context=order_for_check,
-            )
-            trace.record_outcome("reduce_only", "blocked", detail=error_msg)
-            self._order_submitter.record_rejection(
-                symbol, side.value, quantity, price, "reduce_only_mode_blocked"
-            )
-            return quantity, self._finalize_decision_trace(
-                trace,
-                status=OrderSubmissionStatus.BLOCKED,
-                reason=error_msg,
-            )
-        trace.record_outcome(
-            "reduce_only",
-            "passed",
-            detail="clamped" if reduce_only_clamped else None,
+        return await apply_reduce_only_mode(
+            self,
+            symbol=symbol,
+            side=side,
+            price=price,
+            quantity=quantity,
+            reduce_only_flag=reduce_only_flag,
+            is_reducing=is_reducing,
+            current_pos=current_pos,
+            trace=trace,
         )
-        return quantity, None
 
     async def _check_mark_staleness(
         self,
@@ -2165,108 +1549,15 @@ class TradingEngine(BaseEngine):
         reduce_only_flag: bool,
         trace: OrderDecisionTrace,
     ) -> OrderSubmissionResult | None:
-        if self.context.risk_manager is None:
-            trace.record_outcome("mark_staleness", "skipped")
-            return None
-
-        if self.context.risk_manager.check_mark_staleness(symbol):
-            config = self.context.risk_manager.config
-            if config is not None:
-                allow_reduce = config.mark_staleness_allow_reduce_only
-                cooldown = config.mark_staleness_cooldown_seconds
-                self._append_event(
-                    "stale_mark_detected",
-                    {
-                        "symbol": symbol,
-                        "side": side.value,
-                        "allowed_reduce_only": allow_reduce and reduce_only_flag,
-                        "timestamp": time.time(),
-                    },
-                )
-                self._degradation.pause_symbol(
-                    symbol=symbol,
-                    seconds=cooldown,
-                    reason="mark_staleness",
-                    allow_reduce_only=allow_reduce,
-                )
-                if allow_reduce and reduce_only_flag:
-                    logger.info(
-                        f"Mark stale for {symbol} but allowing reduce-only order",
-                        operation="degradation",
-                    )
-                    trace.record_outcome(
-                        "mark_staleness",
-                        "allowed",
-                        detail="reduce_only",
-                    )
-                    return None
-
-                logger.warning(f"Order blocked: mark price stale for {symbol}")
-                self._emit_trade_gate_blocked(
-                    gate="mark_staleness",
-                    symbol=symbol,
-                    side=side,
-                    reason="mark_staleness",
-                    params={
-                        "allow_reduce_only": allow_reduce,
-                        "reduce_only": reduce_only_flag,
-                        "cooldown_seconds": cooldown,
-                    },
-                    decision_id=trace.decision_id,
-                )
-                self._order_submitter.record_rejection(
-                    symbol, side.value, quantity, price, "mark_staleness"
-                )
-                await self._notify(
-                    title="Order Blocked - Stale Mark Price",
-                    message=f"Cannot place order for {symbol}: mark price data is stale",
-                    severity=AlertSeverity.WARNING,
-                    context={"symbol": symbol, "side": side.value},
-                )
-                trace.record_outcome("mark_staleness", "blocked", detail="stale")
-                return self._finalize_decision_trace(
-                    trace,
-                    status=OrderSubmissionStatus.BLOCKED,
-                    reason="mark_staleness",
-                )
-
-            logger.warning(f"Order blocked: mark price stale for {symbol}")
-            self._emit_trade_gate_blocked(
-                gate="mark_staleness",
-                symbol=symbol,
-                side=side,
-                reason="mark_staleness",
-                params={
-                    "allow_reduce_only": False,
-                    "reduce_only": reduce_only_flag,
-                    "cooldown_seconds": None,
-                },
-                decision_id=trace.decision_id,
-            )
-            self._append_event(
-                "stale_mark_detected",
-                {
-                    "symbol": symbol,
-                    "side": side.value,
-                    "allowed_reduce_only": False,
-                    "timestamp": time.time(),
-                },
-            )
-            await self._notify(
-                title="Order Blocked - Stale Mark Price",
-                message=f"Cannot place order for {symbol}: mark price data is stale",
-                severity=AlertSeverity.WARNING,
-                context={"symbol": symbol, "side": side.value},
-            )
-            trace.record_outcome("mark_staleness", "blocked", detail="stale")
-            return self._finalize_decision_trace(
-                trace,
-                status=OrderSubmissionStatus.BLOCKED,
-                reason="mark_staleness",
-            )
-
-        trace.record_outcome("mark_staleness", "passed")
-        return None
+        return await check_mark_staleness(
+            self,
+            symbol=symbol,
+            side=side,
+            quantity=quantity,
+            price=price,
+            reduce_only_flag=reduce_only_flag,
+            trace=trace,
+        )
 
     async def _run_order_validator_guards(
         self,
@@ -2279,180 +1570,16 @@ class TradingEngine(BaseEngine):
         reduce_only_flag: bool,
         trace: OrderDecisionTrace,
     ) -> tuple[Decimal, Decimal, bool, OrderSubmissionResult | None]:
-        effective_price = price
-        if self._order_validator is None:
-            trace.record_outcome("order_validation", "skipped")
-            return quantity, effective_price, reduce_only_flag, None
-
-        try:
-            with profile_span("pre_trade_validation", {"symbol": symbol}) as _val_span:
-                product = self._state_collector.require_product(symbol, product=None)
-                effective_price = self._state_collector.resolve_effective_price(
-                    symbol, side.value.lower(), price, product
-                )
-
-                try:
-                    quantity, _ = self._order_validator.validate_exchange_rules(
-                        symbol=symbol,
-                        side=side,
-                        order_type=OrderType.MARKET,
-                        order_quantity=quantity,
-                        price=None,
-                        effective_price=effective_price,
-                        product=product,
-                    )
-                    trace.quantity = quantity
-                    trace.record_outcome("exchange_rules", "passed")
-                except ValidationError as exc:
-                    trace.record_outcome("exchange_rules", "blocked", detail=str(exc))
-                    raise
-
-                current_positions_dict = self._state_collector.build_positions_dict(
-                    list(self._current_positions.values())
-                )
-                try:
-                    self._order_validator.run_pre_trade_validation(
-                        symbol=symbol,
-                        side=side,
-                        order_quantity=quantity,
-                        effective_price=effective_price,
-                        product=product,
-                        equity=equity,
-                        current_positions=current_positions_dict,
-                    )
-                    trace.record_outcome("pre_trade_validation", "passed")
-                except ValidationError as exc:
-                    trace.record_outcome("pre_trade_validation", "blocked", detail=str(exc))
-                    raise
-
-                try:
-                    self._order_validator.enforce_slippage_guard(
-                        symbol, side, quantity, effective_price
-                    )
-                    trace.record_outcome("slippage_guard", "passed")
-                    self._degradation.reset_slippage_failures(symbol)
-                except ValidationError as slippage_exc:
-                    trace.record_outcome(
-                        "slippage_guard",
-                        "blocked",
-                        detail=str(slippage_exc),
-                    )
-                    config = self.context.risk_manager.config if self.context.risk_manager else None
-                    if config is not None:
-                        self._degradation.record_slippage_failure(symbol, config)
-                    raise slippage_exc
-
-                # Use container's tracker (validated at init, asserted non-None here)
-                assert self.context.container is not None
-                failure_tracker = self.context.container.validation_failure_tracker
-                config = self.context.risk_manager.config if self.context.risk_manager else None
-                preview_disable_threshold = config.preview_failure_disable_after if config else 5
-
-                if (
-                    self._order_validator.enable_order_preview
-                    and failure_tracker.get_failure_count("order_preview")
-                    >= preview_disable_threshold
-                ):
-                    logger.warning(
-                        "Auto-disabling order preview due to repeated failures",
-                        consecutive_failures=failure_tracker.get_failure_count("order_preview"),
-                        threshold=preview_disable_threshold,
-                        operation="degradation",
-                        stage="preview_disable",
-                    )
-                    self._order_validator.enable_order_preview = False
-
-                if self._order_validator.enable_order_preview:
-                    try:
-                        await self._order_validator.maybe_preview_order_async(
-                            symbol=symbol,
-                            side=side,
-                            order_type=OrderType.MARKET,
-                            order_quantity=quantity,
-                            effective_price=effective_price,
-                            stop_price=None,
-                            tif=self.context.config.time_in_force,
-                            reduce_only=reduce_only_flag,
-                            leverage=None,
-                        )
-                        trace.record_outcome("order_preview", "passed")
-                    except ValidationError as exc:
-                        trace.record_outcome(
-                            "order_preview",
-                            "blocked",
-                            detail=str(exc),
-                        )
-                        raise
-                else:
-                    trace.record_outcome("order_preview", "skipped")
-
-                reduce_only_flag = self._order_validator.finalize_reduce_only_flag(
-                    reduce_only_flag, symbol
-                )
-                trace.reduce_only_final = reduce_only_flag
-        except ValidationError as exc:
-            logger.warning(f"Pre-trade guard rejected order: {exc}")
-            blocked_stage = None
-            for stage, outcome in trace.outcomes.items():
-                if outcome.get("status") == "blocked":
-                    blocked_stage = stage
-                    break
-            reason_code = blocked_stage or "order_validation"
-            self._emit_trade_gate_blocked(
-                gate=reason_code,
-                symbol=symbol,
-                side=side,
-                reason=str(exc),
-                params={
-                    "blocked_stage": reason_code,
-                    "reduce_only": reduce_only_flag,
-                },
-                decision_id=trace.decision_id,
-            )
-            self._order_submitter.record_rejection(
-                symbol, side.value, quantity, effective_price, reason_code
-            )
-            await self._notify(
-                title="Order Blocked - Guard Rejection",
-                message=f"Cannot place order for {symbol}: {exc}",
-                severity=AlertSeverity.WARNING,
-                context={"symbol": symbol, "side": side.value, "reason": str(exc)},
-            )
-            trace.record_outcome("order_validation", "blocked", detail=str(exc))
-            return (
-                quantity,
-                effective_price,
-                reduce_only_flag,
-                self._finalize_decision_trace(
-                    trace,
-                    status=OrderSubmissionStatus.BLOCKED,
-                    reason=str(exc),
-                ),
-            )
-        except Exception as exc:
-            logger.error(f"Guard check error: {exc}")
-            self._order_submitter.record_rejection(
-                symbol, side.value, quantity, price, "guard_error"
-            )
-            await self._notify(
-                title="Order Blocked - Guard Error",
-                message=f"Cannot place order for {symbol}: guard check failed",
-                severity=AlertSeverity.ERROR,
-                context={"symbol": symbol, "side": side.value, "error": str(exc)},
-            )
-            trace.record_outcome("order_validation", "error", detail=str(exc))
-            return (
-                quantity,
-                effective_price,
-                reduce_only_flag,
-                self._finalize_decision_trace(
-                    trace,
-                    status=OrderSubmissionStatus.FAILED,
-                    error=str(exc),
-                ),
-            )
-
-        return quantity, effective_price, reduce_only_flag, None
+        return await run_order_validator_guards(
+            self,
+            symbol=symbol,
+            side=side,
+            price=price,
+            equity=equity,
+            quantity=quantity,
+            reduce_only_flag=reduce_only_flag,
+            trace=trace,
+        )
 
     async def _validate_and_place_order(
         self,

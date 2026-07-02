@@ -14,7 +14,7 @@ from gpt_trader.features.live_trade.execution.guards.protocol import RuntimeGuar
 from gpt_trader.features.live_trade.guard_errors import RiskGuardDataUnavailable
 
 if TYPE_CHECKING:
-    from gpt_trader.features.brokerages.core.protocols import BrokerProtocol
+    from gpt_trader.core.protocols import BrokerProtocol
     from gpt_trader.features.live_trade.risk.protocols import RiskManagerProtocol
 
 

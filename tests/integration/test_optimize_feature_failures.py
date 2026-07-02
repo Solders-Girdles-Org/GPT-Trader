@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from gpt_trader.features.live_trade.strategies.perps_baseline import (
+from gpt_trader.features.live_trade.strategies.baseline import (
     BaselinePerpsStrategy,
     PerpsStrategyConfig,
 )

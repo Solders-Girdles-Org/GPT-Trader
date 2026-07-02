@@ -1,8 +1,8 @@
 # Meaning of the prod and canary profiles under the approval ladder
 
 ---
-status: proposed
-date: 2026-06-28
+status: accepted
+date: 2026-07-02
 deciders: rj
 supersedes:
 superseded-by:
@@ -29,13 +29,17 @@ read as if selecting them were sufficient to operate live.
 
 ## Decision
 
-_Pending owner._
+**Option A — `prod` / `canary` remain live-operation assets, explicitly gated
+by readiness evidence + recorded approval.** Accepted 2026-07-02 by rj. The
+profile name is configuration, never approval; the gates in
+[DIRECTION.md](../DIRECTION.md) and recorded human approval remain the only
+authorization path.
 
 ## Consequences
 
-Touches `ProfileLoader` semantics, preflight gating, and profile language across
-docs. No code change should treat a profile value as execution approval until
-this is decided.
+`ProfileLoader` semantics are unchanged. Docs and tests are hardened so no
+profile value is ever treated as execution approval — tracked in
+[#1122](https://github.com/Solders-Girdles/GPT-Trader/issues/1122).
 
 ## Safety boundary
 

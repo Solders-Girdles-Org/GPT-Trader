@@ -26,8 +26,8 @@ from decimal import Decimal
 from typing import Any, Protocol, cast, runtime_checkable
 
 from gpt_trader.core import OrderSide, OrderType, Product, TimeInForce
+from gpt_trader.core.protocols import BrokerProtocol
 from gpt_trader.features.brokerages.coinbase.specs import validate_order as spec_validate_order
-from gpt_trader.features.brokerages.core.protocols import BrokerProtocol
 from gpt_trader.features.live_trade.risk import ValidationError
 from gpt_trader.features.live_trade.risk.protocols import RiskManagerProtocol
 from gpt_trader.monitoring.metrics_collector import record_counter
