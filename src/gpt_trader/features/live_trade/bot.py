@@ -45,7 +45,7 @@ if TYPE_CHECKING:
         RuntimeStateProtocol,
     )
     from gpt_trader.core import Product
-    from gpt_trader.features.brokerages.core.protocols import BrokerProtocol
+    from gpt_trader.core.protocols import BrokerProtocol
     from gpt_trader.features.live_trade.risk.protocols import RiskManagerProtocol
     from gpt_trader.monitoring.notifications.service import NotificationService
 

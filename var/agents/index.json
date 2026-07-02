@@ -6,50 +6,77 @@
     "schemas": {
       "path": "schemas/",
       "description": "JSON schemas for configuration dataclasses",
-      "files": ["bot_config_schema.json", "risk_config_schema.json"],
+      "files": [
+        "bot_config_schema.json",
+        "risk_config_schema.json"
+      ],
       "generator": "scripts/agents/generate_config_schemas.py"
     },
     "models": {
       "path": "models/",
       "description": "Domain model schemas (interfaces, enums, errors)",
-      "files": ["interfaces_schema.json", "enums_schema.json", "errors_schema.json"],
+      "files": [
+        "interfaces_schema.json",
+        "enums_schema.json",
+        "errors_schema.json"
+      ],
       "generator": "scripts/agents/export_model_schemas.py"
     },
     "logging": {
       "path": "logging/",
       "description": "Structured logging event catalog and schema",
-      "files": ["event_catalog.json", "log_schema.json"],
+      "files": [
+        "event_catalog.json",
+        "log_schema.json"
+      ],
       "generator": "scripts/agents/generate_event_catalog.py"
     },
     "observability": {
       "path": "observability/",
       "description": "Prometheus-style metric catalog (static scan)",
-      "files": ["metrics_catalog.json", "metrics_catalog.md"],
+      "files": [
+        "metrics_catalog.json",
+        "metrics_catalog.md"
+      ],
       "generator": "scripts/agents/generate_metrics_catalog.py"
     },
     "configuration": {
       "path": "configuration/",
       "description": "Environment variable reference (static scan + .env.template enrichment)",
-      "files": ["environment_variables.json", "environment_variables.md"],
+      "files": [
+        "environment_variables.json",
+        "environment_variables.md"
+      ],
       "generator": "scripts/agents/generate_environment_variable_reference.py"
     },
     "testing": {
       "path": "testing/",
       "description": "Test inventory with markers and fixtures",
-      "files": ["markers.json"],
-      "optional_files": ["test_inventory.json", "source_test_map.json"],
+      "files": [
+        "markers.json"
+      ],
+      "optional_files": [
+        "test_inventory.json",
+        "source_test_map.json"
+      ],
       "generator": "scripts/agents/generate_test_inventory.py"
     },
     "validation": {
       "path": "validation/",
       "description": "Validator and validation rules registry",
-      "files": ["validator_registry.json", "rules_registry.json"],
+      "files": [
+        "validator_registry.json",
+        "rules_registry.json"
+      ],
       "generator": "scripts/agents/generate_validator_registry.py"
     },
     "broker": {
       "path": "broker/",
       "description": "Broker API reference and examples",
-      "files": ["api_reference.json", "examples.json"],
+      "files": [
+        "api_reference.json",
+        "examples.json"
+      ],
       "generator": "scripts/agents/generate_broker_api_docs.py"
     },
     "reasoning": {
@@ -88,8 +115,19 @@
     "health": {
       "path": "health/",
       "description": "Agent health schema and example outputs",
-      "files": ["agent_health_schema.json", "agent_health_example.json"],
+      "files": [
+        "agent_health_schema.json",
+        "agent_health_example.json"
+      ],
       "generator": "scripts/agents/generate_agent_health_schema.py"
+    },
+    "scratch_logs": {
+      "path": "scratch_logs/",
+      "description": "Dated hand-written agent reasoning snapshots (frozen history; relocated from docs/agents/scratch_logs/ so the docs currency scan does not police them)",
+      "files": [
+        "project_regrounding_20260628.md",
+        "runtime_architecture_refactor_20260629.md"
+      ]
     }
   },
   "tools": {

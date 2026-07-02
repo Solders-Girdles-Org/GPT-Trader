@@ -1,0 +1,17 @@
+{
+  "success": true,
+  "success_response": {
+    "order_id": "c1d2e3f4-a5b6-4788-99aa-bbccddeeff00",
+    "product_id": "BTC-USD",
+    "side": "BUY",
+    "client_order_id": "gpt-trader-contract-1",
+    "attached_order_id": ""
+  },
+  "order_configuration": {
+    "limit_limit_gtc": {
+      "base_size": "0.005",
+      "limit_price": "65000.00",
+      "post_only": false
+    }
+  }
+}

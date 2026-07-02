@@ -21,7 +21,7 @@ class TestKillSwitchDerivation:
 
     def test_baseline_strategy_uses_strategy_config(self, mock_event_store: MagicMock) -> None:
         """Baseline strategy type derives kill_switch from strategy config."""
-        from gpt_trader.features.live_trade.strategies.perps_baseline import (
+        from gpt_trader.features.live_trade.strategies.baseline import (
             PerpsStrategyConfig,
         )
 
@@ -61,7 +61,7 @@ class TestKillSwitchDerivation:
 
     def test_ensemble_strategy_uses_strategy_config(self, mock_event_store: MagicMock) -> None:
         """Ensemble strategy type falls back to strategy config."""
-        from gpt_trader.features.live_trade.strategies.perps_baseline import (
+        from gpt_trader.features.live_trade.strategies.baseline import (
             PerpsStrategyConfig,
         )
 

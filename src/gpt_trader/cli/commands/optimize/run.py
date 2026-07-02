@@ -28,7 +28,7 @@ from gpt_trader.cli.response import CliErrorCode, CliResponse
 from gpt_trader.features.brokerages.coinbase.auth import SimpleAuth
 from gpt_trader.features.brokerages.coinbase.client.client import CoinbaseClient
 from gpt_trader.features.live_trade.strategies.base import StrategyProtocol
-from gpt_trader.features.live_trade.strategies.perps_baseline.strategy import (
+from gpt_trader.features.live_trade.strategies.baseline.strategy import (
     PerpsStrategy,
     PerpsStrategyConfig,
     SpotStrategy,

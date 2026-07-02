@@ -22,7 +22,7 @@ from gpt_trader.core import Product
 if TYPE_CHECKING:
     from gpt_trader.features.brokerages.coinbase.market_data_features import DepthSnapshot
 
-    from .perps_baseline.strategy import Decision
+    from .baseline.strategy import Decision
 
 
 @dataclass(slots=True)

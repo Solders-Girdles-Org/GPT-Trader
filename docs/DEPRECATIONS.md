@@ -57,7 +57,7 @@ Before removing any deprecated item:
 | `monitoring/guards/` package (`RuntimeGuardManager`, builtin guards, alert handlers) | Unreleased | Dead parallel of the canonical runtime guard stack in `features/live_trade/execution/guards/` (managed by `execution/guard_manager.py`). |
 | `monitoring/domain/perps/` margin/liquidation math (`MarginStateMonitor`, `LiquidationMonitor`) | Unreleased | Test-only surface. Live liquidation protection is `features/live_trade/execution/guards/liquidation_buffer.py`. |
 | `StatefulStrategy` ABC (`strategies/stateful.py`) | Unreleased | Test-only. Use `StatefulStrategyBase` in `strategies/base.py`. |
-| `StatefulBaselineStrategy` / `StatefulPerpsStrategy` (`strategies/perps_baseline/stateful.py`) | Unreleased | Test-only; never wired into `factory.py`. Use `BaselinePerpsStrategy`. |
+| `StatefulBaselineStrategy` / `StatefulPerpsStrategy` (`strategies/baseline/stateful.py`) | Unreleased | Test-only; never wired into `factory.py`. Use `BaselinePerpsStrategy`. |
 | `AsyncRetry` / `async_retry` (`utilities/async_tools/retry.py`) | Unreleased | Zero non-test users. Broker IO retry lives in `execution/broker_executor.py` (`RetryPolicy`, `execute_with_retry`). |
 | `retry_on_error` decorator (`errors/error_patterns.py`) | Unreleased | Zero production callers. Call `ErrorHandler.with_retry` directly if retry-with-recovery is needed. |
 | Legacy credential env vars (`COINBASE_API_KEY_NAME` / `COINBASE_PRIVATE_KEY`) | Unreleased | Use `COINBASE_CDP_API_KEY` + `COINBASE_CDP_PRIVATE_KEY` or `COINBASE_CREDENTIALS_FILE`. |
@@ -78,6 +78,7 @@ Before removing any deprecated item:
 | Data module singletons (`store_data`/`fetch_data` functions) | Unreleased | Use `DataService` and its instance methods. |
 | Yahoo data source stub (`DataSource.YAHOO`, `download_from_yahoo`) | Unreleased | Use `DataSource.COINBASE` and `download_from_coinbase`. |
 | `EventStore.events` list + `EventStore.path` JSONL alias | Unreleased | Use `EventStore.list_events()` for reads and `EventStore.root` for the storage root. |
+| Event JSONL as a runtime write path (`events.jsonl`) | Unreleased | Import-only historical data: `EventStore` persists via SQLite (`events.db`); the daily-report loader, `scripts/monitoring/export_metrics.py`, and `scripts/monitoring/perps_dashboard.py` read legacy `events.jsonl` only when no `events.db` exists. See `docs/decisions/event-jsonl-compatibility.md`. |
 | TUI subsystem (`src/gpt_trader/tui/`, `gpt-trader tui` command, `--tui`/`--demo` run flags, `scripts/build_tui_css.py`, TUI CI jobs, `textual` dependency) | Unreleased | Removed; use `gpt-trader run` for the bot and `gpt-trader ideas …` for trade-idea review. See `docs/decisions/remove-tui-subsystem.md`. |
 | `gpt-trader treasury convert\|move` CLI command group (`cli/commands/treasury.py`) | Unreleased | Removed; it was never functional (no `account_manager` was ever wired, so every invocation failed). No migration path. See `docs/decisions/remove-unwired-account-manager-and-strategy-lab.md`. |
 | `CoinbaseAccountManager` (`features/brokerages/coinbase/account_manager.py`) | Unreleased | Removed as never-constructed dead code. Wire a new account-snapshot service from a fresh spec if needed. See `docs/decisions/remove-unwired-account-manager-and-strategy-lab.md`. |

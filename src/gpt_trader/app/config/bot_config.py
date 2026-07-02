@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args, get_origin
 # Import canonical defaults (top-10 symbols).
 
 if TYPE_CHECKING:
-    from gpt_trader.features.live_trade.strategies.perps_baseline import (
+    from gpt_trader.features.live_trade.strategies.baseline import (
         PerpsStrategyConfig,
     )
     from gpt_trader.monitoring.health_signals import HealthThresholds
@@ -148,7 +148,7 @@ StrategyType = Literal["baseline", "mean_reversion", "ensemble", "regime_switche
 
 def _get_default_strategy_config() -> "PerpsStrategyConfig":
     """Lazy factory to avoid circular imports."""
-    from gpt_trader.features.live_trade.strategies.perps_baseline import (
+    from gpt_trader.features.live_trade.strategies.baseline import (
         PerpsStrategyConfig,
     )
 
@@ -336,7 +336,7 @@ class BotConfig:
             parse_int_env,
             parse_list_env,
         )
-        from gpt_trader.features.live_trade.strategies.perps_baseline import (
+        from gpt_trader.features.live_trade.strategies.baseline import (
             PerpsStrategyConfig,
         )
 
@@ -495,7 +495,7 @@ class BotConfig:
         """
         from dataclasses import fields as dataclass_fields
 
-        from gpt_trader.features.live_trade.strategies.perps_baseline import (
+        from gpt_trader.features.live_trade.strategies.baseline import (
             PerpsStrategyConfig,
         )
 

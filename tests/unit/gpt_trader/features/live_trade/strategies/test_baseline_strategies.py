@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from gpt_trader.features.live_trade.strategies.perps_baseline.strategy import Action
-from tests.unit.gpt_trader.features.live_trade.strategies.perps_baseline_test_helpers import (
+from gpt_trader.features.live_trade.strategies.baseline.strategy import Action
+from tests.unit.gpt_trader.features.live_trade.strategies.baseline_test_helpers import (
     make_downtrend,
     make_uptrend,
 )
@@ -15,7 +15,7 @@ class TestSpotStrategy:
     """Tests for SpotStrategy class."""
 
     def test_spot_strategy_uses_spot_config(self) -> None:
-        from gpt_trader.features.live_trade.strategies.perps_baseline import (
+        from gpt_trader.features.live_trade.strategies.baseline import (
             SpotStrategy,
             SpotStrategyConfig,
         )
@@ -27,7 +27,7 @@ class TestSpotStrategy:
 
     def test_spot_strategy_converts_sell_to_hold(self) -> None:
         """Spot strategy should convert SELL signals to HOLD (no shorting)."""
-        from gpt_trader.features.live_trade.strategies.perps_baseline import (
+        from gpt_trader.features.live_trade.strategies.baseline import (
             SpotStrategy,
             SpotStrategyConfig,
         )
@@ -50,7 +50,7 @@ class TestSpotStrategy:
 
     def test_spot_strategy_allows_buy(self) -> None:
         """Spot strategy should still allow BUY signals."""
-        from gpt_trader.features.live_trade.strategies.perps_baseline import (
+        from gpt_trader.features.live_trade.strategies.baseline import (
             SpotStrategy,
             SpotStrategyConfig,
         )
@@ -73,7 +73,7 @@ class TestPerpsStrategy:
     """Tests for PerpsStrategy class."""
 
     def test_perps_strategy_uses_perps_config(self) -> None:
-        from gpt_trader.features.live_trade.strategies.perps_baseline import (
+        from gpt_trader.features.live_trade.strategies.baseline import (
             PerpsStrategy,
             PerpsStrategyConfig,
         )
@@ -85,7 +85,7 @@ class TestPerpsStrategy:
 
     def test_perps_strategy_allows_sell(self) -> None:
         """Perps strategy should allow SELL signals for shorting."""
-        from gpt_trader.features.live_trade.strategies.perps_baseline import (
+        from gpt_trader.features.live_trade.strategies.baseline import (
             PerpsStrategy,
             PerpsStrategyConfig,
         )
