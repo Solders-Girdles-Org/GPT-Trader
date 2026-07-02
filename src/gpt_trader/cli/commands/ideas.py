@@ -40,6 +40,7 @@ from gpt_trader.errors import ValidationError
 from gpt_trader.features.brokerages.mock import DeterministicBroker
 from gpt_trader.features.idea_execution import (
     DEFAULT_PAPER_EXECUTION_ACTOR_ID,
+    PaperCycleRunner,
     PaperIdeaExecutor,
 )
 from gpt_trader.features.intelligence.regime import RegimeConfig
@@ -90,6 +91,7 @@ from gpt_trader.features.trade_ideas import (
     market_snapshot_to_payload,
     optimize_replay_min_history,
     replay_optimize_baseline_candidates,
+    resolve_ideas_root,
     resolve_trade_idea_actor_id,
     validate_paper_reconciliation_profile,
 )
@@ -110,6 +112,7 @@ from gpt_trader.features.trade_ideas.report import (
 from gpt_trader.persistence.event_store import EventStore
 
 VENUE_CHOICES = ("coinbase", "manual")
+CYCLE_PROPOSER_CHOICES = ("baseline", "regime-aware")
 PAPER_RECONCILIATION_PROFILE_CHOICES = tuple(sorted({*options.PROFILE_CHOICES, "mock"}))
 TEXT_JSON_FORMATS = ("text", "json")
 REPORT_FORMATS = ("text", "json", "csv")
@@ -907,6 +910,71 @@ def register(subparsers: Any) -> None:
         ),
     )
     execute_paper.set_defaults(handler=_handle_execute_paper, subcommand="execute-paper")
+
+    cycle = ideas_subparsers.add_parser(
+        "cycle",
+        help="Run one turn of the Stage 1 paper cycle (snapshot -> propose -> execute approved)",
+        description=(
+            "One scheduled turn of the Stage 1 paper loop: sweep expired ideas, run "
+            "the selected proposers over one market snapshot, paper-execute ideas a "
+            "human already approved (priced from the same snapshot), and append one "
+            "manifest row of evidence. Recurrence comes from an external scheduler "
+            "(launchd/cron); this command never decides a cadence, never approves "
+            "ideas, and never contacts a live broker or account."
+        ),
+    )
+    _add_common_options(cycle)
+    cycle_snapshot_source = cycle.add_mutually_exclusive_group(required=True)
+    cycle_snapshot_source.add_argument(
+        "--snapshot",
+        type=Path,
+        help="Run offline from a local MarketSnapshot JSON file",
+    )
+    cycle_snapshot_source.add_argument(
+        "--from-coinbase",
+        action="store_true",
+        help="Fetch read-only public Coinbase market candles for this turn",
+    )
+    cycle.add_argument(
+        "--symbols",
+        help="Comma-separated Coinbase product ids (required with --from-coinbase)",
+    )
+    cycle.add_argument(
+        "--granularity",
+        help="Candle granularity, for example ONE_HOUR or ONE_DAY (required with --from-coinbase)",
+    )
+    cycle.add_argument(
+        "--lookback",
+        type=_positive_int_value,
+        help="Completed candles per symbol (required with --from-coinbase)",
+    )
+    cycle.add_argument(
+        "--coinbase-base-url",
+        default=None,
+        help="Override the public Coinbase market-data base URL",
+    )
+    cycle.add_argument(
+        "--source-label",
+        default="coinbase:market-candles",
+        help="Source label stamped into snapshot metadata",
+    )
+    cycle.add_argument(
+        "--proposer",
+        dest="proposers",
+        action="append",
+        choices=CYCLE_PROPOSER_CHOICES,
+        help=(
+            "Proposer to run this turn; repeatable "
+            f"(default: {', '.join(CYCLE_PROPOSER_CHOICES)})"
+        ),
+    )
+    cycle.add_argument(
+        "--no-execute-approved",
+        dest="execute_approved",
+        action="store_false",
+        help="Skip the paper-execution leg for APPROVED ideas this turn",
+    )
+    cycle.set_defaults(handler=_handle_cycle, subcommand="cycle", execute_approved=True)
 
     budget = ideas_subparsers.add_parser("budget", help="Inspect or update risk budget")
     budget_subparsers = budget.add_subparsers(dest="budget_command", required=True)
@@ -2310,6 +2378,78 @@ def _handle_execute_paper(args: Namespace) -> CliResponse:
         f"order={result.order_id} fill_price={result.fill_price}",
     )
     return _success(command, args, result.to_dict(), text)
+
+
+_CYCLE_PROPOSER_FACTORIES: dict[str, Callable[[TradeIdeaService], Proposer]] = {
+    "baseline": lambda service: BaselineProposer(sizing_bridge=_LazyBudgetSizingBridge(service)),
+    "regime-aware": lambda service: RegimeAwareProposer(
+        sizing_bridge=_LazyBudgetSizingBridge(service)
+    ),
+}
+
+
+def _handle_cycle(args: Namespace) -> CliResponse:
+    command = "ideas cycle"
+    try:
+        if args.snapshot is not None:
+            snapshot_path = args.snapshot
+
+            def snapshot_provider() -> tuple[MarketSnapshot, str]:
+                return _load_market_snapshot(snapshot_path), str(snapshot_path)
+
+        else:
+            missing = [
+                flag
+                for flag, value in (
+                    ("--symbols", args.symbols),
+                    ("--granularity", args.granularity),
+                    ("--lookback", args.lookback),
+                )
+                if value is None
+            ]
+            if missing:
+                return _failure(
+                    command,
+                    args,
+                    CliErrorCode.MISSING_ARGUMENT,
+                    f"--from-coinbase requires {', '.join(missing)}",
+                )
+            request = MarketSnapshotBuildRequest(
+                symbols=_snapshot_symbols(args.symbols),
+                granularity=_snapshot_granularity(args.granularity),
+                lookback=args.lookback,
+                as_of=datetime.now(UTC),
+            )
+
+            def snapshot_provider() -> tuple[MarketSnapshot, str]:
+                snapshot = asyncio.run(_build_coinbase_market_snapshot(args, request))
+                return snapshot, snapshot.source
+
+        service = _service(args)
+        selected_proposers = tuple(dict.fromkeys(args.proposers or CYCLE_PROPOSER_CHOICES))
+        runner = PaperCycleRunner(
+            service,
+            cycle_root=resolve_ideas_root(getattr(args, "ideas_root", None)) / "cycle",
+            proposers=[_CYCLE_PROPOSER_FACTORIES[name](service) for name in selected_proposers],
+            broker=DeterministicBroker(),
+            execute_approved=args.execute_approved,
+        )
+        result = runner.run(snapshot_provider)
+    except (SnapshotInputError, InputPayloadError) as error:
+        return _input_error(command, args, error)
+    except Exception as error:
+        return _mapped_error(command, args, error)
+
+    proposed_total = sum(turn.proposal_count for turn in result.proposer_turns)
+    executed_total = len(result.execution.executed)
+    text = _status_line(
+        command,
+        "OK",
+        f"run={result.run_id} proposed={proposed_total} executed={executed_total} "
+        f"pending={result.queue.get('pending_total')}",
+    )
+    was_noop = proposed_total == 0 and executed_total == 0 and not result.expired_decision_ids
+    return _success(command, args, result.to_dict(), text, was_noop=was_noop)
 
 
 def _handle_budget_show(args: Namespace) -> CliResponse:

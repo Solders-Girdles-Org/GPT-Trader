@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Offline end-to-end smoke for the Stage 0/1 trade-idea rails.
 
-Drives the real ``gpt-trader ideas`` CLI through both execution legs in a
+Drives the real ``gpt-trader ideas`` CLI through the execution legs in a
 scratch ideas root. Manual leg: propose -> (approval blocked without attested
 equity) -> budget attest -> approve -> export-ticket -> mark-submitted ->
 mark-filled -> closeout. Machine leg: propose -> approve -> execute-paper
 (deterministic paper broker, no attestation) -> refused re-execution ->
-closeout. Then: report over both -> audit verify.
+closeout. Cycle leg (issue #1150): `ideas cycle` over a fixture snapshot
+proposes; a human approves between turns; the next turn paper-executes at the
+snapshot mark and each turn appends a manifest row. Then: report over all
+legs -> audit verify.
 
 This is the "does the project still string together?" gate: unit tests cover
 the parts, this covers the operator-visible loop. It needs no network, broker,
@@ -89,6 +92,41 @@ def _build_idea_payload(decision_id: str) -> dict[str, Any]:
         do_not_trade_if=("This is a smoke-test record",),
     )
     return idea.to_dict()
+
+
+def _build_cycle_snapshot_payload(symbol: str) -> dict[str, Any]:
+    """Synthesize a snapshot whose 10/50 MA golden cross lands in the last 3 bars."""
+    from decimal import Decimal
+
+    from gpt_trader.core import Candle
+    from gpt_trader.features.trade_ideas import (
+        MarketSnapshot,
+        SymbolSeries,
+        market_snapshot_to_payload,
+    )
+
+    as_of = datetime.now(UTC)
+    closes = [Decimal("100")] * 57 + [Decimal("120"), Decimal("125"), Decimal("130")]
+    volumes = [Decimal("10")] * 59 + [Decimal("100")]
+    start = as_of - timedelta(hours=len(closes))
+    series = SymbolSeries(
+        symbol=symbol,
+        granularity="ONE_HOUR",
+        candles=tuple(
+            Candle(
+                ts=start + timedelta(hours=index),
+                open=close,
+                high=close,
+                low=close,
+                close=close,
+                volume=volume,
+            )
+            for index, (close, volume) in enumerate(zip(closes, volumes, strict=True))
+        ),
+    )
+    return market_snapshot_to_payload(
+        MarketSnapshot(as_of=as_of, source="smoke:fixture:cycle", series=(series,))
+    )
 
 
 def _run_ideas_cli(
@@ -377,12 +415,102 @@ def run_smoke(ideas_root: Path) -> None:
     )
     _step("closeout record (machine leg) -> attribution captured")
 
+    # --- Cycle leg: one scheduled turn proposes; a human approves between
+    # turns; the next turn paper-executes at the snapshot mark. ---
+    cycle_snapshot_path = ideas_root / "smoke_cycle_snapshot.json"
+    cycle_snapshot_path.write_text(json.dumps(_build_cycle_snapshot_payload("SOL-USD")))
+
+    cycle_first = _run_ideas_cli(
+        ideas_root,
+        "cycle",
+        "--snapshot",
+        str(cycle_snapshot_path),
+    )
+    cycle_first_data = cycle_first["data"]
+    baseline_turn = cycle_first_data["proposers"][0]
+    _assert(
+        int(baseline_turn["proposal_count"]) == 1,
+        "cycle (first turn)",
+        f"expected 1 baseline proposal, got {cycle_first_data['proposers']}",
+    )
+    cycle_decision_id = baseline_turn["proposed_decision_ids"][0]
+    _assert(
+        cycle_first_data["execution"]["executed"] == [],
+        "cycle (first turn)",
+        f"nothing was approved yet, but got executions {cycle_first_data['execution']}",
+    )
+    _step("cycle turn 1 -> proposed from fixture snapshot, nothing executed")
+
+    cycle_approved = _run_ideas_cli(
+        ideas_root,
+        "approve",
+        cycle_decision_id,
+        "--actor",
+        SMOKE_ACTOR_HUMAN,
+        "--reason",
+        "stage1 rails smoke cycle-leg approval",
+    )
+    _assert(
+        cycle_approved["data"]["state"] == "approved",
+        "approve (cycle leg)",
+        f"unexpected state {cycle_approved['data']}",
+    )
+    _step("cycle leg: approve (human actor) between turns")
+
+    cycle_second = _run_ideas_cli(
+        ideas_root,
+        "cycle",
+        "--snapshot",
+        str(cycle_snapshot_path),
+    )
+    cycle_executed = cycle_second["data"]["execution"]["executed"]
+    _assert(
+        len(cycle_executed) == 1 and cycle_executed[0]["decision_id"] == cycle_decision_id,
+        "cycle (second turn)",
+        f"expected the approved idea to execute, got {cycle_second['data']['execution']}",
+    )
+    _assert(
+        cycle_executed[0]["fill_price"] == "130",
+        "cycle (second turn)",
+        f"expected fill at the snapshot mark 130, got {cycle_executed[0]}",
+    )
+    _step("cycle turn 2 -> approved idea paper-executed at the snapshot mark")
+
+    manifest_path = ideas_root / "cycle" / "manifest.jsonl"
+    manifest_rows = [
+        json.loads(line) for line in manifest_path.read_text().splitlines() if line.strip()
+    ]
+    _assert(
+        len(manifest_rows) == 2 and all(row["outcome"] == "completed" for row in manifest_rows),
+        "cycle manifest",
+        f"expected 2 completed manifest rows, got {manifest_rows}",
+    )
+    _step("cycle manifest -> exactly one completed row per turn")
+
+    _run_ideas_cli(
+        ideas_root,
+        "closeout",
+        "record",
+        cycle_decision_id,
+        "--resolution",
+        "thesis_target",
+        "--realized-profit-loss-amount",
+        "12",
+        "--realized-profit-loss-percent",
+        "0.05",
+        "--evidence",
+        "stage1 rails smoke cycle-leg exit",
+        "--actor",
+        SMOKE_ACTOR_HUMAN,
+    )
+    _step("closeout record (cycle leg) -> attribution captured")
+
     report = _run_ideas_cli(ideas_root, "report")
     report_data = report["data"]
     _assert(
-        int(report_data["row_count"]) == 2,
+        int(report_data["row_count"]) == 3,
         "report",
-        f"expected exactly 2 ideas, got row_count={report_data.get('row_count')}",
+        f"expected exactly 3 ideas, got row_count={report_data.get('row_count')}",
     )
     closeouts = report_data.get("closeouts", {})
     _assert(
@@ -390,13 +518,13 @@ def run_smoke(ideas_root: Path) -> None:
         "report",
         f"expected full closeout coverage, got {closeouts}",
     )
-    _step("report -> 2 ideas, full closeout coverage")
+    _step("report -> 3 ideas, full closeout coverage")
 
     verify = _run_ideas_cli(ideas_root, "audit", "verify")
     _assert(
-        int(verify["data"].get("event_count", 0)) >= 8,
+        int(verify["data"].get("event_count", 0)) >= 12,
         "audit verify",
-        f"expected >=8 chained events, got {verify['data']}",
+        f"expected >=12 chained events, got {verify['data']}",
     )
     _step(f"audit verify -> chain intact ({verify['data']['event_count']} events)")
 
@@ -425,7 +553,7 @@ def _execute(ideas_root: Path) -> int:
         print(f"✗ stage1 rails smoke FAILED: {exc}", file=sys.stderr)
         return 1
     print(
-        "✓ stage1 rails smoke OK: manual and machine legs "
+        "✓ stage1 rails smoke OK: manual, machine, and cycle legs "
         "proposed -> approved -> filled -> closed, audit chain intact"
     )
     return 0

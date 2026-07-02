@@ -24,6 +24,15 @@ Live order submission remains gated by docs/DIRECTION.md and recorded human
 approval; nothing in this slice weakens that boundary.
 """
 
+from gpt_trader.features.idea_execution.cycle import (
+    DEFAULT_CYCLE_ACTOR_ID,
+    ExecutionTurn,
+    PaperCycleLockError,
+    PaperCycleResult,
+    PaperCycleRunner,
+    ProposerTurn,
+    SnapshotProvider,
+)
 from gpt_trader.features.idea_execution.executor import (
     DEFAULT_PAPER_EXECUTION_ACTOR_ID,
     PAPER_BROKER_TYPES,
@@ -36,12 +45,19 @@ from gpt_trader.features.idea_execution.executor import (
 )
 
 __all__ = [
+    "DEFAULT_CYCLE_ACTOR_ID",
     "DEFAULT_PAPER_EXECUTION_ACTOR_ID",
     "PAPER_BROKER_TYPES",
     "PAPER_EXECUTION_VENUE",
     "IdeaNotExecutableError",
     "PaperExecutionError",
     "PaperExecutionResult",
+    "ExecutionTurn",
+    "PaperCycleLockError",
+    "PaperCycleResult",
+    "PaperCycleRunner",
     "PaperIdeaExecutor",
     "PaperOnlyLaneError",
+    "ProposerTurn",
+    "SnapshotProvider",
 ]
