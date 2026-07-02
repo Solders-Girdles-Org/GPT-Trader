@@ -47,6 +47,7 @@ The system is organized into vertical feature slices under `src/gpt_trader/featu
 src/gpt_trader/features/
 ├── brokerages/          # Exchange integrations
 ├── data/                # Data acquisition helpers
+├── idea_execution/      # Paper-only execution lane for APPROVED trade ideas
 ├── intelligence/        # Strategy intelligence (sizing, regime, ensemble)
 │   └── sizing/          # Kelly criterion position sizing
 ├── live_trade/          # Production trading engine
