@@ -42,22 +42,10 @@ CUSTOM_LABELS = {
         "color": "d876e3",
         "description": "Requires an explicit decision packet and agent recommendation",
     },
-    "codex-review-feedback": {
-        "color": "fbca04",
-        "description": "Follow-up from Codex review comments or checks",
+    "blocked": {
+        "color": "b60205",
+        "description": "Blocked on a dependency or decision",
     },
-}
-
-CATEGORY_LABELS = {
-    "architecture": "architecture",
-    "bug": "bug",
-    "ci": "ci",
-    "cleanup": "cleanup",
-    "docs": "documentation",
-    "security": "critical",
-    "tests": "tests",
-    "tooling": "ci",
-    "trading-readiness": "coinbase",
 }
 
 
@@ -251,23 +239,17 @@ def marker_for(finding_id: str) -> str:
 
 
 def packet_labels(packet: dict[str, Any]) -> list[str]:
-    labels = {"agent-review", "codex"}
-    category_label = CATEGORY_LABELS.get(str(packet.get("category")))
-    if category_label:
-        labels.add(category_label)
-    if packet.get("severity") == "critical":
-        labels.add("critical")
+    labels = {"agent-review"}
 
     routing = packet.get("routing", {})
     if isinstance(routing, dict):
         blocked_by = routing.get("blocked_by", [])
         candidates = routing.get("candidate_for", [])
         decision_candidate = isinstance(candidates, list) and "decision" in candidates
+        if blocked_by:
+            labels.add("blocked")
         if not routing.get("decision_needed") and not blocked_by and not decision_candidate:
             labels.add("agent-ready")
-        if isinstance(candidates, list):
-            if "codex-review" in candidates:
-                labels.add("codex-review-feedback")
         if routing.get("decision_needed") or decision_candidate:
             labels.add("decision-needed")
 

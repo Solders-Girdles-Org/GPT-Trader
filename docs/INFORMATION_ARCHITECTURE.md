@@ -84,7 +84,7 @@ copying a fact into a second home.
 |---------------------|-------------|-----------|
 | A decision — made **or** still open | `docs/decisions/<slug>.md` (status field carries the lifecycle) | STATUS, a roadmap "Needs Decision" table, a framework "Accepted Direction" section |
 | What is built / current state | `docs/STATUS.md` (small, pointer-only) + the code/tests/`var/agents/**` it points to | ARCHITECTURE prose, rubric stage tables, README |
-| A unit of work / something to build or fix | A **GitHub issue** (+ `triage:*` / `agent-ready` / `decision-needed` labels) | A roadmap "Ready Queue", a STATUS "spine" list |
+| A unit of work / something to build or fix | A **GitHub issue** (labels only for exceptions: `agent-ready`, `decision-needed`, `blocked`) | A roadmap "Ready Queue", a STATUS "spine" list |
 | Where we are going / the gates to get there | `docs/DIRECTION.md` | Multiple parallel rubric/framework/readiness docs |
 | How the code is structured | `docs/ARCHITECTURE.md` + generated maps in `var/agents/**` | Hand-maintained module inventories |
 | API / CLI / env-var / metric inventories | Generated `var/agents/**` (run `agent-regenerate`) | Hand-written reference tables that must be kept in sync |
