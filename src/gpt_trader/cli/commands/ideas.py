@@ -12,7 +12,7 @@ import asyncio
 import hashlib
 import json
 from argparse import ArgumentParser, Namespace
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
@@ -35,6 +35,7 @@ from gpt_trader.cli.commands.ideas_input import (
 )
 from gpt_trader.cli.response import CliError, CliErrorCode, CliResponse, RawCliOutput
 from gpt_trader.errors import ValidationError
+from gpt_trader.features.intelligence.regime import RegimeConfig
 from gpt_trader.features.trade_ideas import (
     DEFAULT_TIME_IN_FORCE,
     DEFAULT_VENUE_ORDER_TYPE,
@@ -55,14 +56,23 @@ from gpt_trader.features.trade_ideas import (
     OptimizeBaselineReplayReport,
     PaperFillReconciler,
     PolicyViolationError,
+    Proposer,
+    RegimeAwareProposer,
+    RegimeAwareProposerConfig,
     ReplayReport,
     ReplayRunnerConfig,
+    ReplayTournamentReport,
     TradeDirection,
     TradeIdeaListQuery,
     TradeIdeaListResult,
     TradeIdeaListSortKey,
+    TradeIdeaPositionSizingBridge,
     TradeIdeaReplayRunner,
+    TradeIdeaReplayTournamentRunner,
     TradeIdeaService,
+    TradeIdeaSizingConfig,
+    TradeIdeaSizingContext,
+    TradeIdeaSizingOutput,
     TradeIdeaState,
     UnknownTradeIdeaError,
     canonical_granularity,
@@ -107,6 +117,7 @@ BUDGET_FIELDS = (
     "gain_retention_floor_pct",
     "allow_futures_leverage",
     "allow_naked_shorts",
+    "account_equity",
 )
 
 
@@ -158,6 +169,33 @@ def register(subparsers: Any) -> None:
         help="Audit reason",
     )
     propose_baseline.set_defaults(handler=_handle_propose_baseline, subcommand="propose-baseline")
+
+    propose_regime_aware = ideas_subparsers.add_parser(
+        "propose-regime-aware",
+        help="Generate regime-aware proposals from a local market snapshot fixture",
+        description=(
+            "Generate deterministic RegimeAwareProposer trade ideas from a local JSON "
+            "market snapshot and persist them through the audited trade-idea service. "
+            "This command reads no broker, account, credential, canary, or preflight data."
+        ),
+    )
+    _add_common_options(propose_regime_aware)
+    _add_actor_options(propose_regime_aware, default_description="regime-aware proposer id")
+    propose_regime_aware.add_argument(
+        "--snapshot",
+        type=Path,
+        required=True,
+        help="Read a local MarketSnapshot JSON fixture",
+    )
+    propose_regime_aware.add_argument(
+        "--reason",
+        default="Regime-aware proposer generated idea from local snapshot",
+        help="Audit reason",
+    )
+    propose_regime_aware.set_defaults(
+        handler=_handle_propose_regime_aware,
+        subcommand="propose-regime-aware",
+    )
 
     snapshot = ideas_subparsers.add_parser(
         "snapshot",
@@ -311,6 +349,25 @@ def register(subparsers: Any) -> None:
         help="Number of matching ideas to skip before returning results",
     )
     list_parser.set_defaults(handler=_handle_list, subcommand="list")
+
+    queue_status = ideas_subparsers.add_parser(
+        "queue-status",
+        help="Report pending trade-idea review queue health",
+        description=(
+            "Read-only queue health for pending approval review. "
+            "Counts proposed and needs-changes ideas, and reports ideas expiring "
+            "inside the warning window. This command never contacts a broker or "
+            "mutates workflow state."
+        ),
+    )
+    _add_common_options(queue_status)
+    queue_status.add_argument(
+        "--warning-window-hours",
+        type=_non_negative_int_value,
+        default=24,
+        help="Warning window for upcoming pending expirations",
+    )
+    queue_status.set_defaults(handler=_handle_queue_status, subcommand="queue-status")
 
     show = ideas_subparsers.add_parser("show", help="Show one trade idea")
     _add_common_options(show)
@@ -470,6 +527,136 @@ def register(subparsers: Any) -> None:
         default=Decimal("0.01"),
     )
     baseline.set_defaults(handler=_handle_replay_baseline, subcommand="replay baseline")
+
+    regime_aware = replay_subparsers.add_parser(
+        "regime-aware",
+        help="Replay the regime-aware proposer over candle history",
+        description=(
+            "Feed a local OHLCV candle fixture to the deterministic regime-aware proposer "
+            "and summarize replay scoring. This command is broker-free and read-only."
+        ),
+    )
+    _add_output_options(regime_aware)
+    regime_aware.add_argument(
+        "--file",
+        type=Path,
+        required=True,
+        help="JSON fixture with a top-level candles array of OHLCV bars",
+    )
+    regime_aware.add_argument("--symbol", required=True, help="Symbol represented by the candles")
+    regime_aware.add_argument(
+        "--granularity",
+        required=True,
+        help="Candle granularity, for example ONE_HOUR, 1H, or 1D",
+    )
+    regime_aware.add_argument(
+        "--source",
+        default="fixture:candles",
+        help="Source label stamped into point-in-time replay snapshots",
+    )
+    regime_aware.add_argument(
+        "--min-history",
+        type=_positive_int_value,
+        help=(
+            "Minimum historical candles before evaluating snapshots "
+            "(default: max(short-window, long-window) + crossover-lookback)"
+        ),
+    )
+    regime_aware.add_argument("--short-window", type=_positive_int_value, default=10)
+    regime_aware.add_argument("--long-window", type=_positive_int_value, default=50)
+    regime_aware.add_argument("--crossover-lookback", type=_positive_int_value, default=3)
+    regime_aware.add_argument(
+        "--risk-per-idea-pct",
+        type=_non_negative_decimal_value,
+        default=Decimal("2"),
+    )
+    regime_aware.add_argument(
+        "--entry-band-pct",
+        type=_positive_decimal_value,
+        default=Decimal("1"),
+    )
+    regime_aware.add_argument(
+        "--reward-multiple",
+        type=_positive_decimal_value,
+        default=Decimal("2"),
+    )
+    regime_aware.add_argument("--expiry-hours", type=_positive_int_value, default=48)
+    regime_aware.add_argument("--expected-hold", default="5-15 days")
+    regime_aware.add_argument(
+        "--price-precision",
+        type=_positive_decimal_value,
+        default=Decimal("0.01"),
+    )
+    regime_aware.set_defaults(
+        handler=_handle_replay_regime_aware,
+        subcommand="replay regime-aware",
+    )
+
+    tournament = replay_subparsers.add_parser(
+        "tournament",
+        help="Replay multiple proposers head-to-head over candle history",
+        description=(
+            "Feed one local OHLCV candle fixture to multiple registered proposers "
+            "and rank their replay results. This command is broker-free and read-only."
+        ),
+    )
+    _add_output_options(tournament)
+    tournament.add_argument(
+        "--file",
+        "--fixture",
+        dest="file",
+        type=Path,
+        required=True,
+        help="JSON fixture with a top-level candles array of OHLCV bars",
+    )
+    tournament.add_argument("--symbol", required=True, help="Symbol represented by the candles")
+    tournament.add_argument(
+        "--granularity",
+        required=True,
+        help="Candle granularity, for example ONE_HOUR, 1H, or 1D",
+    )
+    tournament.add_argument(
+        "--source",
+        default="fixture:candles",
+        help="Source label stamped into point-in-time replay snapshots",
+    )
+    tournament.add_argument(
+        "--proposers",
+        required=True,
+        help=("Comma-separated proposer ids, for example " "baseline-ma-2-4,baseline-ma-3-5"),
+    )
+    tournament.add_argument(
+        "--min-history",
+        type=_positive_int_value,
+        help=(
+            "Minimum historical candles before evaluating snapshots "
+            "(default: max required history across proposer ids)"
+        ),
+    )
+    tournament.add_argument("--crossover-lookback", type=_positive_int_value, default=3)
+    tournament.add_argument(
+        "--risk-per-idea-pct",
+        type=_non_negative_decimal_value,
+        default=Decimal("2"),
+    )
+    tournament.add_argument(
+        "--entry-band-pct",
+        type=_positive_decimal_value,
+        default=Decimal("1"),
+    )
+    tournament.add_argument(
+        "--reward-multiple",
+        type=_positive_decimal_value,
+        default=Decimal("2"),
+    )
+    tournament.add_argument("--expiry-hours", type=_positive_int_value, default=48)
+    tournament.add_argument("--expected-hold", default="5-15 days")
+    tournament.add_argument(
+        "--price-precision",
+        type=_positive_decimal_value,
+        default=Decimal("0.01"),
+    )
+    tournament.set_defaults(handler=_handle_replay_tournament, subcommand="replay tournament")
 
     closeout = ideas_subparsers.add_parser(
         "closeout",
@@ -718,6 +905,14 @@ def register(subparsers: Any) -> None:
         "--allow-naked-shorts",
         choices=("true", "false"),
         help="Whether naked shorts are permitted",
+    )
+    budget_set.add_argument(
+        "--account-equity",
+        type=_non_negative_decimal_value,
+        help=(
+            "Operator-attested account equity; denominator for the "
+            "max_open_notional_pct approval gate"
+        ),
     )
     budget_set.set_defaults(handler=_handle_budget_set, subcommand="budget set")
 
@@ -971,19 +1166,55 @@ def _default_replay_min_history(config: BaselineProposerConfig) -> int:
     return max(config.short_window, config.long_window) + config.crossover_lookback
 
 
-def _resolve_replay_min_history(args: Namespace, config: BaselineProposerConfig) -> int:
-    minimum_history = _default_replay_min_history(config)
+def _default_regime_replay_min_history(
+    config: BaselineProposerConfig,
+    regime_config: RegimeConfig,
+) -> int:
+    return max(
+        _default_replay_min_history(config),
+        regime_config.long_ema_period + regime_config.min_regime_ticks,
+    )
+
+
+def _resolve_replay_min_history(
+    args: Namespace,
+    config: BaselineProposerConfig,
+    *,
+    minimum_history: int | None = None,
+    minimum_context: str | None = None,
+) -> int:
+    required_min_history = (
+        minimum_history if minimum_history is not None else _default_replay_min_history(config)
+    )
+    requested_min_history = cast(int | None, args.min_history)
+    if requested_min_history is None:
+        return required_min_history
+    if requested_min_history < required_min_history:
+        context = f", {minimum_context}" if minimum_context is not None else ""
+        raise CandleInputError(
+            (
+                "--min-history must be at least "
+                f"{required_min_history} for short-window={config.short_window}, "
+                f"long-window={config.long_window}, "
+                f"crossover-lookback={config.crossover_lookback}"
+                f"{context}"
+            ),
+            field="min_history",
+        )
+    return requested_min_history
+
+
+def _resolve_tournament_min_history(
+    args: Namespace,
+    configs: list[BaselineProposerConfig],
+) -> int:
+    minimum_history = max(_default_replay_min_history(config) for config in configs)
     requested_min_history = cast(int | None, args.min_history)
     if requested_min_history is None:
         return minimum_history
     if requested_min_history < minimum_history:
         raise CandleInputError(
-            (
-                "--min-history must be at least "
-                f"{minimum_history} for short-window={config.short_window}, "
-                f"long-window={config.long_window}, "
-                f"crossover-lookback={config.crossover_lookback}"
-            ),
+            f"--min-history must be at least {minimum_history} for selected proposers",
             field="min_history",
         )
     return requested_min_history
@@ -1003,6 +1234,74 @@ def _resolve_optimize_replay_min_history(
             field="min_history",
         )
     return requested_min_history
+
+
+def _baseline_replay_config_from_args(
+    args: Namespace,
+    *,
+    short_window: int,
+    long_window: int,
+) -> BaselineProposerConfig:
+    return BaselineProposerConfig(
+        short_window=short_window,
+        long_window=long_window,
+        crossover_lookback=args.crossover_lookback,
+        risk_per_idea_pct=args.risk_per_idea_pct,
+        entry_band_pct=args.entry_band_pct,
+        reward_multiple=args.reward_multiple,
+        expiry_hours=args.expiry_hours,
+        expected_hold=args.expected_hold,
+        price_precision=args.price_precision,
+    )
+
+
+def _tournament_baseline_configs(args: Namespace) -> list[BaselineProposerConfig]:
+    configs: list[BaselineProposerConfig] = []
+    seen: set[str] = set()
+    proposer_ids = [item.strip() for item in args.proposers.split(",") if item.strip()]
+    if not proposer_ids:
+        raise CandleInputError(
+            "--proposers must include at least one proposer id", field="proposers"
+        )
+    for proposer_id in proposer_ids:
+        if proposer_id in seen:
+            raise CandleInputError(
+                f"Duplicate proposer id: {proposer_id}",
+                field="proposers",
+            )
+        seen.add(proposer_id)
+        configs.append(_baseline_config_from_proposer_id(args, proposer_id))
+    return configs
+
+
+def _baseline_config_from_proposer_id(
+    args: Namespace,
+    proposer_id: str,
+) -> BaselineProposerConfig:
+    parts = proposer_id.split("-")
+    if len(parts) != 4 or parts[0] != "baseline" or parts[1] != "ma":
+        raise CandleInputError(
+            ("Unsupported proposer id " f"'{proposer_id}'; expected baseline-ma-<short>-<long>"),
+            field="proposers",
+        )
+    try:
+        short_window = int(parts[2])
+        long_window = int(parts[3])
+    except ValueError as error:
+        raise CandleInputError(
+            ("Unsupported proposer id " f"'{proposer_id}'; expected numeric MA windows"),
+            field="proposers",
+        ) from error
+    if short_window <= 0 or long_window <= 0:
+        raise CandleInputError(
+            f"Unsupported proposer id '{proposer_id}'; MA windows must be positive",
+            field="proposers",
+        )
+    return _baseline_replay_config_from_args(
+        args,
+        short_window=short_window,
+        long_window=long_window,
+    )
 
 
 def _validate_replay_granularity(granularity: str) -> None:
@@ -1043,28 +1342,73 @@ def _handle_propose(args: Namespace) -> CliResponse:
     return _success(command, args, payload, text, warnings=warning_messages)
 
 
+class _LazyBudgetSizingBridge(TradeIdeaPositionSizingBridge):
+    """Defer the budget read (and its seed-on-first-use side effect) until a
+    candidate actually needs sizing, so no-signal baseline runs stay read-only."""
+
+    def __init__(self, service: TradeIdeaService) -> None:
+        self._budget_service = service
+        self._delegate: TradeIdeaPositionSizingBridge | None = None
+
+    def recommend(self, context: TradeIdeaSizingContext) -> TradeIdeaSizingOutput:
+        if self._delegate is None:
+            budget = self._budget_service.current_budget()
+            # Operator-attested equity must denominate sizing the same way the
+            # approval gate uses it; otherwise max_loss percentages are computed
+            # against the bridge's default equity while approve() compares them
+            # to caps on the attested account.
+            if budget.account_equity is not None:
+                sizing_config = TradeIdeaSizingConfig(
+                    equity=budget.account_equity,
+                    risk_budget=budget,
+                )
+            else:
+                sizing_config = TradeIdeaSizingConfig(risk_budget=budget)
+            self._delegate = TradeIdeaPositionSizingBridge(sizing_config)
+        return self._delegate.recommend(context)
+
+
 def _handle_propose_baseline(args: Namespace) -> CliResponse:
-    command = "ideas propose-baseline"
-    proposer = BaselineProposer()
+    return _handle_propose_from_snapshot(
+        args,
+        "ideas propose-baseline",
+        lambda service: BaselineProposer(sizing_bridge=_LazyBudgetSizingBridge(service)),
+    )
+
+
+def _handle_propose_regime_aware(args: Namespace) -> CliResponse:
+    return _handle_propose_from_snapshot(
+        args,
+        "ideas propose-regime-aware",
+        lambda service: RegimeAwareProposer(sizing_bridge=_LazyBudgetSizingBridge(service)),
+    )
+
+
+def _handle_propose_from_snapshot(
+    args: Namespace,
+    command: str,
+    proposer_factory: Callable[[TradeIdeaService], Proposer],
+) -> CliResponse:
     try:
         snapshot = _load_market_snapshot(args.snapshot)
+        service = _service(args)
+        proposer = proposer_factory(service)
         ideas = proposer.propose(snapshot)
         if not ideas:
-            payload = _baseline_payload(snapshot, proposer.proposer_id, [])
+            payload = _proposer_payload(snapshot, proposer.proposer_id, [])
             text = _status_line(command, "OK", "0 proposals")
             return _success(command, args, payload, text, was_noop=True)
 
-        service = _service(args)
         proposal_batch = tuple(ideas)
         service.validate_new_proposals(proposal_batch)
         previews = [service.approval_violations(idea, actor_type=ActorType.HUMAN) for idea in ideas]
-        actor_id = _baseline_actor_id(args, proposer.proposer_id)
+        actor_id = _proposer_actor_id(args, proposer.proposer_id)
         views = service.propose_batch(
             proposal_batch,
             actor_id=actor_id,
             actor_type=ActorType.AI,
             reason=args.reason,
-            evidence=_baseline_evidence(args.snapshot, snapshot, proposer.proposer_id),
+            evidence=_proposer_evidence(args.snapshot, snapshot, proposer.proposer_id),
         )
     except SnapshotInputError as error:
         return _input_error(command, args, error)
@@ -1072,14 +1416,14 @@ def _handle_propose_baseline(args: Namespace) -> CliResponse:
         return _mapped_error(command, args, error)
 
     proposed = [
-        _baseline_proposed_summary(view, violations)
+        _proposer_proposed_summary(view, violations)
         for view, violations in zip(views, previews, strict=True)
     ]
-    payload = _baseline_payload(snapshot, proposer.proposer_id, proposed)
+    payload = _proposer_payload(snapshot, proposer.proposer_id, proposed)
     warnings = [
         warning for proposal in proposed for warning in proposal["approval_preview"]["warnings"]
     ]
-    text = _baseline_text(command, proposed)
+    text = _proposer_text(command, proposed)
     return _success(command, args, payload, text, warnings=warnings)
 
 
@@ -1234,12 +1578,12 @@ def _handle_resubmit(args: Namespace) -> CliResponse:
     return _success(command, args, payload, text, warnings=warning_messages)
 
 
-def _baseline_actor_id(args: Namespace, proposer_id: str) -> str:
+def _proposer_actor_id(args: Namespace, proposer_id: str) -> str:
     explicit_actor = getattr(args, "actor", None)
     return resolve_trade_idea_actor_id(explicit_actor or proposer_id)
 
 
-def _baseline_evidence(
+def _proposer_evidence(
     snapshot_path: Path,
     snapshot: MarketSnapshot,
     proposer_id: str,
@@ -1252,7 +1596,7 @@ def _baseline_evidence(
     )
 
 
-def _baseline_proposed_summary(view: Any, violations: list[str]) -> dict[str, Any]:
+def _proposer_proposed_summary(view: Any, violations: list[str]) -> dict[str, Any]:
     warning_messages = [f"would fail approval: {violation}" for violation in violations]
     return {
         **_view_summary(view),
@@ -1264,7 +1608,7 @@ def _baseline_proposed_summary(view: Any, violations: list[str]) -> dict[str, An
     }
 
 
-def _baseline_payload(
+def _proposer_payload(
     snapshot: MarketSnapshot,
     proposer_id: str,
     proposed: list[dict[str, Any]],
@@ -1281,7 +1625,7 @@ def _baseline_payload(
     }
 
 
-def _baseline_text(command: str, proposed: list[dict[str, Any]]) -> str:
+def _proposer_text(command: str, proposed: list[dict[str, Any]]) -> str:
     lines = [_status_line(command, "OK", f"{len(proposed)} proposals")]
     for proposal in proposed:
         lines.append(
@@ -1335,6 +1679,26 @@ def _handle_list(args: Namespace) -> CliResponse:
     text = _ideas_table(ideas)
     payload = {"ideas": ideas, **_list_metadata(result)}
     return _success(command, args, payload, text, was_noop=not ideas)
+
+
+def _handle_queue_status(args: Namespace) -> CliResponse:
+    command = "ideas queue-status"
+    try:
+        status = _service(args).queue_status(
+            warning_window_hours=args.warning_window_hours,
+        )
+    except Exception as error:
+        return _mapped_error(command, args, error)
+
+    payload = status.to_dict()
+    counts = cast(dict[str, int], payload["counts"])
+    return _success(
+        command,
+        args,
+        payload,
+        _queue_status_text(payload),
+        was_noop=counts["pending_total"] == 0,
+    )
 
 
 def _handle_show(args: Namespace) -> CliResponse:
@@ -1434,22 +1798,26 @@ def _handle_export_ticket(args: Namespace) -> CliResponse | RawCliOutput:
         return _mapped_error(command, args, error)
 
 
+def _replay_baseline_config_from_args(args: Namespace) -> BaselineProposerConfig:
+    return BaselineProposerConfig(
+        short_window=args.short_window,
+        long_window=args.long_window,
+        crossover_lookback=args.crossover_lookback,
+        risk_per_idea_pct=args.risk_per_idea_pct,
+        entry_band_pct=args.entry_band_pct,
+        reward_multiple=args.reward_multiple,
+        expiry_hours=args.expiry_hours,
+        expected_hold=args.expected_hold,
+        price_precision=args.price_precision,
+    )
+
+
 def _handle_replay_baseline(args: Namespace) -> CliResponse:
     command = "ideas replay baseline"
     try:
         _validate_replay_granularity(args.granularity)
         candles = _load_candle_fixture(args.file)
-        proposer_config = BaselineProposerConfig(
-            short_window=args.short_window,
-            long_window=args.long_window,
-            crossover_lookback=args.crossover_lookback,
-            risk_per_idea_pct=args.risk_per_idea_pct,
-            entry_band_pct=args.entry_band_pct,
-            reward_multiple=args.reward_multiple,
-            expiry_hours=args.expiry_hours,
-            expected_hold=args.expected_hold,
-            price_precision=args.price_precision,
-        )
+        proposer_config = _replay_baseline_config_from_args(args)
         optimize_study = cast(Path | None, getattr(args, "from_optimize_study", None))
         if optimize_study is not None:
             candidates = load_optimize_baseline_candidates(
@@ -1486,8 +1854,66 @@ def _handle_replay_baseline(args: Namespace) -> CliResponse:
         return _mapped_error(command, args, error)
 
     payload = replay_report.to_dict()
-    text = _replay_report_text(replay_report)
+    text = _replay_report_text(replay_report, command=command)
     return _success(command, args, payload, text, was_noop=replay_report.ideas_proposed == 0)
+
+
+def _handle_replay_regime_aware(args: Namespace) -> CliResponse:
+    command = "ideas replay regime-aware"
+    try:
+        _validate_replay_granularity(args.granularity)
+        candles = _load_candle_fixture(args.file)
+        proposer_config = _replay_baseline_config_from_args(args)
+        regime_config = RegimeConfig()
+        min_history = _resolve_replay_min_history(
+            args,
+            proposer_config,
+            minimum_history=_default_regime_replay_min_history(proposer_config, regime_config),
+            minimum_context=(
+                f"regime-long-ema={regime_config.long_ema_period}, "
+                f"min-regime-ticks={regime_config.min_regime_ticks}"
+            ),
+        )
+        report = TradeIdeaReplayRunner(
+            RegimeAwareProposer(
+                RegimeAwareProposerConfig(
+                    baseline_config=proposer_config,
+                    regime_config=regime_config,
+                ),
+            ),
+            config=ReplayRunnerConfig(source=args.source, min_history=min_history),
+        ).run_series(symbol=args.symbol, granularity=args.granularity, candles=candles)
+    except CandleInputError as error:
+        return _input_error(command, args, error)
+    except Exception as error:
+        return _mapped_error(command, args, error)
+
+    payload = report.to_dict()
+    text = _replay_report_text(report, command=command)
+    return _success(command, args, payload, text, was_noop=report.ideas_proposed == 0)
+
+
+def _handle_replay_tournament(args: Namespace) -> CliResponse:
+    command = "ideas replay tournament"
+    try:
+        _validate_replay_granularity(args.granularity)
+        candles = _load_candle_fixture(args.file)
+        proposer_configs = _tournament_baseline_configs(args)
+        min_history = _resolve_tournament_min_history(args, proposer_configs)
+        report = TradeIdeaReplayTournamentRunner(
+            [BaselineProposer(config) for config in proposer_configs],
+            config=ReplayRunnerConfig(source=args.source, min_history=min_history),
+        ).run_series(symbol=args.symbol, granularity=args.granularity, candles=candles)
+    except CandleInputError as error:
+        return _input_error(command, args, error)
+    except Exception as error:
+        return _mapped_error(command, args, error)
+
+    payload = report.to_dict()
+    text = _replay_tournament_text(report)
+    return _success(
+        command, args, payload, text, was_noop=all(r.ideas_proposed == 0 for r in report.reports)
+    )
 
 
 def _handle_closeout_record(args: Namespace) -> CliResponse:
@@ -1825,10 +2251,13 @@ def _handle_reconcile_paper_fills(args: Namespace) -> CliResponse:
 def _handle_budget_show(args: Namespace) -> CliResponse:
     command = "ideas budget show"
     try:
-        budget = _service(args).current_budget()
+        service = _service(args)
+        budget = service.current_budget()
+        budget_headroom = service.budget_headroom()
     except Exception as error:
         return _mapped_error(command, args, error)
     payload = budget.to_dict()
+    payload["headroom"] = budget_headroom
     text = _budget_text(payload)
     return _success(command, args, payload, text)
 
@@ -2333,6 +2762,37 @@ def _ideas_table(ideas: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def _queue_status_text(payload: dict[str, Any]) -> str:
+    counts = payload["counts"]
+    lines = [
+        _status_line(
+            "ideas queue-status",
+            "OK",
+            (
+                f"pending={counts['pending_total']}, "
+                f"upcoming_expirations={counts['upcoming_expirations']}"
+            ),
+        ),
+        f"proposed: {counts['proposed']}",
+        f"needs_changes: {counts['needs_changes']}",
+    ]
+    expirations = payload["upcoming_expirations"]
+    if expirations:
+        lines.append("UPCOMING_EXPIRATIONS")
+        for expiration in expirations:
+            lines.append(
+                "{decision_id}  {state}  {instrument}  {deadline_type}  {expires_at}  {seconds}s".format(
+                    decision_id=expiration["decision_id"],
+                    state=expiration["state"],
+                    instrument=expiration["instrument"],
+                    deadline_type=expiration["deadline_type"],
+                    expires_at=expiration["expires_at"],
+                    seconds=expiration["seconds_until_expiry"],
+                )
+            )
+    return "\n".join(lines)
+
+
 def _record_text(payload: dict[str, Any], *, include_events: bool) -> str:
     lines = [
         f"decision_id: {payload['decision_id']}",
@@ -2464,12 +2924,12 @@ def _budget_text(payload: dict[str, Any]) -> str:
     return "\n".join(f"{key}: {value}" for key, value in payload.items())
 
 
-def _replay_report_text(report: ReplayReport) -> str:
+def _replay_report_text(report: ReplayReport, *, command: str = "ideas replay baseline") -> str:
     average_return_r = report.average_return_r
     return "\n".join(
         [
             _status_line(
-                "ideas replay baseline",
+                command,
                 "OK",
                 (
                     f"{report.symbol} {report.granularity}, "
@@ -2523,6 +2983,37 @@ def _optimize_baseline_replay_text(report: OptimizeBaselineReplayReport) -> str:
                 ideas=row.report.ideas_proposed,
                 target=_decimal_pct(row.report.target_hit_rate),
                 average=(average_return_r.normalize() if average_return_r is not None else "n/a"),
+            )
+        )
+    return "\n".join(lines)
+
+
+def _replay_tournament_text(report: ReplayTournamentReport) -> str:
+    lines = [
+        _status_line(
+            "ideas replay tournament",
+            "OK",
+            (
+                f"{report.symbol} {report.granularity}, "
+                f"snapshots={report.snapshots_evaluated}, "
+                f"proposers={len(report.reports)}"
+            ),
+        ),
+        "RANK  PROPOSER_ID  IDEAS  RESOLVED  TARGET_HIT_RATE  STOP_HIT_RATE  AVG_R",
+    ]
+    for ranking in report.rankings:
+        average_return_r = (
+            ranking.average_return_r.normalize() if ranking.average_return_r is not None else "n/a"
+        )
+        lines.append(
+            "{rank}  {proposer_id}  {ideas}  {resolved}  {target}  {stop}  {avg_r}".format(
+                rank=ranking.rank,
+                proposer_id=ranking.proposer_id,
+                ideas=ranking.ideas_proposed,
+                resolved=ranking.resolved_ideas,
+                target=_decimal_pct(ranking.target_hit_rate),
+                stop=_decimal_pct(ranking.stop_hit_rate),
+                avg_r=average_return_r,
             )
         )
     return "\n".join(lines)

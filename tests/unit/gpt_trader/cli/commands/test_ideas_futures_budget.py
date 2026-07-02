@@ -10,6 +10,7 @@ import pytest
 from gpt_trader import cli
 from gpt_trader.cli.response import CliErrorCode
 from gpt_trader.features.trade_ideas import ProductType, TimeHorizon
+from tests.unit.gpt_trader.cli.commands.conftest import attest_ideas_root
 from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
 
 EXPECTED_FUTURES_BUDGET_VIOLATIONS = [
@@ -50,6 +51,7 @@ def _propose(
     root: Path,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
+    attest_ideas_root(root)
     path = _write_idea(root.parent / "futures-idea.json", payload)
     exit_code, response = _run_json(
         capsys,
