@@ -68,14 +68,14 @@ markers. Regenerating cannot drift from the files.
 <!-- BEGIN GENERATED DECISION INDEX -->
 | Date | Decision | Status |
 |------|----------|--------|
-| 2026-07-02 | [Account snapshot command — wire a real provider or remove it](account-snapshot-wire-or-remove.md) | proposed |
-| 2026-07-02 | [Canonical risk-limit vocabulary — budget vs runtime limits](canonical-risk-limit-vocabulary.md) | proposed |
+| 2026-07-02 | [Account snapshot command — wire a real provider or remove it](account-snapshot-wire-or-remove.md) | accepted |
+| 2026-07-02 | [Adopt a measured-outcome operating rubric](adopt-measured-outcome-rubric.md) | accepted |
+| 2026-07-02 | [Canonical risk-limit vocabulary — budget vs runtime limits](canonical-risk-limit-vocabulary.md) | accepted |
+| 2026-07-02 | [Event JSONL: accepted fallback or import-only historical data](event-jsonl-compatibility.md) | accepted |
+| 2026-07-02 | [Meaning of the prod and canary profiles under the approval ladder](prod-canary-profile-meaning.md) | accepted |
 | 2026-07-01 | [Remove the unwired account manager and strategy-dev lab](remove-unwired-account-manager-and-strategy-lab.md) | accepted |
 | 2026-06-30 | [Remove the TUI subsystem](remove-tui-subsystem.md) | accepted |
-| 2026-06-28 | [Adopt a measured-outcome operating rubric](adopt-measured-outcome-rubric.md) | proposed |
-| 2026-06-28 | [Event JSONL: accepted fallback or import-only historical data](event-jsonl-compatibility.md) | proposed |
 | 2026-06-28 | [INTX default derivatives venue](intx-default-derivatives-venue.md) | accepted |
-| 2026-06-28 | [Meaning of the prod and canary profiles under the approval ladder](prod-canary-profile-meaning.md) | proposed |
 | 2026-06-27 | [Stabilize and reconcile before closing the Stage 1 loop](stabilize-before-closing-the-loop.md) | accepted |
 | 2026-06-22 | [Trade-ideas CLI is the active discovery lane](trade-ideas-cli-discovery-lane.md) | accepted |
 | 2026-06-11 | [Accept the staged-autonomy direction (human-approved execution → bounded autonomy)](accept-staged-autonomy-direction.md) | accepted |

@@ -1,7 +1,7 @@
 # Account snapshot command — wire a real provider or remove it
 
 ---
-status: proposed
+status: accepted
 date: 2026-07-02
 deciders: RJ
 supersedes:
@@ -48,20 +48,19 @@ dead end at exactly the moment they need account truth.
 
 ## Decision
 
-*(pending — owner call; recommendation below)*
-
-**Recommendation: Option A.** The runbooks already treat an account snapshot
-as operationally necessary, the data is one read-only call away on the
-existing broker surface, and the staged-autonomy direction leans on
-transparency — a working snapshot command is transparency infrastructure.
+**Option A — wire a minimal read-only snapshot provider.** Accepted 2026-07-02
+by RJ. The runbooks already treat an account snapshot as operationally
+necessary, the data is one read-only call away on the existing broker surface,
+and the staged-autonomy direction leans on transparency — a working snapshot
+command is transparency infrastructure.
 
 ## Consequences
 
-If A: file a small spec issue (provider protocol, container wiring, CLI
-adaptation, unit tests over the real service with a boundary-double broker),
-and drop the "not available" fallback once wired. If B: one PR removing the
-subcommand, its tests, and rewriting the three production.md procedures plus
-the RUNBOOKS verification step.
+The spec issue is filed:
+[#1121](https://github.com/Solders-Girdles/GPT-Trader/issues/1121) (provider
+protocol, container wiring, CLI adaptation, unit tests over the real service
+with a boundary-double broker), and the "not available" fallback is dropped
+once wired.
 
 ## Safety boundary
 
