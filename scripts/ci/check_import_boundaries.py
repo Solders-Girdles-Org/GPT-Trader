@@ -179,6 +179,24 @@ CROSS_SLICE_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset(
     }
 )
 
+# Some slice-to-slice edges are narrower than the target slice root. Each entry
+# is (source_slice, target_slice, import prefix) and replaces the broad
+# gpt_trader.features.<target_slice> allowance for that source/target pair.
+CROSS_SLICE_NARROW_IMPORT_PREFIXES: frozenset[tuple[str, str, str]] = frozenset(
+    {
+        (
+            "idea_execution",
+            "brokerages",
+            "gpt_trader.features.brokerages.mock",
+        ),
+        (
+            "idea_execution",
+            "brokerages",
+            "gpt_trader.features.brokerages.paper",
+        ),
+    }
+)
+
 
 def _discover_feature_slices() -> tuple[str, ...]:
     """Enumerate feature slice packages so new slices are guarded automatically."""
@@ -195,8 +213,20 @@ def _discover_feature_slices() -> tuple[str, ...]:
 
 def _cross_slice_rule(slice_name: str) -> ImportRule:
     """Build the cross-slice ratchet rule for one feature slice."""
+    narrow_prefixes = sorted(
+        prefix
+        for source, _target, prefix in CROSS_SLICE_NARROW_IMPORT_PREFIXES
+        if source == slice_name
+    )
+    narrow_targets = {
+        target
+        for source, target, _prefix in CROSS_SLICE_NARROW_IMPORT_PREFIXES
+        if source == slice_name
+    }
     allowed_targets = sorted(
-        target for source, target in CROSS_SLICE_ALLOWED_EDGES if source == slice_name
+        target
+        for source, target in CROSS_SLICE_ALLOWED_EDGES
+        if source == slice_name and target not in narrow_targets
     )
     return ImportRule(
         name=f"features_{slice_name}_cross_slice_imports",
@@ -210,7 +240,8 @@ def _cross_slice_rule(slice_name: str) -> ImportRule:
         forbidden_prefixes=("gpt_trader.features",),
         allowlist_import_prefixes=tuple(
             f"gpt_trader.features.{target}" for target in (slice_name, *allowed_targets)
-        ),
+        )
+        + tuple(narrow_prefixes),
     )
 
 
