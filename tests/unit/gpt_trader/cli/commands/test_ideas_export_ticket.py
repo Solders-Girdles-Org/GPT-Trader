@@ -11,6 +11,7 @@ import pytest
 from gpt_trader import cli
 from gpt_trader.cli.response import CliErrorCode
 from gpt_trader.features.trade_ideas import TimeHorizon, canonical_ticket_json
+from tests.unit.gpt_trader.cli.commands.conftest import attest_ideas_root
 from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
 
 
@@ -67,6 +68,7 @@ def _propose_and_approve(
     root: Path,
     payload: dict[str, Any],
 ) -> None:
+    attest_ideas_root(root)
     path = _write_idea(root.parent / f"{payload['decision_id']}.json", payload)
     exit_code, proposed = _run_json(
         capsys,

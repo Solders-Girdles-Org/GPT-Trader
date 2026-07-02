@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Sequence
 
 
 @dataclass(frozen=True)
@@ -42,7 +42,13 @@ CORE_PREFLIGHT_CHECKS: tuple[PreflightCheckNode, ...] = (
     PreflightCheckNode(
         "check_event_store_redaction", dependencies=("check_profile_configuration",)
     ),
-    PreflightCheckNode("check_readiness_report", dependencies=("check_event_store_redaction",)),
+    PreflightCheckNode(
+        "check_trade_ideas_readiness", dependencies=("check_environment_variables",)
+    ),
+    PreflightCheckNode(
+        "check_readiness_report",
+        dependencies=("check_event_store_redaction", "check_trade_ideas_readiness"),
+    ),
 )
 
 

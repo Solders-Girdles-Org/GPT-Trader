@@ -100,3 +100,59 @@ class TradeIdeaListResult:
     @property
     def returned_count(self) -> int:
         return len(self.views)
+
+
+@dataclass(frozen=True, slots=True)
+class TradeIdeaQueueExpiration:
+    """One pending idea expiring inside the queue warning window."""
+
+    decision_id: str
+    state: TradeIdeaState
+    instrument: str
+    expires_at: datetime
+    deadline_type: str
+    seconds_until_expiry: int
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "decision_id": self.decision_id,
+            "state": self.state.value,
+            "instrument": self.instrument,
+            "expires_at": self.expires_at.isoformat(),
+            "deadline_type": self.deadline_type,
+            "seconds_until_expiry": self.seconds_until_expiry,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class TradeIdeaQueueStatus:
+    """Read-only queue health for pending human review."""
+
+    as_of: datetime
+    warning_window_hours: int
+    proposed_count: int
+    needs_changes_count: int
+    upcoming_expirations: tuple[TradeIdeaQueueExpiration, ...]
+
+    @property
+    def pending_total(self) -> int:
+        return self.proposed_count + self.needs_changes_count
+
+    @property
+    def upcoming_expiration_count(self) -> int:
+        return len(self.upcoming_expirations)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "as_of": self.as_of.isoformat(),
+            "warning_window_hours": self.warning_window_hours,
+            "counts": {
+                "proposed": self.proposed_count,
+                "needs_changes": self.needs_changes_count,
+                "pending_total": self.pending_total,
+                "upcoming_expirations": self.upcoming_expiration_count,
+            },
+            "upcoming_expirations": [
+                expiration.to_dict() for expiration in self.upcoming_expirations
+            ],
+        }

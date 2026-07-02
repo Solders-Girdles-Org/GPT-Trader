@@ -11,6 +11,7 @@ import gpt_trader.cli.commands.ideas as ideas_command_module
 from gpt_trader import cli
 from gpt_trader.features.trade_ideas import TimeHorizon, TradeIdeaService, TradeIdeaState
 from gpt_trader.persistence.event_store import EventStore
+from tests.unit.gpt_trader.cli.commands.conftest import attest_account_equity
 from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
 
 
@@ -35,6 +36,7 @@ def _seed_approved_idea(root: Path) -> str:
     )
     idea = build_trade_idea(time_horizon=_future_horizon())
     service.propose(idea, actor_id="idea-generator-v1")
+    attest_account_equity(service)
     service.approve(idea.decision_id, actor_id="rj", reason="Risk verified")
     return idea.decision_id
 

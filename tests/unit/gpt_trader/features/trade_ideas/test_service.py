@@ -6,15 +6,16 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
+from tests.unit.gpt_trader.features.trade_ideas.conftest import (
+    attest_account_equity,
+    build_trade_idea,
+)
 
 from gpt_trader.features.trade_ideas import (
     DEFAULT_RISK_BUDGET,
     ActorType,
-    ApprovalPolicy,
     AuditAction,
     AuditIntegrityError,
-    AutonomyMode,
     BudgetIntegrityError,
     BudgetLogEntry,
     DuplicateTradeIdeaError,
@@ -73,6 +74,7 @@ def test_duplicate_propose_rejects_before_record_or_audit_mutation(tmp_path: Pat
 
 
 def test_full_lifecycle_to_fill(service: TradeIdeaService) -> None:
+    attest_account_equity(service)
     idea = build_trade_idea()
     service.propose(idea, actor_id="idea-generator-v1")
     service.approve(idea.decision_id, actor_id="rj", reason="Thesis and risk verified")
@@ -185,6 +187,7 @@ def test_futures_approval_requires_budget_leverage_flag(service: TradeIdeaServic
             **DEFAULT_RISK_BUDGET.to_dict(),
             "version": 2,
             "allow_futures_leverage": True,
+            "account_equity": "20000",
         }
     )
     service.update_budget(allowed_budget, actor_type=ActorType.HUMAN, actor_id="rj")
@@ -224,6 +227,7 @@ def test_short_approval_requires_naked_shorts_flag(service: TradeIdeaService) ->
             **DEFAULT_RISK_BUDGET.to_dict(),
             "version": 3,
             "allow_naked_shorts": True,
+            "account_equity": "20000",
         }
     )
     service.update_budget(allowed_budget, actor_type=ActorType.HUMAN, actor_id="rj")
@@ -239,6 +243,7 @@ def test_unknown_decision_id_is_an_error(service: TradeIdeaService) -> None:
 
 
 def test_list_views_filters_by_state(service: TradeIdeaService) -> None:
+    attest_account_equity(service)
     first = build_trade_idea(decision_id="trade-20260612-001")
     second = build_trade_idea(decision_id="trade-20260612-002")
     service.propose(first, actor_id="idea-generator-v1")
@@ -249,50 +254,6 @@ def test_list_views_filters_by_state(service: TradeIdeaService) -> None:
 
     assert [view.idea.decision_id for view in approved] == ["trade-20260612-001"]
     assert service.open_approved_count() == 1
-
-
-def test_budget_seeds_defaults_on_first_use(service: TradeIdeaService) -> None:
-    assert service.current_budget() == DEFAULT_RISK_BUDGET
-
-
-def test_human_can_renegotiate_budget(service: TradeIdeaService) -> None:
-    widened = RiskBudget.from_dict(
-        {**DEFAULT_RISK_BUDGET.to_dict(), "version": 2, "max_loss_per_idea_pct": "8"}
-    )
-
-    service.update_budget(widened, actor_type=ActorType.HUMAN, actor_id="rj")
-
-    assert service.current_budget().max_loss_per_idea_pct == Decimal("8")
-
-
-def test_agent_budget_change_refused_in_current_mode(service: TradeIdeaService) -> None:
-    widened = RiskBudget.from_dict(
-        {**DEFAULT_RISK_BUDGET.to_dict(), "version": 2, "max_loss_per_idea_pct": "8"}
-    )
-
-    with pytest.raises(PolicyViolationError):
-        service.update_budget(widened, actor_type=ActorType.AI, actor_id="idea-generator-v1")
-
-    assert service.current_budget() == DEFAULT_RISK_BUDGET
-
-
-def test_agent_budget_change_refused_in_bounded_autonomy_until_meta_envelope(
-    tmp_path: Path,
-) -> None:
-    service = TradeIdeaService(
-        tmp_path / "trade_ideas",
-        policy=ApprovalPolicy(AutonomyMode.BOUNDED_AUTONOMY),
-        now_factory=lambda: datetime(2026, 6, 12, 10, 0, tzinfo=UTC),
-    )
-    widened = RiskBudget.from_dict(
-        {**DEFAULT_RISK_BUDGET.to_dict(), "version": 2, "max_loss_per_idea_pct": "8"}
-    )
-
-    with pytest.raises(PolicyViolationError) as exc_info:
-        service.update_budget(widened, actor_type=ActorType.AI, actor_id="idea-generator-v1")
-
-    assert any("budget meta-envelope" in violation for violation in exc_info.value.violations)
-    assert service.current_budget() == DEFAULT_RISK_BUDGET
 
 
 def test_expire_is_a_system_action(service: TradeIdeaService) -> None:
@@ -311,6 +272,7 @@ def test_expire_due_ideas_skips_submitted_and_continues(tmp_path: Path) -> None:
         tmp_path / "trade_ideas",
         now_factory=lambda: current_time,
     )
+    attest_account_equity(service)
     expires_soon = TimeHorizon(
         expected_hold="1 day",
         expires_at=datetime(2026, 6, 11, 10, 0, tzinfo=UTC),

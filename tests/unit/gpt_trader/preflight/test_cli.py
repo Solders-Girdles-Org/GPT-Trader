@@ -220,6 +220,7 @@ class TestMain:
         cli_mocks.checker.check_disk_space.assert_called_once()
         cli_mocks.checker.simulate_dry_run.assert_called_once()
         cli_mocks.checker.check_event_store_redaction.assert_called_once()
+        cli_mocks.checker.check_trade_ideas_readiness.assert_called_once()
         cli_mocks.checker.check_readiness_report.assert_called_once()
 
     def test_runs_checks_in_graph_order(self, cli_mocks: CLIMocks) -> None:

@@ -10,6 +10,7 @@ import pytest
 from gpt_trader import cli
 from gpt_trader.cli.response import CliErrorCode
 from gpt_trader.features.trade_ideas import TimeHorizon
+from tests.unit.gpt_trader.cli.commands.conftest import attest_ideas_root
 from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
 
 
@@ -59,6 +60,7 @@ def _propose(capsys: pytest.CaptureFixture[str], root: Path, payload: dict[str, 
 
 
 def _approve(capsys: pytest.CaptureFixture[str], root: Path, decision_id: str) -> None:
+    attest_ideas_root(root)
     exit_code, response = _run_json(
         capsys,
         [

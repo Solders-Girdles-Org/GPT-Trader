@@ -19,6 +19,7 @@ from gpt_trader.features.trade_ideas import (
     TradeIdeaService,
     TradeIdeaStore,
 )
+from tests.unit.gpt_trader.cli.commands.conftest import attest_ideas_root
 from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
 
 
@@ -52,6 +53,7 @@ def _root_args(root: Path) -> list[str]:
 def _propose(
     capsys: pytest.CaptureFixture[str], root: Path, payload: dict[str, Any], filename: str
 ) -> None:
+    attest_ideas_root(root)
     path = _write_idea(root.parent / filename, payload)
     exit_code, response = _run_json(
         capsys,
