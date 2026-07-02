@@ -145,6 +145,33 @@ def test_load_optimize_candidates_accepts_best_only_parameters_export(
     assert candidates[0].optimize_objective_value == Decimal("0.42")
 
 
+def test_load_optimize_candidates_falls_back_to_best_parameters_when_trials_empty(
+    tmp_path: Path,
+) -> None:
+    study_path = _write_json(
+        tmp_path / "empty-trials.json",
+        {
+            "trials": [],
+            "best_parameters": {
+                "short_ma_period": 2,
+                "long_ma_period": 4,
+                "crossover_lookback": 1,
+            },
+            "best_objective_value": 0.42,
+        },
+    )
+
+    candidates = load_optimize_baseline_candidates(
+        study_path,
+        base_config=BaselineProposerConfig(),
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].config.short_window == 2
+    assert candidates[0].config.long_window == 4
+    assert candidates[0].optimize_objective_value == Decimal("0.42")
+
+
 def test_load_optimize_candidates_skips_invalid_walk_forward_windows(
     tmp_path: Path,
 ) -> None:

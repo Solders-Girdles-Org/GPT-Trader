@@ -200,11 +200,16 @@ def _raw_candidates(payload: Any) -> list[dict[str, Any]]:
             if isinstance(item, dict) and _is_replayable_window_result(item)
         ]
     if isinstance(payload.get("trials"), list):
-        return [
+        trials = [
             item
             for item in payload["trials"]
             if isinstance(item, dict) and item.get("is_feasible", True)
         ]
+        # A normal `optimize export --include-trials` payload still carries
+        # top-level best_parameters; an empty/infeasible trials list must fall
+        # through to it rather than yielding zero candidates.
+        if trials:
+            return trials
     if isinstance(payload.get("best_parameters"), dict):
         return [payload]
     if isinstance(payload.get("parameters"), dict):
