@@ -28,10 +28,13 @@ historical data.
 The precondition (no live path depends on JSONL writes) was verified at
 acceptance: `EventStore` (`src/gpt_trader/persistence/event_store.py`) persists
 exclusively via SQLite (`events.db`) with an in-memory cache — no JSONL write
-path exists. The only remaining JSONL surface on the event side is a read-only
-fallback in `src/gpt_trader/monitoring/daily_report/loaders.py`, used solely
-when a storage directory predates `events.db` — which is exactly the
-import-only-historical shape this option prescribes.
+path exists. The remaining JSONL surfaces on the event side are all read-only
+fallbacks used solely when a storage directory predates `events.db`:
+`src/gpt_trader/monitoring/daily_report/loaders.py`,
+`scripts/monitoring/export_metrics.py`, and
+`scripts/monitoring/perps_dashboard.py`. That is exactly the
+import-only-historical shape this option prescribes; those readers stay
+supported as import paths.
 
 ## Consequences
 

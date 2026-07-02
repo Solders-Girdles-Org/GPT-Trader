@@ -104,8 +104,10 @@ remains gated before any non-manual execution lane opens:
   authorizes account, venue, product, or API capability. A fresh review gates any
   non-manual Coinbase (or other) execution.
 
-Open questions that gate parts of this are tracked as `proposed` decisions —
-e.g. profile meaning
+Open questions that gate parts of this are tracked as `proposed` decisions in
+[docs/decisions](decisions/README.md). Profile meaning is resolved: `prod` and
+`canary` remain live-operation assets, explicitly gated — the profile name is
+never approval
 ([prod-canary-profile-meaning](decisions/prod-canary-profile-meaning.md)).
 The derivatives default is resolved: the
 [intx-default-derivatives-venue](decisions/intx-default-derivatives-venue.md)
