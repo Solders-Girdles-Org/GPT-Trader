@@ -73,6 +73,7 @@ markers. Regenerating cannot drift from the files.
 | 2026-07-02 | [Canonical risk-limit vocabulary — budget vs runtime limits](canonical-risk-limit-vocabulary.md) | accepted |
 | 2026-07-02 | [Event JSONL: accepted fallback or import-only historical data](event-jsonl-compatibility.md) | accepted |
 | 2026-07-02 | [Meaning of the prod and canary profiles under the approval ladder](prod-canary-profile-meaning.md) | accepted |
+| 2026-07-02 | [Stop committing high-churn generated agent inventories](stop-committing-high-churn-agent-inventories.md) | proposed |
 | 2026-07-01 | [Remove the unwired account manager and strategy-dev lab](remove-unwired-account-manager-and-strategy-lab.md) | accepted |
 | 2026-06-30 | [Remove the TUI subsystem](remove-tui-subsystem.md) | accepted |
 | 2026-06-28 | [INTX default derivatives venue](intx-default-derivatives-venue.md) | accepted |
