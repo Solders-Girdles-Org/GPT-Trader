@@ -169,7 +169,7 @@ assert get_sleeps() == [0.5, 1.0]  # Exponential delays
 uv run pytest tests/unit/gpt_trader/features/live_trade/execution/test_broker_executor_resilience_*.py -v
 
 # Degradation recovery tests
-uv run pytest tests/unit/gpt_trader/features/live_trade/test_degradation.py::TestPauseExpiryRecovery -v
+uv run pytest tests/unit/gpt_trader/features/live_trade/test_degradation_pause_expiry_and_recovery.py::TestPauseExpiryRecovery -v
 
 # Order submission idempotency test
 uv run pytest tests/unit/gpt_trader/features/live_trade/execution/test_order_submission_flows.py::TestTransientFailureWithClientOrderIdReuse -v
