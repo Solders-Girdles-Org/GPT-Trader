@@ -132,7 +132,15 @@ uv run gpt-trader ideas show <decision-id>
 uv run gpt-trader ideas approve <decision-id> --actor <you> --reason "<why>"
 # ...or: ideas reject / ideas request-changes
 
-# 4. Export the ticket and paper-execute it by hand (no broker API calls)
+# 4. Paper-execute the approved idea (machine loop, no attestation).
+#    Places one simulated market order on the offline deterministic paper
+#    broker (client_order_id = decision id) and records the submission and
+#    fill on the audit log; live brokers are structurally unreachable here.
+#    Pass the price you observe so the simulated fill is honest.
+uv run gpt-trader ideas execute-paper <decision-id> --mark <observed-price>
+
+# 4-alt. Or paper-execute by hand against a real external venue: export the
+#        ticket and attest the lifecycle yourself (no broker API calls).
 uv run gpt-trader ideas export-ticket --decision-id <decision-id> --venue manual
 uv run gpt-trader ideas mark-submitted <decision-id> --venue manual \
   --external-order-id <paper-id> --actor <you> --actor-type human
@@ -147,9 +155,10 @@ uv run gpt-trader ideas audit verify
 ```
 
 Every step stamps an actor into the append-only audit log; proposals come from
-`ai` actors and approvals from `human` actors. None of these commands place,
-modify, or cancel broker orders. Ideas that expire unreviewed are swept with
-`uv run gpt-trader ideas expire`.
+`ai` actors, approvals from `human` actors, and `execute-paper` lifecycle
+events from the `paper-idea-executor` system actor under the `paper` venue.
+None of these commands touch a live broker or account. Ideas that expire
+unreviewed are swept with `uv run gpt-trader ideas expire`.
 
 ## Readiness Evidence Inputs
 

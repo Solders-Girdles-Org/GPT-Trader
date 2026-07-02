@@ -6,6 +6,11 @@ import warnings
 from pathlib import Path
 from typing import Any
 
+# Keep repo-root scripts/ (CLI helpers like scripts/maintenance/test_legacy_triage.py)
+# out of collection without a basename pattern in norecursedirs, which would also
+# shadow tests/unit/scripts and tests/integration/scripts (see pytest.ini).
+collect_ignore = ["scripts"]
+
 
 def pytest_configure(config: Any) -> None:  # pragma: no cover
     """Register optional warning filters.
