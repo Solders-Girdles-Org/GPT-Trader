@@ -8,12 +8,11 @@ This strategy combines multiple technical indicators to generate trading signals
 """
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal
-from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-from gpt_trader.core import Product
+from gpt_trader.core import Action, Decision, Product
 from gpt_trader.features.live_trade.indicators import (
     compute_ma_series,
     detect_crossover,
@@ -26,21 +25,6 @@ if TYPE_CHECKING:
     from gpt_trader.features.live_trade.strategies.base import MarketDataContext
 
 logger = get_logger(__name__, component="baseline_strategy")
-
-
-class Action(Enum):
-    BUY = "buy"
-    SELL = "sell"
-    HOLD = "hold"
-    CLOSE = "close"
-
-
-@dataclass
-class Decision:
-    action: Action
-    reason: str
-    confidence: float = 0.0
-    indicators: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

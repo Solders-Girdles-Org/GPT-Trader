@@ -14,7 +14,7 @@ from gpt_trader.app.runtime.fingerprint import (
     compare_startup_config_fingerprints,
     compute_startup_config_fingerprint,
 )
-from gpt_trader.features.live_trade.strategies.perps_baseline import PerpsStrategyConfig
+from gpt_trader.features.live_trade.strategies.baseline import PerpsStrategyConfig
 
 
 @pytest.fixture

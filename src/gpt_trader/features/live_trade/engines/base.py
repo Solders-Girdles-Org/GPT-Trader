@@ -16,7 +16,7 @@ if TYPE_CHECKING:
         EventStoreProtocol,
         RuntimeStateProtocol,
     )
-    from gpt_trader.features.brokerages.core.protocols import (
+    from gpt_trader.core.protocols import (
         BrokerProtocol,
     )  # Protocol import is OK
     from gpt_trader.features.live_trade.risk.protocols import RiskManagerProtocol

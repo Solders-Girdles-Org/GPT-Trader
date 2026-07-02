@@ -16,7 +16,7 @@ from gpt_trader.features.live_trade.execution.order_submission import (
 )
 from gpt_trader.features.live_trade.execution.submission_result import OrderSubmissionStatus
 from gpt_trader.features.live_trade.guard_errors import GuardError
-from gpt_trader.features.live_trade.strategies.perps_baseline import Action, Decision
+from gpt_trader.features.live_trade.strategies.baseline import Action, Decision
 
 pytest_plugins = ["strategy_engine_chaos_fixtures"]
 

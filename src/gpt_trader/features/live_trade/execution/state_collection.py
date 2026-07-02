@@ -19,7 +19,7 @@ from gpt_trader.config.constants import (
     MIN_COLLATERAL_CHANGE_TO_LOG,
 )
 from gpt_trader.core import Balance, MarketType, Product
-from gpt_trader.features.brokerages.core.protocols import ExtendedBrokerProtocol
+from gpt_trader.core.protocols import ExtendedBrokerProtocol
 from gpt_trader.utilities.logging_patterns import get_logger
 from gpt_trader.utilities.quantities import quantity_from
 

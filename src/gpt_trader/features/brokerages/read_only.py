@@ -20,7 +20,7 @@ from gpt_trader.core import (
     Quote,
     TimeInForce,
 )
-from gpt_trader.features.brokerages.core.protocols import BrokerProtocol
+from gpt_trader.core.protocols import BrokerProtocol
 from gpt_trader.utilities.logging_patterns import get_logger
 
 logger = get_logger(__name__, component="read_only_broker")
