@@ -14,10 +14,43 @@ def test_normalize_item_filters_glossary_noise() -> None:
     )
 
 
-def test_verify_path_marks_runtime_paths_uncertain(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "item",
+    [
+        "runtime_data/canary/reports/daily_report_2026-01-01.txt",
+        "var/logs",
+    ],
+)
+def test_verify_path_marks_runtime_paths_uncertain(tmp_path: Path, item: str) -> None:
     state = scan.ScanState(repo_root=tmp_path)
-    result = scan.verify_path(state, "runtime_data/canary/reports/daily_report_2026-01-01.txt")
+    result = scan.verify_path(state, item)
     assert result.status == "uncertain"
+
+
+@pytest.mark.parametrize("item", ["var/logstash/config.yml", "var/logs_archive/report.json"])
+def test_verify_path_checks_non_log_sibling_paths(tmp_path: Path, item: str) -> None:
+    state = scan.ScanState(repo_root=tmp_path, tracked_paths=set())
+
+    result = scan.verify_path(state, item)
+    assert result.status == "missing"
+
+
+def test_verify_path_ignores_untracked_local_files_when_git_index_known(tmp_path: Path) -> None:
+    local_artifact = tmp_path / "var" / "ops" / "controls_smoke.json"
+    local_artifact.parent.mkdir(parents=True)
+    local_artifact.write_text("{}", encoding="utf-8")
+
+    state = scan.ScanState(repo_root=tmp_path, tracked_paths=set())
+
+    result = scan.verify_path(state, "var/ops/controls_smoke.json")
+    assert result.status == "missing"
+
+
+def test_verify_path_accepts_tracked_directory_prefix(tmp_path: Path) -> None:
+    state = scan.ScanState(repo_root=tmp_path, tracked_paths={"src/gpt_trader/app.py"})
+
+    result = scan.verify_path(state, "src/gpt_trader/")
+    assert result.status == "ok"
 
 
 def test_verify_env_var_accepts_makefile_variable(tmp_path: Path) -> None:

@@ -225,10 +225,12 @@ class ScanState:
     make_vars: set[str] = field(default_factory=set)
     project_scripts: set[str] = field(default_factory=set)
     source_cache: dict[str, str] = field(default_factory=dict)
+    tracked_paths: set[str] | None = None
 
 
 def load_state(repo_root: Path, *, fetch_help: bool = True) -> ScanState:
     state = ScanState(repo_root=repo_root)
+    state.tracked_paths = _load_tracked_paths(repo_root)
     pyproject = repo_root / "pyproject.toml"
     makefile = repo_root / "Makefile"
     env_template = repo_root / "config/environments/.env.template"
@@ -287,6 +289,22 @@ def load_state(repo_root: Path, *, fetch_help: bool = True) -> ScanState:
                 pass
 
     return state
+
+
+def _load_tracked_paths(repo_root: Path) -> set[str] | None:
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "-z"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except Exception:
+        return None
+    if result.returncode != 0:
+        return None
+    return {path for path in result.stdout.split("\0") if path}
 
 
 def normalize_item(category: str, raw: str) -> str | None:
@@ -369,8 +387,17 @@ def _grep_repo(state: ScanState, needle: str, *, suffixes: tuple[str, ...] = (".
 
 
 def _is_runtime_or_placeholder_path(item: str) -> bool:
+    if item == "var/logs":
+        return True
     if item.startswith(
-        ("runtime_data/", "var/data/", "var/results/", "var/snapshots/", "review_artifacts/")
+        (
+            "runtime_data/",
+            "var/data/",
+            "var/logs/",
+            "var/results/",
+            "var/snapshots/",
+            "review_artifacts/",
+        )
     ):
         return True
     if "{" in item or "}" in item or "<" in item or ">" in item:
@@ -382,6 +409,18 @@ def _is_runtime_or_placeholder_path(item: str) -> bool:
     return False
 
 
+def _tracked_path_exists(state: ScanState, item: str) -> bool:
+    if state.tracked_paths is None:
+        return (state.repo_root / item).exists()
+
+    normalized = item.strip("/")
+    if normalized in state.tracked_paths:
+        return True
+
+    prefix = f"{normalized}/"
+    return any(path.startswith(prefix) for path in state.tracked_paths)
+
+
 def verify_path(state: ScanState, item: str, source_doc: str = "") -> VerificationResult:
     if _is_runtime_or_placeholder_path(item):
         return VerificationResult(
@@ -389,14 +428,15 @@ def verify_path(state: ScanState, item: str, source_doc: str = "") -> Verificati
             "runtime/placeholder path",
             "runtime or templated path; not expected on disk by default",
         )
-    full = state.repo_root / item
-    if full.exists():
-        return VerificationResult("ok", f"test -e {item}", "exists on disk")
+    if _tracked_path_exists(state, item):
+        return VerificationResult("ok", f"git ls-files {item}", "tracked path exists")
     if _is_documented_removal(item, source_doc):
-        return VerificationResult("ok", f"test -e {item}", "documented removal/migration reference")
+        return VerificationResult(
+            "ok", f"git ls-files {item}", "documented removal/migration reference"
+        )
     if "DEPRECATIONS" in item or any(marker in item for marker in DEPRECATED_MARKERS):
-        return VerificationResult("stale", f"test -e {item}", "references removed artifact")
-    return VerificationResult("missing", f"test -e {item}", "path not found")
+        return VerificationResult("stale", f"git ls-files {item}", "references removed artifact")
+    return VerificationResult("missing", f"git ls-files {item}", "path not found")
 
 
 def _try_import(state: ScanState, dotted: str) -> VerificationResult:

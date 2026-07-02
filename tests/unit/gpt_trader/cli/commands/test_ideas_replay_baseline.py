@@ -277,6 +277,7 @@ def test_replay_baseline_help_documents_required_flags_and_read_only_contract(
     output = capsys.readouterr().out
     assert "--file" in output
     assert "--symbol" in output
+    assert "--from-optimize-study" in output
     assert "broker-free and read-only" in output
 
 
