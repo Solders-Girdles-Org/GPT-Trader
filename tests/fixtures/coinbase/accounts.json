@@ -1,0 +1,73 @@
+{
+  "accounts": [
+    {
+      "uuid": "8bfc20d7-f7c6-4422-bf07-8243ca4169fe",
+      "name": "USD Wallet",
+      "currency": "USD",
+      "available_balance": {
+        "value": "10500.25",
+        "currency": "USD"
+      },
+      "default": true,
+      "active": true,
+      "created_at": "2024-01-15T09:12:33.001Z",
+      "updated_at": "2026-06-30T20:05:00.000Z",
+      "deleted_at": null,
+      "type": "ACCOUNT_TYPE_FIAT",
+      "ready": true,
+      "hold": {
+        "value": "250.75",
+        "currency": "USD"
+      },
+      "retail_portfolio_id": "3f6a1a5f-7c9d-4b21-9c5a-0d5f6f6d9b1a",
+      "platform": "ACCOUNT_PLATFORM_CONSUMER"
+    },
+    {
+      "uuid": "0d3f5c8e-2a4b-4a7e-9e3d-6a1b2c3d4e5f",
+      "name": "BTC Wallet",
+      "currency": "BTC",
+      "available_balance": {
+        "value": "0.52815476",
+        "currency": "BTC"
+      },
+      "default": true,
+      "active": true,
+      "created_at": "2024-01-15T09:12:33.001Z",
+      "updated_at": "2026-06-30T20:05:00.000Z",
+      "deleted_at": null,
+      "type": "ACCOUNT_TYPE_CRYPTO",
+      "ready": true,
+      "hold": {
+        "value": "0.001",
+        "currency": "BTC"
+      },
+      "retail_portfolio_id": "3f6a1a5f-7c9d-4b21-9c5a-0d5f6f6d9b1a",
+      "platform": "ACCOUNT_PLATFORM_CONSUMER"
+    },
+    {
+      "uuid": "f1e2d3c4-b5a6-4978-8c9d-0e1f2a3b4c5d",
+      "name": "ETH Wallet",
+      "currency": "ETH",
+      "available_balance": {
+        "value": "0",
+        "currency": "ETH"
+      },
+      "default": true,
+      "active": true,
+      "created_at": "2024-03-02T14:30:00.000Z",
+      "updated_at": "2026-06-30T20:05:00.000Z",
+      "deleted_at": null,
+      "type": "ACCOUNT_TYPE_CRYPTO",
+      "ready": true,
+      "hold": {
+        "value": "0",
+        "currency": "ETH"
+      },
+      "retail_portfolio_id": "3f6a1a5f-7c9d-4b21-9c5a-0d5f6f6d9b1a",
+      "platform": "ACCOUNT_PLATFORM_CONSUMER"
+    }
+  ],
+  "has_next": false,
+  "cursor": "",
+  "size": 3
+}

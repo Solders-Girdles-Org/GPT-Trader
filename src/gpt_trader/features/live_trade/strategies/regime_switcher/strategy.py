@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from gpt_trader.features.intelligence.regime import MarketRegimeDetector, RegimeState, RegimeType
 from gpt_trader.features.live_trade.interfaces import TradingStrategy
-from gpt_trader.features.live_trade.strategies.perps_baseline import Action, Decision
+from gpt_trader.features.live_trade.strategies.baseline import Action, Decision
 from gpt_trader.utilities.logging_patterns import get_logger
 
 if TYPE_CHECKING:

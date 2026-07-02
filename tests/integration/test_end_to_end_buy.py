@@ -8,7 +8,7 @@ from gpt_trader.app.container import (
     clear_application_container,
     set_application_container,
 )
-from gpt_trader.features.live_trade.strategies.perps_baseline import Action, Decision
+from gpt_trader.features.live_trade.strategies.baseline import Action, Decision
 
 pytestmark = pytest.mark.integration
 

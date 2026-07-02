@@ -11,7 +11,7 @@ import gpt_trader.security.validate as security_validate_module
 from gpt_trader.core import OrderSide, Product
 from gpt_trader.features.live_trade.execution.decision_trace import OrderDecisionTrace
 from gpt_trader.features.live_trade.execution.submission_result import OrderSubmissionStatus
-from gpt_trader.features.live_trade.strategies.perps_baseline import Action, Decision
+from gpt_trader.features.live_trade.strategies.baseline import Action, Decision
 
 
 @pytest.mark.asyncio

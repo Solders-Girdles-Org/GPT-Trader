@@ -1,0 +1,15 @@
+{
+  "success": true,
+  "success_response": {
+    "order_id": "d4e5f6a7-b8c9-4011-8899-aabbccddee11",
+    "product_id": "ETH-USD",
+    "side": "SELL",
+    "client_order_id": "gpt-trader-contract-2",
+    "attached_order_id": ""
+  },
+  "order_configuration": {
+    "market_market_ioc": {
+      "base_size": "0.25"
+    }
+  }
+}

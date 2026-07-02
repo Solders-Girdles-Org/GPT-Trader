@@ -10,7 +10,7 @@ from gpt_trader.features.live_trade.engines.strategy import (
     EVENT_PRICE_TICK,
     TradingEngine,
 )
-from gpt_trader.features.live_trade.strategies.perps_baseline import BaselinePerpsStrategy
+from gpt_trader.features.live_trade.strategies.baseline import BaselinePerpsStrategy
 
 pytest_plugins = ["tests.unit.gpt_trader.features.live_trade.state_recovery_test_helpers"]
 

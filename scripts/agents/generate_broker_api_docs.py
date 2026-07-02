@@ -80,7 +80,7 @@ def get_method_info(method: Any, hints: dict[str, Any] | None = None) -> dict[st
 
 def generate_protocol_docs() -> dict[str, Any]:
     """Generate documentation for broker protocols."""
-    from gpt_trader.features.brokerages.core.protocols import (
+    from gpt_trader.core.protocols import (
         BrokerProtocol,
         ExtendedBrokerProtocol,
         MarketDataProtocol,

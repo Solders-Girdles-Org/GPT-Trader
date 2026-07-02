@@ -8,7 +8,7 @@
 # Priorities: high | medium | low
 #
 version: 1
-generated_at: '2026-07-01T21:32:30.386300+00:00'
+generated_at: '2026-07-02T06:45:12.900671+00:00'
 summary:
   total_clusters: 207
   by_priority:
@@ -81,9 +81,9 @@ clusters:
     rationale: Consolidate 48 test files into single parametrized file
     status: pending
     added: '2026-07-01'
-  89b05d1c78b8:
+  865b4f9b2ba2:
     type: source_fanout
-    description: 24 test files import gpt_trader.features.live_trade.strategies.perps_baseline
+    description: 24 test files import gpt_trader.features.live_trade.strategies.baseline
     files:
     - tests/unit/gpt_trader/app/config/test_bot_config.py
     - tests/unit/gpt_trader/app/containers/test_risk_validation_kill_switch.py
@@ -104,20 +104,20 @@ clusters:
     - tests/unit/gpt_trader/features/live_trade/strategies/mean_reversion/test_strategy_safety_and_recovery.py
     - tests/unit/gpt_trader/features/live_trade/strategies/mean_reversion/test_strategy_sizing_and_trend_filter.py
     - tests/unit/gpt_trader/features/live_trade/strategies/mean_reversion/test_strategy_zscore_and_signals.py
+    - tests/unit/gpt_trader/features/live_trade/strategies/test_baseline_strategies.py
     - tests/unit/gpt_trader/features/live_trade/strategies/test_ensemble_strategy_edges.py
-    - tests/unit/gpt_trader/features/live_trade/strategies/test_perps_baseline_strategies.py
     - tests/unit/gpt_trader/features/live_trade/strategies/test_regime_switcher.py
     - tests/unit/gpt_trader/features/live_trade/test_state_recovery.py
     - tests/unit/gpt_trader/features/live_trade/test_trading_engine.py
     source_modules:
-    - gpt_trader.features.live_trade.strategies.perps_baseline
+    - gpt_trader.features.live_trade.strategies.baseline
     decision: merge
-    target_location: tests/unit/gpt_trader/app/config/test_perps_baseline.py
+    target_location: tests/unit/gpt_trader/app/config/test_baseline.py
     expected_file_delta: -23
     priority: high
     rationale: Consolidate 24 test files into single parametrized file
     status: pending
-    added: '2026-07-01'
+    added: '2026-07-02'
   3bfcffa0f4b2:
     type: source_fanout
     description: 22 test files import gpt_trader.cli.response
@@ -1169,9 +1169,9 @@ clusters:
     rationale: Consolidate 6 test files into single parametrized file
     status: pending
     added: '2026-07-01'
-  '44528e531829':
+  16d513512faf:
     type: source_fanout
-    description: 79 test files import gpt_trader.core
+    description: 80 test files import gpt_trader.core
     files:
     - tests/unit/gpt_trader/backtesting/simulation/test_accounting.py
     - tests/unit/gpt_trader/backtesting/simulation/test_fill_model.py
@@ -1210,6 +1210,7 @@ clusters:
     - tests/unit/gpt_trader/features/brokerages/paper/test_hybrid_paper_market_data.py
     - tests/unit/gpt_trader/features/brokerages/paper/test_hybrid_paper_orders.py
     - tests/unit/gpt_trader/features/brokerages/paper/test_hybrid_paper_positions.py
+    - tests/unit/gpt_trader/features/brokerages/test_read_only_broker.py
     - tests/unit/gpt_trader/features/data/test_data_coinbase_edges.py
     - tests/unit/gpt_trader/features/data/test_data_coinbase_runtime_edges.py
     - tests/unit/gpt_trader/features/data/test_quality_candles.py
@@ -1256,14 +1257,14 @@ clusters:
     - gpt_trader.core
     decision: merge
     target_location: tests/unit/gpt_trader/backtesting/simulation/test_core.py
-    expected_file_delta: -78
+    expected_file_delta: -79
     priority: low
-    rationale: Consolidate 79 test files into single parametrized file
+    rationale: Consolidate 80 test files into single parametrized file
     status: pending
-    added: '2026-07-01'
-  ffe9711fb32a:
+    added: '2026-07-02'
+  83d5bc54ea89:
     type: source_fanout
-    description: 29 test files import gpt_trader.app.config
+    description: 30 test files import gpt_trader.app.config
     files:
     - tests/unit/gpt_trader/app/config/test_bot_config.py
     - tests/unit/gpt_trader/app/config/test_bot_config_loading.py
@@ -1280,6 +1281,7 @@ clusters:
     - tests/unit/gpt_trader/cli/test_services.py
     - tests/unit/gpt_trader/cli/test_services_build_config.py
     - tests/unit/gpt_trader/features/brokerages/test_brokerage_factory_paper_fills.py
+    - tests/unit/gpt_trader/features/brokerages/test_read_only_broker.py
     - tests/unit/gpt_trader/features/live_trade/engines/test_runtime_start_event.py
     - tests/unit/gpt_trader/features/live_trade/execution/test_get_validation_metrics.py
     - tests/unit/gpt_trader/features/live_trade/strategies/mean_reversion/test_strategy_exit_logic_and_cooldown.py
@@ -1298,11 +1300,11 @@ clusters:
     - gpt_trader.app.config
     decision: merge
     target_location: tests/unit/gpt_trader/app/config/test_config.py
-    expected_file_delta: -28
+    expected_file_delta: -29
     priority: low
-    rationale: Consolidate 29 test files into single parametrized file
+    rationale: Consolidate 30 test files into single parametrized file
     status: pending
-    added: '2026-07-01'
+    added: '2026-07-02'
   3b0b64d9e707:
     type: source_fanout
     description: 14 test files import gpt_trader.utilities.datetime_helpers
@@ -1656,24 +1658,6 @@ clusters:
     rationale: Consolidate 3 test files into single parametrized file
     status: pending
     added: '2026-07-01'
-  b89b9f506607:
-    type: similar_names
-    description: 3 test files match pattern test_perps_baseline_* in tests/unit/gpt_trader/features/live_trade/strategies
-    files:
-    - tests/unit/gpt_trader/features/live_trade/strategies/test_perps_baseline.py
-    - tests/unit/gpt_trader/features/live_trade/strategies/test_perps_baseline_signals.py
-    - tests/unit/gpt_trader/features/live_trade/strategies/test_perps_baseline_strategies.py
-    source_modules: []
-    decision: merge
-    target_location: tests/unit/gpt_trader/features/live_trade/strategies/test_perps_baseline.py
-    expected_file_delta: -1
-    priority: low
-    rationale: Consolidated pause basics/monotonicity while keeping expiry/recovery
-      separate
-    status: done
-    owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/397
-    added: '2026-01-21'
   bc63d37275b3:
     type: similar_names
     description: 3 test files match pattern test_notification_service_* in tests/unit/gpt_trader/monitoring/notifications
@@ -3634,6 +3618,24 @@ clusters:
     status: done
     owner: codex
     pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/391
+    added: '2026-01-21'
+  b89b9f506607:
+    type: similar_names
+    description: 3 test files match pattern test_perps_baseline_* in tests/unit/gpt_trader/features/live_trade/strategies
+    files:
+    - tests/unit/gpt_trader/features/live_trade/strategies/test_perps_baseline.py
+    - tests/unit/gpt_trader/features/live_trade/strategies/test_perps_baseline_signals.py
+    - tests/unit/gpt_trader/features/live_trade/strategies/test_perps_baseline_strategies.py
+    source_modules: []
+    decision: merge
+    target_location: tests/unit/gpt_trader/features/live_trade/strategies/test_perps_baseline.py
+    expected_file_delta: -1
+    priority: low
+    rationale: Consolidated pause basics/monotonicity while keeping expiry/recovery
+      separate
+    status: done
+    owner: codex
+    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/397
     added: '2026-01-21'
   ba5346200fdc:
     type: similar_names

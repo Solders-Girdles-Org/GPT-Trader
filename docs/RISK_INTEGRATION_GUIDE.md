@@ -60,7 +60,7 @@ Pre-trade validation lives in `features/live_trade/execution/validation.py`
 ## Position Sizing & Exposure
 
 - Strategy-level sizing uses `PerpsStrategyConfig.position_fraction` in
-  `features/live_trade/strategies/perps_baseline/strategy.py`.
+  `features/live_trade/strategies/baseline/strategy.py`.
 - Bot-level risk sizing uses `BotRiskConfig.position_fraction` and is adapted to
   `RiskConfig.max_position_pct_per_symbol` in `app/containers/risk_validation.py`.
 - Equity and exposure calculations for guards are handled by
