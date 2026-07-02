@@ -58,8 +58,12 @@ from gpt_trader.features.trade_ideas import (
     TradeIdeaListQuery,
     TradeIdeaListResult,
     TradeIdeaListSortKey,
+    TradeIdeaPositionSizingBridge,
     TradeIdeaReplayRunner,
     TradeIdeaService,
+    TradeIdeaSizingConfig,
+    TradeIdeaSizingContext,
+    TradeIdeaSizingOutput,
     TradeIdeaState,
     UnknownTradeIdeaError,
     canonical_granularity,
@@ -1016,18 +1020,44 @@ def _handle_propose(args: Namespace) -> CliResponse:
     return _success(command, args, payload, text, warnings=warning_messages)
 
 
+class _LazyBudgetSizingBridge(TradeIdeaPositionSizingBridge):
+    """Defer the budget read (and its seed-on-first-use side effect) until a
+    candidate actually needs sizing, so no-signal baseline runs stay read-only."""
+
+    def __init__(self, service: TradeIdeaService) -> None:
+        self._budget_service = service
+        self._delegate: TradeIdeaPositionSizingBridge | None = None
+
+    def recommend(self, context: TradeIdeaSizingContext) -> TradeIdeaSizingOutput:
+        if self._delegate is None:
+            budget = self._budget_service.current_budget()
+            # Operator-attested equity must denominate sizing the same way the
+            # approval gate uses it; otherwise max_loss percentages are computed
+            # against the bridge's default equity while approve() compares them
+            # to caps on the attested account.
+            if budget.account_equity is not None:
+                sizing_config = TradeIdeaSizingConfig(
+                    equity=budget.account_equity,
+                    risk_budget=budget,
+                )
+            else:
+                sizing_config = TradeIdeaSizingConfig(risk_budget=budget)
+            self._delegate = TradeIdeaPositionSizingBridge(sizing_config)
+        return self._delegate.recommend(context)
+
+
 def _handle_propose_baseline(args: Namespace) -> CliResponse:
     command = "ideas propose-baseline"
-    proposer = BaselineProposer()
     try:
         snapshot = _load_market_snapshot(args.snapshot)
+        service = _service(args)
+        proposer = BaselineProposer(sizing_bridge=_LazyBudgetSizingBridge(service))
         ideas = proposer.propose(snapshot)
         if not ideas:
             payload = _baseline_payload(snapshot, proposer.proposer_id, [])
             text = _status_line(command, "OK", "0 proposals")
             return _success(command, args, payload, text, was_noop=True)
 
-        service = _service(args)
         proposal_batch = tuple(ideas)
         service.validate_new_proposals(proposal_batch)
         previews = [service.approval_violations(idea, actor_type=ActorType.HUMAN) for idea in ideas]
