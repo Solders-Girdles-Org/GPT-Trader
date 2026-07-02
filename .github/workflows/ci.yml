@@ -674,31 +674,54 @@ jobs:
     name: Dependency Vulnerability Audit
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    if: always()
+    needs: changes
     steps:
+      - name: Fail when change classifier did not succeed
+        if: needs.changes.result != 'success'
+        run: |
+          echo "::error::CI Change Classifier ended with result '${{ needs.changes.result }}'; failing closed."
+          exit 1
+
+      - name: Skip dependency audit
+        if: needs.changes.result == 'success' && needs.changes.outputs.dependencies != 'true'
+        run: |
+          echo "Dependency manifests did not change; skipping dependency audit."
+          {
+            echo "## Dependency Vulnerability Audit"
+            echo "Status: SKIPPED (no dependency manifest inputs changed)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # actions/checkout@v7
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        if: needs.changes.result == 'success' && needs.changes.outputs.dependencies == 'true'
         with:
           persist-credentials: false
 
       - name: Install uv
         # astral-sh/setup-uv@v7
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        if: needs.changes.result == 'success' && needs.changes.outputs.dependencies == 'true'
         with:
           enable-cache: true
 
       - name: Set up Python
         # actions/setup-python@v5
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        if: needs.changes.result == 'success' && needs.changes.outputs.dependencies == 'true'
         with:
           python-version-file: ".python-version"
 
       - name: Install dependencies
+        if: needs.changes.result == 'success' && needs.changes.outputs.dependencies == 'true'
         run: uv sync --all-extras --dev
 
       - name: Export locked requirements
+        if: needs.changes.result == 'success' && needs.changes.outputs.dependencies == 'true'
         run: uv export --frozen --all-extras --no-emit-project --no-hashes -o requirements-audit.txt
 
       - name: Audit dependencies (pip-audit)
+        if: needs.changes.result == 'success' && needs.changes.outputs.dependencies == 'true'
         # --no-deps: the uv export is already a complete pinned closure
         run: uv run pip-audit -r requirements-audit.txt --disable-pip --no-deps --strict
 
