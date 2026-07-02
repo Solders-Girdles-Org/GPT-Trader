@@ -137,7 +137,9 @@ make ci-required
 ```
 
 It runs lint/format, docs audits, mypy, agent artifacts freshness, test
-guardrails, and core unit tests, stopping on the first failure. Use
+guardrails, core unit tests, and the Stage 1 rails end-to-end smoke
+(`scripts/ops/stage1_rails_smoke.py`, also `make stage1-smoke`), stopping on
+the first failure. Use
 it when you want the local PR-readiness surface without optional suites or local
 readiness evidence. Agent artifacts freshness is advisory here: stale artifacts
 warn without stopping the run, while non-PR GitHub CI remains the blocking

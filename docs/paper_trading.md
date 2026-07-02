@@ -99,6 +99,58 @@ broker.set_mark("BTC-PERP", Decimal("50000"))
 # Set container._broker = broker before calling container.create_bot()
 ```
 
+## Stage 1 Paper Loop — One Honest Day
+
+The Stage 1 loop from [Direction](DIRECTION.md) — propose, review, paper-execute,
+attribute, report — can be run today as an operator procedure on real market
+data with no credentials and no broker access. Running it end to end is the
+project's ground truth: a component is trusted when its output shows up in the
+artifacts this loop produces (snapshots, audit events, closeouts, the report).
+
+The automated offline equivalent runs in CI and locally via `make stage1-smoke`
+(`scripts/ops/stage1_rails_smoke.py`), so the loop cannot silently break. The
+manual day below adds the real-data half.
+
+```bash
+# 0. Inspect the risk budget; attest account equity if unset (human action)
+uv run gpt-trader ideas budget show
+uv run gpt-trader ideas budget set --account-equity <equity> \
+  --actor <you> --reason "attest equity for paper day"
+
+# 1. Record the market view (read-only public candles -> snapshot artifact)
+uv run gpt-trader ideas snapshot build --from-coinbase \
+  --symbols BTC-USD,ETH-USD --granularity ONE_HOUR --lookback 200 \
+  --out var/data/snapshots/paper-day.json
+
+# 2. Propose from the recorded snapshot (deterministic proposer, ai actor)
+uv run gpt-trader ideas propose-baseline --snapshot var/data/snapshots/paper-day.json
+
+# 3. Review the queue and decide (human actions)
+uv run gpt-trader ideas queue-status
+uv run gpt-trader ideas list --state proposed
+uv run gpt-trader ideas show <decision-id>
+uv run gpt-trader ideas approve <decision-id> --actor <you> --reason "<why>"
+# ...or: ideas reject / ideas request-changes
+
+# 4. Export the ticket and paper-execute it by hand (no broker API calls)
+uv run gpt-trader ideas export-ticket --decision-id <decision-id> --venue manual
+uv run gpt-trader ideas mark-submitted <decision-id> --venue manual \
+  --external-order-id <paper-id> --actor <you> --actor-type human
+uv run gpt-trader ideas mark-filled <decision-id> --venue manual \
+  --external-order-id <paper-id> --actor <you>
+
+# 5. Attribute the outcome and close the day
+uv run gpt-trader ideas closeout record <decision-id> --resolution thesis_target \
+  --realized-profit-loss-amount <amount> --actor <you>
+uv run gpt-trader ideas report
+uv run gpt-trader ideas audit verify
+```
+
+Every step stamps an actor into the append-only audit log; proposals come from
+`ai` actors and approvals from `human` actors. None of these commands place,
+modify, or cancel broker orders. Ideas that expire unreviewed are swept with
+`uv run gpt-trader ideas expire`.
+
 ## Readiness Evidence Inputs
 
 Paper trading produces evidence that feeds the readiness checklist; it does not

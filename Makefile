@@ -72,6 +72,9 @@ test-guardrails:
 	uv run python scripts/ci/check_dedupe_manifest.py
 	$(MAKE) test-triage-check
 
+stage1-smoke:
+	uv run python scripts/ops/stage1_rails_smoke.py
+
 ci-required:
 	$(MAKE) lint
 	uv run ruff check scripts/ops scripts/analysis/backtest_runner.py scripts/monitoring scripts/production_preflight.py
@@ -82,6 +85,7 @@ ci-required:
 	uv run agent-regenerate --verify || echo "::warning::Agent artifacts stale (advisory; run 'uv run agent-regenerate' to refresh). Non-PR CI still enforces this."
 	$(MAKE) test-guardrails
 	GPT_TRADER_STRICT_CONTAINER=1 PYTHONWARNINGS=default uv run pytest tests/unit -n auto -q
+	$(MAKE) stage1-smoke
 
 legacy-patterns:
 	uv run python scripts/ci/check_legacy_patterns.py

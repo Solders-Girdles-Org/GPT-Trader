@@ -524,6 +524,12 @@ jobs:
         # cleanup_workspace.py --apply, which deletes a root-level coverage.json).
         run: uv run pytest tests/unit -n auto -q --cov=src/gpt_trader --cov-report="json:$PWD/var/results/coverage/coverage.json"
 
+      - name: Stage 1 rails end-to-end smoke
+        # Offline operator-lifecycle smoke: unit tests cover the parts, this
+        # covers the loop (propose -> approve -> ticket -> fill -> closeout ->
+        # audit verify) through the real CLI. No network or credentials.
+        run: uv run python scripts/ops/stage1_rails_smoke.py
+
       - name: Upload coverage artifact
         if: always()
         # actions/upload-artifact@v7
