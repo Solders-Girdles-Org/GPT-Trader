@@ -242,6 +242,43 @@ def test_cross_slice_allowlisted_edge_passes(tmp_path, monkeypatch, capsys) -> N
     assert "Import boundary guard passed." in captured.out
 
 
+def test_cross_slice_narrow_prefixes_allow_only_paper_brokerages(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    slice_root = _configure_cross_slice_rule(monkeypatch, tmp_path, "idea_execution")
+    _write_file(
+        tmp_path,
+        "src/gpt_trader/features/idea_execution/executor.py",
+        "from gpt_trader.features.brokerages.mock import DeterministicBroker\n"
+        "from gpt_trader.features.brokerages.paper import HybridPaperBroker\n"
+        "from gpt_trader.features.trade_ideas import TradeIdeaService\n",
+    )
+
+    result = check_import_boundaries.scan([str(slice_root)])
+    captured = capsys.readouterr()
+
+    assert result == 0
+    assert "Import boundary guard passed." in captured.out
+
+
+def test_cross_slice_narrow_prefixes_reject_live_brokerage_import(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    slice_root = _configure_cross_slice_rule(monkeypatch, tmp_path, "idea_execution")
+    _write_file(
+        tmp_path,
+        "src/gpt_trader/features/idea_execution/live_leak.py",
+        "from gpt_trader.features.brokerages.coinbase.client import CoinbaseClient\n",
+    )
+
+    result = check_import_boundaries.scan([str(slice_root)])
+    captured = capsys.readouterr()
+
+    assert result == 1
+    assert "imports gpt_trader.features.brokerages.coinbase.client.CoinbaseClient" in captured.out
+    assert "CROSS_SLICE_ALLOWED_EDGES" in captured.out
+
+
 def test_cross_slice_new_edge_fails_with_allowlist_pointer(tmp_path, monkeypatch, capsys) -> None:
     slice_root = _configure_cross_slice_rule(monkeypatch, tmp_path, "data")
     _write_file(
@@ -265,6 +302,10 @@ def test_cross_slice_allowlist_is_frozen_topology() -> None:
     # one is progress and should just update this test.
     assert check_import_boundaries.CROSS_SLICE_ALLOWED_EDGES == frozenset(
         {
+            # Paper execution lane consumes APPROVED ideas and drives paper/mock
+            # brokers only (docs/decisions/adopt-five-role-composition.md).
+            ("idea_execution", "trade_ideas"),
+            ("idea_execution", "brokerages"),
             ("intelligence", "live_trade"),
             ("live_trade", "brokerages"),
             ("live_trade", "intelligence"),
@@ -277,6 +318,28 @@ def test_cross_slice_allowlist_is_frozen_topology() -> None:
             ("strategy_tools", "trade_ideas"),
         }
     )
+
+
+def test_cross_slice_narrow_import_prefixes_are_frozen() -> None:
+    assert check_import_boundaries.CROSS_SLICE_NARROW_IMPORT_PREFIXES == frozenset(
+        {
+            (
+                "idea_execution",
+                "brokerages",
+                "gpt_trader.features.brokerages.mock",
+            ),
+            (
+                "idea_execution",
+                "brokerages",
+                "gpt_trader.features.brokerages.paper",
+            ),
+        }
+    )
+
+
+def test_cross_slice_narrow_import_prefixes_have_topology_edges() -> None:
+    for source, target, _prefix in check_import_boundaries.CROSS_SLICE_NARROW_IMPORT_PREFIXES:
+        assert (source, target) in check_import_boundaries.CROSS_SLICE_ALLOWED_EDGES
 
 
 def test_trade_ideas_allowed_prefixes_are_frozen() -> None:
