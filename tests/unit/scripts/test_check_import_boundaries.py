@@ -265,6 +265,10 @@ def test_cross_slice_allowlist_is_frozen_topology() -> None:
     # one is progress and should just update this test.
     assert check_import_boundaries.CROSS_SLICE_ALLOWED_EDGES == frozenset(
         {
+            # Paper execution lane consumes APPROVED ideas and drives paper/mock
+            # brokers only (docs/decisions/adopt-five-role-composition.md).
+            ("idea_execution", "trade_ideas"),
+            ("idea_execution", "brokerages"),
             ("intelligence", "live_trade"),
             ("live_trade", "brokerages"),
             ("live_trade", "intelligence"),
