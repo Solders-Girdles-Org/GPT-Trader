@@ -111,9 +111,8 @@ those check names stable.
 
 | Check / workflow job | Tier | Trigger | Blocking status | Why it exists |
 | --- | --- | --- | --- | --- |
-| `CI` / `Lint & Format`, `Docs Link Audit`, `Type Check`, `Test Guardrails`, `Unit Tests (Core)`, `Property Tests`, `Contract Tests` | Required merge safety | `pull_request`, `merge_group`, push to `main`/`develop`, manual | Required by `main` branch protection | Fast repo integrity, docs reachability, type checks, and core test coverage |
+| `CI` / `Lint & Format`, `Docs Link Audit`, `Type Check`, `Test Guardrails`, `Unit Tests (Core)`, `Property Tests`, `Contract Tests`, `Integration Tests` | Required merge safety | `pull_request`, `merge_group`, push to `main`/`develop`, manual | Required by `main` branch protection | Fast repo integrity, docs reachability, type checks, and core/integration test coverage |
 | `CI` / `Agent Health` | Advisory PR health | Same as `CI` | Not branch-protection required | Publishes an agent-health report without defining merge eligibility |
-| `CI` / `Integration Tests` | Advisory PR health | Same as `CI` | Not branch-protection required | Runs the mock-broker integration suite (`tests/integration`, excluding `slow`/`real_api`) on every PR; needs no secrets |
 | `CI` / `Agent Artifacts Freshness` | Generated artifact advisory on PR; blocking outside PR | Same as `CI` | Not branch-protection required; exits successfully with a warning on `pull_request`, fails on non-PR events when stale | Shows when `var/agents/**` needs regeneration without stalling ordinary PRs |
 | `CI` / `Windows Unit Tests (Portability)` and `Dependency Review` | Event/compatibility advisory | Windows follows `CI`; dependency review is `pull_request` only | Not branch-protection required | Covers Windows-sensitive units and high-severity dependency changes |
 | `CodeQL` / `Analyze Python` | Scheduled/security advisory | Push/PR to `main`/`develop`; weekly Monday 06:00 UTC | Not branch-protection required | GitHub code scanning |
