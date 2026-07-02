@@ -20,6 +20,7 @@ from .system import (
     check_system_time,
 )
 from .test_suite import check_test_suite
+from .trade_ideas import check_trade_ideas_readiness
 
 __all__ = [
     "check_python_version",
@@ -33,6 +34,7 @@ __all__ = [
     "check_pretrade_diagnostics",
     "check_event_store_redaction",
     "check_readiness_report",
+    "check_trade_ideas_readiness",
     "check_test_suite",
     "check_profile_configuration",
     "simulate_dry_run",

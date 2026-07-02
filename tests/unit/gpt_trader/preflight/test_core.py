@@ -91,6 +91,7 @@ class TestPreflightCheckDelegations:
             ("check_risk_configuration", "check_risk_configuration", True),
             ("check_pretrade_diagnostics", "check_pretrade_diagnostics", True),
             ("check_readiness_report", "check_readiness_report", True),
+            ("check_trade_ideas_readiness", "check_trade_ideas_readiness", True),
             ("check_event_store_redaction", "check_event_store_redaction", True),
             ("check_test_suite", "check_test_suite", True),
             ("check_profile_configuration", "check_profile_configuration", True),
