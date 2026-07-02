@@ -12,6 +12,7 @@ from gpt_trader.features.trade_ideas import (
     RiskBudgetLog,
     TradeIdeaService,
     TradeIdeaState,
+    TradeIdeaStore,
     resolve_ideas_root,
 )
 
@@ -80,6 +81,20 @@ def _validate_audit_record_references(
         service.load_record_version(event.decision_id, event.record_hash)
 
 
+def _orphaned_decision_ids(ideas_root: Path, events: list[AuditEvent]) -> list[str]:
+    """Return stored decision ids that no audit event references.
+
+    The service treats a persisted record without an audit trail as corrupt
+    (``get()``/``list_view_result()`` raise ``AuditIntegrityError``), so the
+    readiness check must fail on the same state instead of reporting READY.
+    """
+    audited = {event.decision_id for event in events}
+    store = TradeIdeaStore(ideas_root / "records")
+    return sorted(
+        decision_id for decision_id in store.list_decision_ids() if decision_id not in audited
+    )
+
+
 def _check_cli_surface(checker: PreflightCheck, details: dict[str, str]) -> bool:
     try:
         from gpt_trader.cli.commands.ideas import register as register_ideas_cli
@@ -145,6 +160,13 @@ def check_trade_ideas_readiness(checker: PreflightCheck) -> bool:
             checker.log_error(f"Trade ideas audit records unreadable: {exc}", details=details)
             all_good = False
         else:
+            orphaned = _orphaned_decision_ids(ideas_root, events)
+            if orphaned:
+                checker.log_error(
+                    "Trade ideas records missing audit trail: " + ", ".join(orphaned),
+                    details={**details, "orphaned_decision_ids": ", ".join(orphaned)},
+                )
+                all_good = False
             event_details = {**details, "event_count": len(events)}
             checker.log_success(
                 f"Trade ideas audit verified at {audit_path}: {len(events)} event(s)",

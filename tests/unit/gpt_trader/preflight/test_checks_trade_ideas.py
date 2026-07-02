@@ -16,6 +16,7 @@ from gpt_trader.features.trade_ideas import (
     TradeIdeaAuditLog,
     TradeIdeaService,
     TradeIdeaState,
+    TradeIdeaStore,
     new_event_id,
 )
 from gpt_trader.preflight.checks.trade_ideas import check_trade_ideas_readiness
@@ -161,6 +162,23 @@ def test_trade_ideas_readiness_fails_when_audit_record_is_missing(
     result = _failed_result(checker, "audit record integrity failed")
     assert result["details"]["ideas_root"] == str(ideas_root)
     assert result["details"]["audit_path"] == str(ideas_root / "audit.jsonl")
+
+
+def test_trade_ideas_readiness_fails_when_stored_record_has_no_audit_trail(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ideas_root = tmp_path / "trade_ideas"
+    _seed_budget(ideas_root)
+    orphan = build_trade_idea(decision_id="trade-20260612-orphaned-record")
+    TradeIdeaStore(ideas_root / "records").save(orphan)
+    monkeypatch.setenv("GPT_TRADER_IDEAS_ROOT", str(ideas_root))
+
+    checker = PreflightCheck(profile="dev")
+
+    assert check_trade_ideas_readiness(checker) is False
+    result = _failed_result(checker, "records missing audit trail")
+    assert "trade-20260612-orphaned-record" in result["message"]
+    assert result["details"]["orphaned_decision_ids"] == "trade-20260612-orphaned-record"
 
 
 def test_trade_ideas_readiness_fails_when_budget_is_missing(
