@@ -37,6 +37,9 @@ def test_budget_show_seeds_defaults_and_budget_set_bumps_version(
     assert exit_code == 0
     assert response["data"]["version"] == 1
     assert response["data"]["max_loss_per_idea_pct"] == "5"
+    assert response["data"]["headroom"]["daily_loss_used_pct"] == "0"
+    assert response["data"]["headroom"]["daily_loss_headroom_pct"] == "10"
+    assert response["data"]["headroom"]["open_notional"] == "0"
 
     exit_code, response = _run_json(
         capsys,

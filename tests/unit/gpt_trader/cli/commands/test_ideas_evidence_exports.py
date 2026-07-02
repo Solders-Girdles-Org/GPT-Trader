@@ -22,6 +22,7 @@ from gpt_trader.features.trade_ideas.report import (
     build_trade_idea_track_record_report,
 )
 from gpt_trader.features.trade_ideas.service import TradeIdeaService
+from tests.unit.gpt_trader.cli.commands.conftest import attest_account_equity
 from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
 
 
@@ -61,6 +62,7 @@ def _root_args(root: Path, *, output_format: str = "json") -> list[str]:
 def _seed_evidence_store(root: Path) -> TradeIdeaService:
     current_time = [datetime(2026, 5, 7, 12, 0, tzinfo=UTC)]
     service = TradeIdeaService(root, now_factory=lambda: current_time[0])
+    attest_account_equity(service)
 
     filled = _idea("trade-evidence-filled")
     service.propose(

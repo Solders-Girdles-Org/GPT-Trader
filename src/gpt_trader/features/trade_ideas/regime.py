@@ -33,6 +33,7 @@ from gpt_trader.features.trade_ideas.models import (
     SizingRecommendation,
     TradeIdea,
 )
+from gpt_trader.features.trade_ideas.sizing import TradeIdeaPositionSizingBridge
 from gpt_trader.features.trade_ideas.snapshot import MarketSnapshot, SymbolSeries
 
 REGIME_DETECTOR_VERSION = "market-regime-detector-v1"
@@ -69,9 +70,13 @@ class RegimeAwareProposer:
         config: RegimeAwareProposerConfig | None = None,
         *,
         detector_factory: RegimeDetectorFactory = MarketRegimeDetector,
+        sizing_bridge: TradeIdeaPositionSizingBridge | None = None,
     ) -> None:
         self._config = config or RegimeAwareProposerConfig()
-        self._baseline = BaselineProposer(self._config.baseline_config)
+        self._baseline = BaselineProposer(
+            self._config.baseline_config,
+            sizing_bridge=sizing_bridge,
+        )
         self._detector_factory = detector_factory
         self._config_fingerprint = _regime_config_fingerprint(self._config.regime_config)
         self._identity_fingerprint = _proposer_config_fingerprint(self._config)

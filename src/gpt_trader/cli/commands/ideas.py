@@ -12,7 +12,7 @@ import asyncio
 import hashlib
 import json
 from argparse import ArgumentParser, Namespace
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
@@ -62,8 +62,12 @@ from gpt_trader.features.trade_ideas import (
     TradeIdeaListQuery,
     TradeIdeaListResult,
     TradeIdeaListSortKey,
+    TradeIdeaPositionSizingBridge,
     TradeIdeaReplayRunner,
     TradeIdeaService,
+    TradeIdeaSizingConfig,
+    TradeIdeaSizingContext,
+    TradeIdeaSizingOutput,
     TradeIdeaState,
     UnknownTradeIdeaError,
     canonical_granularity,
@@ -105,6 +109,7 @@ BUDGET_FIELDS = (
     "gain_retention_floor_pct",
     "allow_futures_leverage",
     "allow_naked_shorts",
+    "account_equity",
 )
 
 
@@ -794,6 +799,14 @@ def register(subparsers: Any) -> None:
         choices=("true", "false"),
         help="Whether naked shorts are permitted",
     )
+    budget_set.add_argument(
+        "--account-equity",
+        type=_non_negative_decimal_value,
+        help=(
+            "Operator-attested account equity; denominator for the "
+            "max_open_notional_pct approval gate"
+        ),
+    )
     budget_set.set_defaults(handler=_handle_budget_set, subcommand="budget set")
 
     audit = ideas_subparsers.add_parser("audit", help="Read and verify the audit log")
@@ -1122,32 +1135,63 @@ def _handle_propose(args: Namespace) -> CliResponse:
     return _success(command, args, payload, text, warnings=warning_messages)
 
 
+class _LazyBudgetSizingBridge(TradeIdeaPositionSizingBridge):
+    """Defer the budget read (and its seed-on-first-use side effect) until a
+    candidate actually needs sizing, so no-signal baseline runs stay read-only."""
+
+    def __init__(self, service: TradeIdeaService) -> None:
+        self._budget_service = service
+        self._delegate: TradeIdeaPositionSizingBridge | None = None
+
+    def recommend(self, context: TradeIdeaSizingContext) -> TradeIdeaSizingOutput:
+        if self._delegate is None:
+            budget = self._budget_service.current_budget()
+            # Operator-attested equity must denominate sizing the same way the
+            # approval gate uses it; otherwise max_loss percentages are computed
+            # against the bridge's default equity while approve() compares them
+            # to caps on the attested account.
+            if budget.account_equity is not None:
+                sizing_config = TradeIdeaSizingConfig(
+                    equity=budget.account_equity,
+                    risk_budget=budget,
+                )
+            else:
+                sizing_config = TradeIdeaSizingConfig(risk_budget=budget)
+            self._delegate = TradeIdeaPositionSizingBridge(sizing_config)
+        return self._delegate.recommend(context)
+
+
 def _handle_propose_baseline(args: Namespace) -> CliResponse:
-    return _handle_propose_from_snapshot(args, "ideas propose-baseline", BaselineProposer())
+    return _handle_propose_from_snapshot(
+        args,
+        "ideas propose-baseline",
+        lambda service: BaselineProposer(sizing_bridge=_LazyBudgetSizingBridge(service)),
+    )
 
 
 def _handle_propose_regime_aware(args: Namespace) -> CliResponse:
     return _handle_propose_from_snapshot(
         args,
         "ideas propose-regime-aware",
-        RegimeAwareProposer(),
+        lambda service: RegimeAwareProposer(sizing_bridge=_LazyBudgetSizingBridge(service)),
     )
 
 
 def _handle_propose_from_snapshot(
     args: Namespace,
     command: str,
-    proposer: Proposer,
+    proposer_factory: Callable[[TradeIdeaService], Proposer],
 ) -> CliResponse:
     try:
         snapshot = _load_market_snapshot(args.snapshot)
+        service = _service(args)
+        proposer = proposer_factory(service)
         ideas = proposer.propose(snapshot)
         if not ideas:
             payload = _proposer_payload(snapshot, proposer.proposer_id, [])
             text = _status_line(command, "OK", "0 proposals")
             return _success(command, args, payload, text, was_noop=True)
 
-        service = _service(args)
         proposal_batch = tuple(ideas)
         service.validate_new_proposals(proposal_batch)
         previews = [service.approval_violations(idea, actor_type=ActorType.HUMAN) for idea in ideas]
@@ -1932,10 +1976,13 @@ def _handle_reconcile_paper_fills(args: Namespace) -> CliResponse:
 def _handle_budget_show(args: Namespace) -> CliResponse:
     command = "ideas budget show"
     try:
-        budget = _service(args).current_budget()
+        service = _service(args)
+        budget = service.current_budget()
+        budget_headroom = service.budget_headroom()
     except Exception as error:
         return _mapped_error(command, args, error)
     payload = budget.to_dict()
+    payload["headroom"] = budget_headroom
     text = _budget_text(payload)
     return _success(command, args, payload, text)
 
