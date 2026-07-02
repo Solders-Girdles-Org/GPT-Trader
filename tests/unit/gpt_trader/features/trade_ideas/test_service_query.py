@@ -5,7 +5,10 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
+from tests.unit.gpt_trader.features.trade_ideas.conftest import (
+    attest_account_equity,
+    build_trade_idea,
+)
 
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.trade_ideas import (
@@ -105,6 +108,7 @@ def test_queue_status_counts_pending_states_and_upcoming_expirations(
     service.request_changes(change.decision_id, actor_id="rj", reason="Tighten risk")
     service.propose(later, actor_id="idea-generator-v1")
     service.propose(approved, actor_id="idea-generator-v1")
+    attest_account_equity(service)
     service.approve(approved.decision_id, actor_id="rj", reason="Risk verified")
 
     status = service.queue_status(warning_window_hours=6)
