@@ -215,6 +215,25 @@ class TestExecuteApprovedLeg:
         (executed,) = second.execution.executed
         assert executed["decision_id"] == decision_id
 
+    def test_approval_during_snapshot_fetch_waits_for_the_next_turn(
+        self, cycle_service: TradeIdeaService, tmp_path: Path
+    ) -> None:
+        # The snapshot fetch is the slowest part of a real --from-coinbase
+        # turn; an approval landing during it must also wait for the next
+        # turn, so candidates are captured before the provider is called.
+        decision_id = "trade-20260703-cycle-fetch-race"
+        cycle_service.propose(build_cycle_idea(decision_id), actor_id="test-proposer")
+
+        def approving_provider():
+            cycle_service.approve(
+                decision_id, actor_id="test-operator", reason="approval during fetch"
+            )
+            return snapshot(crossover_series("BTC-USD")), "test:fixture:slow-fetch"
+
+        result = make_cycle_runner(cycle_service, tmp_path, proposers=[]).run(approving_provider)
+        assert result.execution.executed == ()
+        assert cycle_service.get(decision_id).state is TradeIdeaState.APPROVED
+
     def test_cancelled_during_turn_is_recorded_not_executed(
         self, cycle_service: TradeIdeaService, tmp_path: Path
     ) -> None:

@@ -219,10 +219,6 @@ class PaperCycleRunner:
         run_dir = self._cycle_root / "runs" / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
 
-        snapshot, snapshot_reference = snapshot_provider()
-        snapshot_info = self._persist_snapshot(snapshot, snapshot_reference, run_dir)
-        row["snapshot"] = snapshot_info
-
         expired_views = self._service.expire_due_ideas(
             actor_id=self._actor_id,
             reason="paper-cycle expiry sweep",
@@ -231,13 +227,19 @@ class PaperCycleRunner:
         expired_decision_ids = tuple(view.idea.decision_id for view in expired_views)
         row["expired_decision_ids"] = list(expired_decision_ids)
 
-        # Capture the execution candidates before the proposer leg: the
-        # approval CLI does not take the cycle lock, so an idea approved while
-        # this turn is running must wait for the next turn — approval lands
-        # between turns, never inside one.
+        # Capture the execution candidates before any slow turn work — the
+        # snapshot fetch is a network call and the approval CLI does not take
+        # the cycle lock, so an approval landing anywhere inside the turn must
+        # wait for the next turn: approval lands between turns, never inside
+        # one. Only the local expiry sweep runs first, so already-stale ideas
+        # are not captured.
         approved_before_turn = tuple(
             view.idea.decision_id for view in self._service.list_views(TradeIdeaState.APPROVED)
         )
+
+        snapshot, snapshot_reference = snapshot_provider()
+        snapshot_info = self._persist_snapshot(snapshot, snapshot_reference, run_dir)
+        row["snapshot"] = snapshot_info
 
         proposer_turns: list[ProposerTurn] = []
         for proposer in self._proposers:
