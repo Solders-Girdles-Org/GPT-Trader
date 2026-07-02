@@ -17,6 +17,7 @@ from gpt_trader.features.trade_ideas import (
     TimeHorizon,
     TradeIdea,
     TradeIdeaReplayRunner,
+    TradeIdeaReplayTournamentRunner,
 )
 
 AS_OF = datetime(2026, 6, 12, 12, 0, tzinfo=UTC)
@@ -182,6 +183,102 @@ def test_replay_runner_scores_baseline_proposer_on_historical_candles() -> None:
     assert report.ideas[0].outcome is ReplayOutcome.TARGET_HIT
     assert report.ideas[0].levels.stop == Decimal("102.50")
     assert report.ideas[0].levels.target == Decimal("125.00")
+
+
+def test_replay_tournament_ranks_proposers_on_shared_window() -> None:
+    candles = (
+        candle(-8, open_="100", close="100", high="100", low="100"),
+        candle(-7, open_="100", close="100", high="100", low="100"),
+        candle(-6, open_="100", close="100", high="100", low="100"),
+        candle(-5, open_="100", close="100", high="100", low="100"),
+        candle(-4, open_="110", close="110", high="110", low="110"),
+        candle(-3, open_="90", close="90", high="90", low="90"),
+        candle(-2, open_="112", close="112", high="112", low="112"),
+        candle(-1, open_="112", close="112", high="113", low="112"),
+        candle(0, open_="132", close="132", high="132", low="132"),
+    )
+
+    report = TradeIdeaReplayTournamentRunner(
+        (
+            BaselineProposer(
+                BaselineProposerConfig(
+                    short_window=2,
+                    long_window=4,
+                    crossover_lookback=1,
+                    expiry_hours=3,
+                )
+            ),
+            BaselineProposer(
+                BaselineProposerConfig(
+                    short_window=3,
+                    long_window=5,
+                    crossover_lookback=1,
+                    expiry_hours=3,
+                )
+            ),
+        ),
+        config=ReplayRunnerConfig(source="fixture:candles", min_history=6),
+    ).run_series(symbol="BTC-USD", granularity="ONE_HOUR", candles=candles)
+
+    assert {item.snapshots_evaluated for item in report.reports} == {3}
+    assert [ranking.proposer_id for ranking in report.rankings] == [
+        "baseline-ma-3-5",
+        "baseline-ma-2-4",
+    ]
+    assert report.rankings[0].average_return_r == Decimal("2")
+    assert report.rankings[0].target_hit_rate == Decimal("1")
+    assert report.to_dict()["rankings"][0]["eligibility_pass_rate"] == "1"
+
+
+def test_replay_tournament_computes_eligibility_pass_rate() -> None:
+    class MixedEligibilityProposer:
+        proposer_id = "mixed-eligibility"
+
+        def propose(self, snapshot: MarketSnapshot) -> list[TradeIdea]:
+            horizon = TimeHorizon(
+                expected_hold="1-4 hours",
+                expires_at=snapshot.as_of + timedelta(hours=4),
+            )
+            # Asymmetric 3:1 split so an inverted eligible/ineligible
+            # calculation (0.25) cannot masquerade as the correct 0.75.
+            return [
+                scoreable_idea(
+                    decision_id="trade-20260612-eligible-a",
+                    time_horizon=horizon,
+                ),
+                scoreable_idea(
+                    decision_id="trade-20260612-eligible-b",
+                    time_horizon=horizon,
+                ),
+                scoreable_idea(
+                    decision_id="trade-20260612-eligible-c",
+                    time_horizon=horizon,
+                ),
+                scoreable_idea(
+                    decision_id="trade-20260612-missing-data-used",
+                    data_used=(),
+                    time_horizon=horizon,
+                ),
+            ]
+
+    report = TradeIdeaReplayTournamentRunner(
+        (MixedEligibilityProposer(),),
+        config=ReplayRunnerConfig(source="fixture:candles", min_history=1),
+    ).run_series(
+        symbol="BTC-USD",
+        granularity="ONE_HOUR",
+        candles=(
+            candle(-1, high="102", low="100", close="101"),
+            candle(0, high="114", low="101", close="113"),
+        ),
+    )
+
+    assert report.rankings[0].eligibility_pass_rate == Decimal("0.75")
+    assert report.to_dict()["rankings"][0]["eligibility_pass_rate"] == "0.75"
+    report_payload = report.reports[0].to_dict()
+    assert report_payload["eligibility_checked"] == 4
+    assert report_payload["eligibility_passed"] == 3
+    assert report_payload["eligibility_pass_rate"] == "0.75"
 
 
 def test_replay_runner_config_rejects_non_positive_min_history() -> None:

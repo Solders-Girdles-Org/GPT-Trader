@@ -58,12 +58,14 @@ from gpt_trader.features.trade_ideas import (
     RegimeAwareProposerConfig,
     ReplayReport,
     ReplayRunnerConfig,
+    ReplayTournamentReport,
     TradeDirection,
     TradeIdeaListQuery,
     TradeIdeaListResult,
     TradeIdeaListSortKey,
     TradeIdeaPositionSizingBridge,
     TradeIdeaReplayRunner,
+    TradeIdeaReplayTournamentRunner,
     TradeIdeaService,
     TradeIdeaSizingConfig,
     TradeIdeaSizingContext,
@@ -569,6 +571,72 @@ def register(subparsers: Any) -> None:
         handler=_handle_replay_regime_aware,
         subcommand="replay regime-aware",
     )
+
+    tournament = replay_subparsers.add_parser(
+        "tournament",
+        help="Replay multiple proposers head-to-head over candle history",
+        description=(
+            "Feed one local OHLCV candle fixture to multiple registered proposers "
+            "and rank their replay results. This command is broker-free and read-only."
+        ),
+    )
+    _add_output_options(tournament)
+    tournament.add_argument(
+        "--file",
+        "--fixture",
+        dest="file",
+        type=Path,
+        required=True,
+        help="JSON fixture with a top-level candles array of OHLCV bars",
+    )
+    tournament.add_argument("--symbol", required=True, help="Symbol represented by the candles")
+    tournament.add_argument(
+        "--granularity",
+        required=True,
+        help="Candle granularity, for example ONE_HOUR, 1H, or 1D",
+    )
+    tournament.add_argument(
+        "--source",
+        default="fixture:candles",
+        help="Source label stamped into point-in-time replay snapshots",
+    )
+    tournament.add_argument(
+        "--proposers",
+        required=True,
+        help=("Comma-separated proposer ids, for example " "baseline-ma-2-4,baseline-ma-3-5"),
+    )
+    tournament.add_argument(
+        "--min-history",
+        type=_positive_int_value,
+        help=(
+            "Minimum historical candles before evaluating snapshots "
+            "(default: max required history across proposer ids)"
+        ),
+    )
+    tournament.add_argument("--crossover-lookback", type=_positive_int_value, default=3)
+    tournament.add_argument(
+        "--risk-per-idea-pct",
+        type=_non_negative_decimal_value,
+        default=Decimal("2"),
+    )
+    tournament.add_argument(
+        "--entry-band-pct",
+        type=_positive_decimal_value,
+        default=Decimal("1"),
+    )
+    tournament.add_argument(
+        "--reward-multiple",
+        type=_positive_decimal_value,
+        default=Decimal("2"),
+    )
+    tournament.add_argument("--expiry-hours", type=_positive_int_value, default=48)
+    tournament.add_argument("--expected-hold", default="5-15 days")
+    tournament.add_argument(
+        "--price-precision",
+        type=_positive_decimal_value,
+        default=Decimal("0.01"),
+    )
+    tournament.set_defaults(handler=_handle_replay_tournament, subcommand="replay tournament")
 
     closeout = ideas_subparsers.add_parser(
         "closeout",
@@ -1114,6 +1182,90 @@ def _resolve_replay_min_history(
             field="min_history",
         )
     return requested_min_history
+
+
+def _resolve_tournament_min_history(
+    args: Namespace,
+    configs: list[BaselineProposerConfig],
+) -> int:
+    minimum_history = max(_default_replay_min_history(config) for config in configs)
+    requested_min_history = cast(int | None, args.min_history)
+    if requested_min_history is None:
+        return minimum_history
+    if requested_min_history < minimum_history:
+        raise CandleInputError(
+            f"--min-history must be at least {minimum_history} for selected proposers",
+            field="min_history",
+        )
+    return requested_min_history
+
+
+def _baseline_replay_config_from_args(
+    args: Namespace,
+    *,
+    short_window: int,
+    long_window: int,
+) -> BaselineProposerConfig:
+    return BaselineProposerConfig(
+        short_window=short_window,
+        long_window=long_window,
+        crossover_lookback=args.crossover_lookback,
+        risk_per_idea_pct=args.risk_per_idea_pct,
+        entry_band_pct=args.entry_band_pct,
+        reward_multiple=args.reward_multiple,
+        expiry_hours=args.expiry_hours,
+        expected_hold=args.expected_hold,
+        price_precision=args.price_precision,
+    )
+
+
+def _tournament_baseline_configs(args: Namespace) -> list[BaselineProposerConfig]:
+    configs: list[BaselineProposerConfig] = []
+    seen: set[str] = set()
+    proposer_ids = [item.strip() for item in args.proposers.split(",") if item.strip()]
+    if not proposer_ids:
+        raise CandleInputError(
+            "--proposers must include at least one proposer id", field="proposers"
+        )
+    for proposer_id in proposer_ids:
+        if proposer_id in seen:
+            raise CandleInputError(
+                f"Duplicate proposer id: {proposer_id}",
+                field="proposers",
+            )
+        seen.add(proposer_id)
+        configs.append(_baseline_config_from_proposer_id(args, proposer_id))
+    return configs
+
+
+def _baseline_config_from_proposer_id(
+    args: Namespace,
+    proposer_id: str,
+) -> BaselineProposerConfig:
+    parts = proposer_id.split("-")
+    if len(parts) != 4 or parts[0] != "baseline" or parts[1] != "ma":
+        raise CandleInputError(
+            ("Unsupported proposer id " f"'{proposer_id}'; expected baseline-ma-<short>-<long>"),
+            field="proposers",
+        )
+    try:
+        short_window = int(parts[2])
+        long_window = int(parts[3])
+    except ValueError as error:
+        raise CandleInputError(
+            ("Unsupported proposer id " f"'{proposer_id}'; expected numeric MA windows"),
+            field="proposers",
+        ) from error
+    if short_window <= 0 or long_window <= 0:
+        raise CandleInputError(
+            f"Unsupported proposer id '{proposer_id}'; MA windows must be positive",
+            field="proposers",
+        )
+    return _baseline_replay_config_from_args(
+        args,
+        short_window=short_window,
+        long_window=long_window,
+    )
 
 
 def _validate_replay_granularity(granularity: str) -> None:
@@ -1678,6 +1830,29 @@ def _handle_replay_regime_aware(args: Namespace) -> CliResponse:
     payload = report.to_dict()
     text = _replay_report_text(report, command=command)
     return _success(command, args, payload, text, was_noop=report.ideas_proposed == 0)
+
+
+def _handle_replay_tournament(args: Namespace) -> CliResponse:
+    command = "ideas replay tournament"
+    try:
+        _validate_replay_granularity(args.granularity)
+        candles = _load_candle_fixture(args.file)
+        proposer_configs = _tournament_baseline_configs(args)
+        min_history = _resolve_tournament_min_history(args, proposer_configs)
+        report = TradeIdeaReplayTournamentRunner(
+            [BaselineProposer(config) for config in proposer_configs],
+            config=ReplayRunnerConfig(source=args.source, min_history=min_history),
+        ).run_series(symbol=args.symbol, granularity=args.granularity, candles=candles)
+    except CandleInputError as error:
+        return _input_error(command, args, error)
+    except Exception as error:
+        return _mapped_error(command, args, error)
+
+    payload = report.to_dict()
+    text = _replay_tournament_text(report)
+    return _success(
+        command, args, payload, text, was_noop=all(r.ideas_proposed == 0 for r in report.reports)
+    )
 
 
 def _handle_closeout_record(args: Namespace) -> CliResponse:
@@ -2721,6 +2896,37 @@ def _replay_report_text(report: ReplayReport, *, command: str = "ideas replay ba
             ),
         ]
     )
+
+
+def _replay_tournament_text(report: ReplayTournamentReport) -> str:
+    lines = [
+        _status_line(
+            "ideas replay tournament",
+            "OK",
+            (
+                f"{report.symbol} {report.granularity}, "
+                f"snapshots={report.snapshots_evaluated}, "
+                f"proposers={len(report.reports)}"
+            ),
+        ),
+        "RANK  PROPOSER_ID  IDEAS  RESOLVED  TARGET_HIT_RATE  STOP_HIT_RATE  AVG_R",
+    ]
+    for ranking in report.rankings:
+        average_return_r = (
+            ranking.average_return_r.normalize() if ranking.average_return_r is not None else "n/a"
+        )
+        lines.append(
+            "{rank}  {proposer_id}  {ideas}  {resolved}  {target}  {stop}  {avg_r}".format(
+                rank=ranking.rank,
+                proposer_id=ranking.proposer_id,
+                ideas=ranking.ideas_proposed,
+                resolved=ranking.resolved_ideas,
+                target=_decimal_pct(ranking.target_hit_rate),
+                stop=_decimal_pct(ranking.stop_hit_rate),
+                avg_r=average_return_r,
+            )
+        )
+    return "\n".join(lines)
 
 
 def _decimal_pct(value: Decimal) -> str:
