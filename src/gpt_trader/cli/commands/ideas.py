@@ -342,6 +342,25 @@ def register(subparsers: Any) -> None:
     )
     list_parser.set_defaults(handler=_handle_list, subcommand="list")
 
+    queue_status = ideas_subparsers.add_parser(
+        "queue-status",
+        help="Report pending trade-idea review queue health",
+        description=(
+            "Read-only queue health for pending approval review. "
+            "Counts proposed and needs-changes ideas, and reports ideas expiring "
+            "inside the warning window. This command never contacts a broker or "
+            "mutates workflow state."
+        ),
+    )
+    _add_common_options(queue_status)
+    queue_status.add_argument(
+        "--warning-window-hours",
+        type=_non_negative_int_value,
+        default=24,
+        help="Warning window for upcoming pending expirations",
+    )
+    queue_status.set_defaults(handler=_handle_queue_status, subcommand="queue-status")
+
     show = ideas_subparsers.add_parser("show", help="Show one trade idea")
     _add_common_options(show)
     show.add_argument("decision_id", help="Trade idea decision identifier")
@@ -1474,6 +1493,26 @@ def _handle_list(args: Namespace) -> CliResponse:
     return _success(command, args, payload, text, was_noop=not ideas)
 
 
+def _handle_queue_status(args: Namespace) -> CliResponse:
+    command = "ideas queue-status"
+    try:
+        status = _service(args).queue_status(
+            warning_window_hours=args.warning_window_hours,
+        )
+    except Exception as error:
+        return _mapped_error(command, args, error)
+
+    payload = status.to_dict()
+    counts = cast(dict[str, int], payload["counts"])
+    return _success(
+        command,
+        args,
+        payload,
+        _queue_status_text(payload),
+        was_noop=counts["pending_total"] == 0,
+    )
+
+
 def _handle_show(args: Namespace) -> CliResponse:
     command = "ideas show"
     decision_id_error = _decision_id_error(command, args, args.decision_id)
@@ -2484,6 +2523,37 @@ def _ideas_table(ideas: list[dict[str, Any]]) -> str:
                 expires_at=idea["expires_at"] or "",
             )
         )
+    return "\n".join(lines)
+
+
+def _queue_status_text(payload: dict[str, Any]) -> str:
+    counts = payload["counts"]
+    lines = [
+        _status_line(
+            "ideas queue-status",
+            "OK",
+            (
+                f"pending={counts['pending_total']}, "
+                f"upcoming_expirations={counts['upcoming_expirations']}"
+            ),
+        ),
+        f"proposed: {counts['proposed']}",
+        f"needs_changes: {counts['needs_changes']}",
+    ]
+    expirations = payload["upcoming_expirations"]
+    if expirations:
+        lines.append("UPCOMING_EXPIRATIONS")
+        for expiration in expirations:
+            lines.append(
+                "{decision_id}  {state}  {instrument}  {deadline_type}  {expires_at}  {seconds}s".format(
+                    decision_id=expiration["decision_id"],
+                    state=expiration["state"],
+                    instrument=expiration["instrument"],
+                    deadline_type=expiration["deadline_type"],
+                    expires_at=expiration["expires_at"],
+                    seconds=expiration["seconds_until_expiry"],
+                )
+            )
     return "\n".join(lines)
 
 

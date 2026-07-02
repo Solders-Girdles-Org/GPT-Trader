@@ -12,7 +12,7 @@ import getpass
 import os
 import shutil
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, cast
@@ -61,6 +61,8 @@ from gpt_trader.features.trade_ideas.service_models import (
     TradeIdeaListResult,
     TradeIdeaListSortKey,
     TradeIdeaQueryPage,
+    TradeIdeaQueueExpiration,
+    TradeIdeaQueueStatus,
     TradeIdeaView,
     UnknownTradeIdeaError,
     _QueryItem,
@@ -917,6 +919,55 @@ class TradeIdeaService:
             has_more=start + len(page) < total_count,
         )
 
+    def queue_status(self, *, warning_window_hours: int = 24) -> TradeIdeaQueueStatus:
+        """Return read-only approval queue counts and upcoming pending expirations."""
+        if warning_window_hours < 0:
+            raise ValidationError(
+                "Trade idea queue warning_window_hours must be non-negative",
+                field="warning_window_hours",
+                value=warning_window_hours,
+            )
+
+        as_of = self._now()
+        window_end = as_of + timedelta(hours=warning_window_hours)
+        budget = self._budget_log.current() or DEFAULT_RISK_BUDGET
+        proposed = self.list_view_result(
+            TradeIdeaListQuery(
+                state=TradeIdeaState.PROPOSED,
+                sort_by=TradeIdeaListSortKey.EXPIRES_AT,
+            )
+        ).views
+        needs_changes = self.list_view_result(
+            TradeIdeaListQuery(
+                state=TradeIdeaState.NEEDS_CHANGES,
+                sort_by=TradeIdeaListSortKey.EXPIRES_AT,
+            )
+        ).views
+        upcoming_expirations: list[TradeIdeaQueueExpiration] = []
+        for view in (*proposed, *needs_changes):
+            expiration = _queue_expiration(
+                view,
+                as_of,
+                window_end,
+                budget,
+                review_started_at=self._review_started_at_from_events(view.events),
+            )
+            if expiration is not None:
+                upcoming_expirations.append(expiration)
+        upcoming = tuple(
+            sorted(
+                upcoming_expirations,
+                key=lambda expiration: (expiration.expires_at, expiration.decision_id),
+            )
+        )
+        return TradeIdeaQueueStatus(
+            as_of=as_of,
+            warning_window_hours=warning_window_hours,
+            proposed_count=len(proposed),
+            needs_changes_count=len(needs_changes),
+            upcoming_expirations=upcoming,
+        )
+
     def list_audit_events(
         self,
         *,
@@ -1386,6 +1437,41 @@ def _list_sort_value(
     if sort_by is TradeIdeaListSortKey.UPDATED_AT:
         return (view.events[-1].timestamp, idea.decision_id)
     return None
+
+
+def _queue_expiration(
+    view: TradeIdeaView,
+    as_of: datetime,
+    window_end: datetime,
+    budget: RiskBudget,
+    *,
+    review_started_at: datetime | None,
+) -> TradeIdeaQueueExpiration | None:
+    deadlines: list[tuple[str, datetime]] = []
+    horizon_expires_at = view.idea.time_horizon.expires_at
+    if horizon_expires_at is not None:
+        deadlines.append(("time_horizon", horizon_expires_at))
+    if review_started_at is not None:
+        review_deadline = review_started_at + timedelta(hours=budget.max_review_latency_hours)
+        deadlines.append(("review_latency", review_deadline))
+
+    upcoming = [
+        (deadline_type, expires_at)
+        for deadline_type, expires_at in deadlines
+        if expires_at <= window_end
+    ]
+    if not upcoming:
+        return None
+
+    deadline_type, expires_at = min(upcoming, key=lambda item: (item[1], item[0]))
+    return TradeIdeaQueueExpiration(
+        decision_id=view.idea.decision_id,
+        state=view.state,
+        instrument=view.idea.instrument,
+        expires_at=expires_at,
+        deadline_type=deadline_type,
+        seconds_until_expiry=max(0, int((expires_at - as_of).total_seconds())),
+    )
 
 
 def create_trade_idea_service(
