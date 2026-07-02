@@ -92,11 +92,24 @@ side deriving from it rather than carrying its own numbers.
 If Option A is accepted:
 
 - New derivation seam: engine startup resolves the active `RiskBudget` version
-  and seeds `RiskConfig.daily_loss_limit_pct` (from `max_daily_loss_pct`),
-  `max_exposure_pct` (from `max_open_notional_pct`), and futures permission
-  gating — with one normalization function owning the percent-points ↔
-  fraction conversion, and one definition of the trading day shared by the
-  approval gate (#1091's realized-loss window) and the runtime breaker.
+  and seeds `RiskConfig.daily_loss_limit_pct` (from `max_daily_loss_pct`) and
+  `max_exposure_pct` (from `max_open_notional_pct`) — with one normalization
+  function owning the percent-points ↔ fraction conversion, and one definition
+  of the trading day shared by the approval gate (#1091's realized-loss
+  window) and the runtime breaker.
+- Permissions derive too, as booleans gating numeric caps:
+  `allow_futures_leverage=false` forces the effective CFM leverage caps to 1x
+  (the numeric `cfm_*` magnitudes stay in `RiskConfig` as enforcement
+  parameters); `allow_naked_shorts` becomes the single source for
+  `BotConfig.enable_shorts`, which turns into a derived/transitional alias
+  like the other duplicated appetite fields.
+- Refresh semantics: runtime limits are seeded **at engine startup** from the
+  budget version current at that moment; a budget change mid-run takes effect
+  at approval time immediately but at runtime only after restart. The
+  derivation seam records the seeded budget version in startup telemetry so
+  the drift window is visible; live re-seeding without restart is explicitly
+  out of scope for the first cut (it would put a mutable control path into
+  the running risk manager).
 - `BotRiskConfig.daily_loss_limit_pct` and `max_leverage` become transitional
   aliases, then are removed.
 - Naming pass: `_pct` fields are normalized to one unit convention
