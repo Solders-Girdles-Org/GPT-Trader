@@ -1431,6 +1431,70 @@ class TradingEngine(BaseEngine):
             decision_trace=trace,
         )
 
+    # Thin delegates to engines/order_guards.py. They are deliberate class
+    # seams: controls_smoke and tests patch these method names to make the
+    # order path deterministic, so _validate_and_place_order must route
+    # through them rather than calling the module functions directly.
+    async def _check_degradation_gate(
+        self,
+        *,
+        symbol: str,
+        side: OrderSide,
+        price: Decimal,
+        trace: OrderDecisionTrace,
+        reduce_only_flag: bool,
+    ) -> OrderSubmissionResult | None:
+        return await check_degradation_gate(
+            self,
+            symbol=symbol,
+            side=side,
+            price=price,
+            trace=trace,
+            reduce_only_flag=reduce_only_flag,
+        )
+
+    def _calculate_quantity_and_record(
+        self,
+        *,
+        symbol: str,
+        side: OrderSide,
+        price: Decimal,
+        equity: Decimal,
+        quantity_override: Decimal | None,
+        trace: OrderDecisionTrace,
+    ) -> tuple[Decimal, OrderSubmissionResult | None]:
+        return calculate_quantity_and_record(
+            self,
+            symbol=symbol,
+            side=side,
+            price=price,
+            equity=equity,
+            quantity_override=quantity_override,
+            trace=trace,
+        )
+
+    async def _check_reduce_only_request(
+        self,
+        *,
+        symbol: str,
+        side: OrderSide,
+        quantity: Decimal,
+        price: Decimal,
+        reduce_only_requested: bool,
+        is_reducing: bool,
+        trace: OrderDecisionTrace,
+    ) -> OrderSubmissionResult | None:
+        return await check_reduce_only_request(
+            self,
+            symbol=symbol,
+            side=side,
+            quantity=quantity,
+            price=price,
+            reduce_only_requested=reduce_only_requested,
+            is_reducing=is_reducing,
+            trace=trace,
+        )
+
     async def _run_security_validation(
         self,
         *,
@@ -1448,6 +1512,72 @@ class TradingEngine(BaseEngine):
             quantity=quantity,
             price=price,
             equity=equity,
+            trace=trace,
+        )
+
+    async def _apply_reduce_only_mode(
+        self,
+        *,
+        symbol: str,
+        side: OrderSide,
+        price: Decimal,
+        quantity: Decimal,
+        reduce_only_flag: bool,
+        is_reducing: bool,
+        current_pos: Position | dict[str, Any] | None,
+        trace: OrderDecisionTrace,
+    ) -> tuple[Decimal, OrderSubmissionResult | None]:
+        return await apply_reduce_only_mode(
+            self,
+            symbol=symbol,
+            side=side,
+            price=price,
+            quantity=quantity,
+            reduce_only_flag=reduce_only_flag,
+            is_reducing=is_reducing,
+            current_pos=current_pos,
+            trace=trace,
+        )
+
+    async def _check_mark_staleness(
+        self,
+        *,
+        symbol: str,
+        side: OrderSide,
+        quantity: Decimal,
+        price: Decimal,
+        reduce_only_flag: bool,
+        trace: OrderDecisionTrace,
+    ) -> OrderSubmissionResult | None:
+        return await check_mark_staleness(
+            self,
+            symbol=symbol,
+            side=side,
+            quantity=quantity,
+            price=price,
+            reduce_only_flag=reduce_only_flag,
+            trace=trace,
+        )
+
+    async def _run_order_validator_guards(
+        self,
+        *,
+        symbol: str,
+        side: OrderSide,
+        price: Decimal,
+        equity: Decimal,
+        quantity: Decimal,
+        reduce_only_flag: bool,
+        trace: OrderDecisionTrace,
+    ) -> tuple[Decimal, Decimal, bool, OrderSubmissionResult | None]:
+        return await run_order_validator_guards(
+            self,
+            symbol=symbol,
+            side=side,
+            price=price,
+            equity=equity,
+            quantity=quantity,
+            reduce_only_flag=reduce_only_flag,
             trace=trace,
         )
 
@@ -1508,8 +1638,7 @@ class TradingEngine(BaseEngine):
                 reason="kill_switch",
             )
 
-        result = await check_degradation_gate(
-            self,
+        result = await self._check_degradation_gate(
             symbol=symbol,
             side=side,
             price=price,
@@ -1519,8 +1648,7 @@ class TradingEngine(BaseEngine):
         if result is not None:
             return result
 
-        quantity, result = calculate_quantity_and_record(
-            self,
+        quantity, result = self._calculate_quantity_and_record(
             symbol=symbol,
             side=side,
             price=price,
@@ -1531,8 +1659,7 @@ class TradingEngine(BaseEngine):
         if result is not None:
             return result
 
-        result = await check_reduce_only_request(
-            self,
+        result = await self._check_reduce_only_request(
             symbol=symbol,
             side=side,
             quantity=quantity,
@@ -1544,8 +1671,7 @@ class TradingEngine(BaseEngine):
         if result is not None:
             return result
 
-        result = await run_security_validation(
-            self,
+        result = await self._run_security_validation(
             symbol=symbol,
             side=side,
             quantity=quantity,
@@ -1556,8 +1682,7 @@ class TradingEngine(BaseEngine):
         if result is not None:
             return result
 
-        quantity, result = await apply_reduce_only_mode(
-            self,
+        quantity, result = await self._apply_reduce_only_mode(
             symbol=symbol,
             side=side,
             price=price,
@@ -1570,8 +1695,7 @@ class TradingEngine(BaseEngine):
         if result is not None:
             return result
 
-        result = await check_mark_staleness(
-            self,
+        result = await self._check_mark_staleness(
             symbol=symbol,
             side=side,
             quantity=quantity,
@@ -1587,8 +1711,7 @@ class TradingEngine(BaseEngine):
             effective_price,
             reduce_only_flag,
             result,
-        ) = await run_order_validator_guards(
-            self,
+        ) = await self._run_order_validator_guards(
             symbol=symbol,
             side=side,
             price=price,
