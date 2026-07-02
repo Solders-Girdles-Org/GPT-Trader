@@ -28,13 +28,7 @@ CONTRACT_TEST_PREFIX = "tests/contract/"
 REAL_API_TEST_PREFIX = "tests/real_api/"
 # Files exempt from the THRESHOLD line cap. Each entry is self-policing: once a
 # file drops to <= THRESHOLD lines it must be removed from this map (CI enforces).
-SIZE_ALLOWLIST_REASONS: dict[str, str] = {
-    "tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_orders.py": (
-        "Cohesive TradingEngine order-pipeline suite (placement, guards, exits, "
-        "telemetry) whose file-local helpers are shared across every group; "
-        "splitting would fragment one narrative behind a shared helper module."
-    ),
-}
+SIZE_ALLOWLIST_REASONS: dict[str, str] = {}
 SIZE_ALLOWLIST: set[str] = set(SIZE_ALLOWLIST_REASONS)
 
 # Unit-test files that legitimately contain `.mark.integration/contract/real_api`

@@ -7,7 +7,7 @@ from decimal import Decimal
 
 from gpt_trader.backtesting.engine.bar_runner import IHistoricalDataProvider
 from gpt_trader.core import Candle
-from gpt_trader.features.live_trade.strategies.perps_baseline import (
+from gpt_trader.features.live_trade.strategies.baseline import (
     BaselinePerpsStrategy,
     PerpsStrategyConfig,
 )

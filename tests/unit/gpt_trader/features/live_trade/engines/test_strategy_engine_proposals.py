@@ -20,7 +20,7 @@ import pytest
 from gpt_trader.core import Position
 from gpt_trader.features.live_trade.engines.cycle_runner import _fetch_positions_and_audit
 from gpt_trader.features.live_trade.engines.strategy import TradingEngine
-from gpt_trader.features.live_trade.strategies.perps_baseline import Action, Decision
+from gpt_trader.features.live_trade.strategies.baseline import Action, Decision
 from gpt_trader.features.trade_ideas import (
     TradeDirection,
     TradeIdeaState,

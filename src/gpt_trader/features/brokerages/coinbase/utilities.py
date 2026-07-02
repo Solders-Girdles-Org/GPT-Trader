@@ -17,6 +17,7 @@ from gpt_trader.core import (
 )
 from gpt_trader.features.brokerages.coinbase.models import to_product
 from gpt_trader.utilities.datetime_helpers import utc_now
+from gpt_trader.utilities.quantization import quantize_to_increment
 
 
 @dataclass
@@ -114,12 +115,6 @@ class FundingCalculator:
     ) -> Decimal:
         # simplified logic for now
         return Decimal("0")
-
-
-def quantize_to_increment(value: Decimal, increment: Decimal | None) -> Decimal:
-    if not increment or increment == 0:
-        return value
-    return (value // increment) * increment
 
 
 def enforce_perp_rules(

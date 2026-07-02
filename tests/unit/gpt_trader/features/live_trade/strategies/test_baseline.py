@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from gpt_trader.features.live_trade.strategies.perps_baseline.strategy import (
+from gpt_trader.features.live_trade.strategies.baseline.strategy import (
     Action,
     BaselinePerpsStrategy,
     Decision,
     IndicatorState,
     PerpsStrategyConfig,
 )
-from tests.unit.gpt_trader.features.live_trade.strategies.perps_baseline_test_helpers import (
+from tests.unit.gpt_trader.features.live_trade.strategies.baseline_test_helpers import (
     make_uptrend,
 )
 

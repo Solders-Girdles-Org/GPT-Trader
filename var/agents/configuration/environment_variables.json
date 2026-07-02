@@ -848,7 +848,7 @@
       ],
       "code_references": [
         {
-          "line": 922,
+          "line": 932,
           "path": "src/gpt_trader/features/live_trade/engines/strategy.py",
           "reader": "os.getenv"
         }
@@ -2411,7 +2411,7 @@
       ],
       "code_references": [
         {
-          "line": 56,
+          "line": 60,
           "path": "src/gpt_trader/features/brokerages/coinbase/specs.py",
           "reader": "os.environ.get"
         }

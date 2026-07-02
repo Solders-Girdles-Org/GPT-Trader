@@ -8,7 +8,7 @@ avoid ad-hoc imports from other slices.
 from gpt_trader.core import Product
 from gpt_trader.features.live_trade.interfaces import TradingStrategy
 from gpt_trader.features.live_trade.strategies.base import MarketDataContext
-from gpt_trader.features.live_trade.strategies.perps_baseline import Action, Decision
+from gpt_trader.features.live_trade.strategies.baseline import Action, Decision
 
 __all__ = [
     "Action",

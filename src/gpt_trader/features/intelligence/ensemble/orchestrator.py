@@ -42,7 +42,7 @@ class EnsembleOrchestrator:
     - State serialization for crash recovery
 
     Example:
-        from gpt_trader.features.live_trade.strategies.perps_baseline import BaselinePerpsStrategy
+        from gpt_trader.features.live_trade.strategies.baseline import BaselinePerpsStrategy
         from gpt_trader.features.live_trade.strategies.mean_reversion import MeanReversionStrategy
 
         strategies = {

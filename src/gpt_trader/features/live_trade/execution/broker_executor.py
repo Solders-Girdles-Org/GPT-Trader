@@ -19,7 +19,7 @@ from gpt_trader.utilities.backoff_policy import evaluate_backoff_delay
 from gpt_trader.utilities.logging_patterns import get_logger
 
 if TYPE_CHECKING:
-    from gpt_trader.features.brokerages.core.protocols import BrokerProtocol
+    from gpt_trader.core.protocols import BrokerProtocol
 
 logger = get_logger(__name__, component="broker_executor")
 

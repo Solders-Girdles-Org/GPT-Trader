@@ -120,7 +120,7 @@ class TestTradingEngineGuardStack:
 
         initial_events = len(engine.context.event_store.list_events())
 
-        from gpt_trader.features.live_trade.strategies.perps_baseline import Action, Decision
+        from gpt_trader.features.live_trade.strategies.baseline import Action, Decision
 
         buy_decision = Decision(action=Action.BUY, reason="Test signal", confidence=0.8)
 
@@ -146,7 +146,7 @@ class TestTradingEngineGuardStack:
         stale_time = time.time() - 300
         risk_manager.last_mark_update["BTC-USD"] = stale_time
 
-        from gpt_trader.features.live_trade.strategies.perps_baseline import Action, Decision
+        from gpt_trader.features.live_trade.strategies.baseline import Action, Decision
 
         buy_decision = Decision(action=Action.BUY, reason="Test signal", confidence=0.8)
 

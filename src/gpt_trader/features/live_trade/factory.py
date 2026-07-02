@@ -31,7 +31,7 @@ def create_strategy(config: "BotConfig") -> TradingStrategy:
     strategy_type = config.strategy_type
 
     if strategy_type == "baseline":
-        from gpt_trader.features.live_trade.strategies.perps_baseline import (
+        from gpt_trader.features.live_trade.strategies.baseline import (
             BaselinePerpsStrategy,
         )
 
@@ -76,12 +76,12 @@ def create_strategy(config: "BotConfig") -> TradingStrategy:
 
     elif strategy_type == "regime_switcher":
         from gpt_trader.features.intelligence.regime import MarketRegimeDetector, RegimeConfig
-        from gpt_trader.features.live_trade.strategies.mean_reversion import (
-            MeanReversionStrategy,
-        )
-        from gpt_trader.features.live_trade.strategies.perps_baseline import (
+        from gpt_trader.features.live_trade.strategies.baseline import (
             BaselinePerpsStrategy,
             SpotStrategy,
+        )
+        from gpt_trader.features.live_trade.strategies.mean_reversion import (
+            MeanReversionStrategy,
         )
         from gpt_trader.features.live_trade.strategies.regime_switcher import (
             RegimeSwitchingStrategy,

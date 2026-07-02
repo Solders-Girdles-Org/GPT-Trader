@@ -102,16 +102,9 @@ _FEATURES_ROOT = REPO_ROOT / "src" / "gpt_trader" / "features"
 
 # Frozen runtime debt edges from monitoring into feature slices. Each entry is
 # (repo-relative file, import prefix). TYPE_CHECKING-only imports never need an
-# entry here.
-_MONITORING_FEATURES_RUNTIME_ALLOWLIST: tuple[tuple[str, str], ...] = (
-    # DEBT: health checks use TickerFreshnessProvider/Source in isinstance()
-    # checks at runtime, so the import cannot move under TYPE_CHECKING. Remove
-    # this edge when the broker protocols move to gpt_trader.core.
-    (
-        "src/gpt_trader/monitoring/health_checks.py",
-        "gpt_trader.features.brokerages.core.protocols",
-    ),
-)
+# entry here. Empty since the broker protocols moved to gpt_trader.core
+# (2026-07-02); keep the mechanism for future frozen edges.
+_MONITORING_FEATURES_RUNTIME_ALLOWLIST: tuple[tuple[str, str], ...] = ()
 
 _MONITORING_FEATURES_RULE = ImportRule(
     name="monitoring_no_feature_runtime_imports",
