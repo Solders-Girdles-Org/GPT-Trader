@@ -19,7 +19,7 @@ from gpt_trader.core import OrderSide, OrderType
 from gpt_trader.features.live_trade.execution.decision_trace import OrderDecisionTrace
 from gpt_trader.features.live_trade.execution.submission_result import OrderSubmissionStatus
 from gpt_trader.features.live_trade.risk.manager import ValidationError
-from gpt_trader.features.live_trade.strategies.perps_baseline import Action, Decision
+from gpt_trader.features.live_trade.strategies.baseline import Action, Decision
 
 
 async def _place_order(engine, action: Action = Action.BUY):

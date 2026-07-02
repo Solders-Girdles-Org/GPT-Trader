@@ -11,7 +11,7 @@ from gpt_trader.features.intelligence.regime import (
     RegimeState,
     RegimeType,
 )
-from gpt_trader.features.live_trade.strategies.perps_baseline import Action, Decision
+from gpt_trader.features.live_trade.strategies.baseline import Action, Decision
 from gpt_trader.features.live_trade.strategies.regime_switcher import (
     RegimeSwitchingStrategy,
 )

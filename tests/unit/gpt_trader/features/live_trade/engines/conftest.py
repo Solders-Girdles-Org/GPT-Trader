@@ -26,7 +26,7 @@ from gpt_trader.features.live_trade.execution.order_submission import (
     OrderSubmissionOutcome,
     OrderSubmissionOutcomeStatus,
 )
-from gpt_trader.features.live_trade.strategies.perps_baseline import Action, Decision
+from gpt_trader.features.live_trade.strategies.baseline import Action, Decision
 
 
 @pytest.fixture

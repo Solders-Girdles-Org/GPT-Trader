@@ -378,7 +378,7 @@ EXECUTION_FLOW_NODES = [
         "id": "broker_adapter",
         "label": "BrokerProtocol.place_order",
         "type": "submission",
-        "path": "src/gpt_trader/features/brokerages/core/protocols.py",
+        "path": "src/gpt_trader/core/protocols.py",
         "cluster": "submission",
     },
     {
@@ -592,14 +592,14 @@ MARKET_DATA_FLOW_NODES = [
         "id": "broker_get_ticker",
         "label": "BrokerProtocol.get_ticker",
         "type": "broker",
-        "path": "src/gpt_trader/features/brokerages/core/protocols.py",
+        "path": "src/gpt_trader/core/protocols.py",
         "cluster": "polling",
     },
     {
         "id": "broker_get_candles",
         "label": "BrokerProtocol.get_candles",
         "type": "broker",
-        "path": "src/gpt_trader/features/brokerages/core/protocols.py",
+        "path": "src/gpt_trader/core/protocols.py",
         "cluster": "polling",
     },
     {
@@ -2437,7 +2437,7 @@ def build_config_code_map() -> dict[str, Any]:
         HealthThresholdsConfig,
         MeanReversionConfig,
     )
-    from gpt_trader.features.live_trade.strategies.perps_baseline import PerpsStrategyConfig
+    from gpt_trader.features.live_trade.strategies.baseline import PerpsStrategyConfig
 
     files = list(_iter_python_files(SRC_ROOT))
 

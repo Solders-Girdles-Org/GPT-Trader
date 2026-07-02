@@ -17,7 +17,7 @@ from typing import Any, cast
 
 from gpt_trader.app.protocols import EventStoreProtocol
 from gpt_trader.core import OrderSide, OrderType
-from gpt_trader.features.brokerages.core.protocols import BrokerProtocol
+from gpt_trader.core.protocols import BrokerProtocol
 from gpt_trader.features.live_trade.execution.broker_executor import BrokerExecutor, RetryPolicy
 from gpt_trader.features.live_trade.execution.decision_trace import OrderDecisionTrace
 from gpt_trader.features.live_trade.execution.order_event_recorder import OrderEventRecorder

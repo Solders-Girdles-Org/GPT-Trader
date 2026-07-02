@@ -17,7 +17,7 @@ from gpt_trader.features.live_trade.guard_errors import (
 from gpt_trader.utilities.logging_patterns import get_logger
 
 if TYPE_CHECKING:
-    from gpt_trader.features.brokerages.core.protocols import BrokerProtocol
+    from gpt_trader.core.protocols import BrokerProtocol
     from gpt_trader.features.live_trade.risk.protocols import RiskManagerProtocol
 
 logger = get_logger(__name__, component="api_health_guard")

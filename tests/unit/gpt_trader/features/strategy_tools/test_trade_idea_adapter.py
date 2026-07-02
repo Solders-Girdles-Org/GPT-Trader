@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from gpt_trader.errors import ValidationError
-from gpt_trader.features.live_trade.strategies.perps_baseline.strategy import (
+from gpt_trader.features.live_trade.strategies.baseline.strategy import (
     Action,
     Decision,
 )

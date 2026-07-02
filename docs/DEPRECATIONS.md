@@ -57,7 +57,7 @@ Before removing any deprecated item:
 | `monitoring/guards/` package (`RuntimeGuardManager`, builtin guards, alert handlers) | Unreleased | Dead parallel of the canonical runtime guard stack in `features/live_trade/execution/guards/` (managed by `execution/guard_manager.py`). |
 | `monitoring/domain/perps/` margin/liquidation math (`MarginStateMonitor`, `LiquidationMonitor`) | Unreleased | Test-only surface. Live liquidation protection is `features/live_trade/execution/guards/liquidation_buffer.py`. |
 | `StatefulStrategy` ABC (`strategies/stateful.py`) | Unreleased | Test-only. Use `StatefulStrategyBase` in `strategies/base.py`. |
-| `StatefulBaselineStrategy` / `StatefulPerpsStrategy` (`strategies/perps_baseline/stateful.py`) | Unreleased | Test-only; never wired into `factory.py`. Use `BaselinePerpsStrategy`. |
+| `StatefulBaselineStrategy` / `StatefulPerpsStrategy` (`strategies/baseline/stateful.py`) | Unreleased | Test-only; never wired into `factory.py`. Use `BaselinePerpsStrategy`. |
 | `AsyncRetry` / `async_retry` (`utilities/async_tools/retry.py`) | Unreleased | Zero non-test users. Broker IO retry lives in `execution/broker_executor.py` (`RetryPolicy`, `execute_with_retry`). |
 | `retry_on_error` decorator (`errors/error_patterns.py`) | Unreleased | Zero production callers. Call `ErrorHandler.with_retry` directly if retry-with-recovery is needed. |
 | Legacy credential env vars (`COINBASE_API_KEY_NAME` / `COINBASE_PRIVATE_KEY`) | Unreleased | Use `COINBASE_CDP_API_KEY` + `COINBASE_CDP_PRIVATE_KEY` or `COINBASE_CREDENTIALS_FILE`. |

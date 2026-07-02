@@ -15,7 +15,7 @@ from gpt_trader.features.live_trade.guard_errors import (
 from gpt_trader.utilities.quantities import quantity_from
 
 if TYPE_CHECKING:
-    from gpt_trader.features.brokerages.core.protocols import BrokerProtocol
+    from gpt_trader.core.protocols import BrokerProtocol
     from gpt_trader.features.live_trade.risk.protocols import RiskManagerProtocol
 
 

@@ -7,7 +7,7 @@ import pytest
 from gpt_trader.features.intelligence.ensemble.models import EnsembleConfig
 from gpt_trader.features.intelligence.ensemble.orchestrator import EnsembleOrchestrator
 from gpt_trader.features.intelligence.regime import RegimeConfig, RegimeType
-from gpt_trader.features.live_trade.strategies.perps_baseline import Action
+from gpt_trader.features.live_trade.strategies.baseline import Action
 
 from .orchestrator_test_base import MockStrategy
 
