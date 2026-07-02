@@ -181,6 +181,32 @@ def test_trade_ideas_readiness_fails_when_stored_record_has_no_audit_trail(
     assert result["details"]["orphaned_decision_ids"] == "trade-20260612-orphaned-record"
 
 
+def test_trade_ideas_readiness_fails_when_latest_record_is_tampered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ideas_root = tmp_path / "trade_ideas"
+    _seed_budget(ideas_root)
+    service = TradeIdeaService(
+        ideas_root,
+        now_factory=lambda: datetime(2026, 6, 12, 10, 0, tzinfo=UTC),
+    )
+    idea = build_trade_idea(decision_id="trade-20260612-tampered-latest")
+    service.propose(idea, actor_id="idea-generator-v1")
+    # Replace latest.json with a different, unaudited (but valid) revision.
+    tampered = build_trade_idea(
+        decision_id=idea.decision_id,
+        invalidation="Daily close below 59000",
+    )
+    TradeIdeaStore(ideas_root / "records").save(tampered)
+    monkeypatch.setenv("GPT_TRADER_IDEAS_ROOT", str(ideas_root))
+
+    checker = PreflightCheck(profile="dev")
+
+    assert check_trade_ideas_readiness(checker) is False
+    result = _failed_result(checker, "latest record integrity failed")
+    assert result["details"]["ideas_root"] == str(ideas_root)
+
+
 def test_trade_ideas_readiness_fails_when_budget_is_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

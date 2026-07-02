@@ -95,6 +95,24 @@ def _orphaned_decision_ids(ideas_root: Path, events: list[AuditEvent]) -> list[s
     )
 
 
+def _validate_latest_records(
+    service: TradeIdeaService,
+    ideas_root: Path,
+    events: list[AuditEvent],
+) -> None:
+    """Load each audited stored record through the service's own gate.
+
+    Audited version files can be intact while ``latest.json`` was tampered
+    with or replaced; ``service.get()`` re-verifies that the latest record is
+    itself audited, so READY here means the read paths will actually work.
+    """
+    audited = {event.decision_id for event in events}
+    store = TradeIdeaStore(ideas_root / "records")
+    for decision_id in store.list_decision_ids():
+        if decision_id in audited:
+            service.get(decision_id)
+
+
 def _check_cli_surface(checker: PreflightCheck, details: dict[str, str]) -> bool:
     try:
         from gpt_trader.cli.commands.ideas import register as register_ideas_cli
@@ -166,6 +184,16 @@ def check_trade_ideas_readiness(checker: PreflightCheck) -> bool:
                     "Trade ideas records missing audit trail: " + ", ".join(orphaned),
                     details={**details, "orphaned_decision_ids": ", ".join(orphaned)},
                 )
+                all_good = False
+            try:
+                _validate_latest_records(service, ideas_root, events)
+            except (AuditIntegrityError, ValidationError) as exc:
+                checker.log_error(
+                    f"Trade ideas latest record integrity failed: {exc}", details=details
+                )
+                all_good = False
+            except OSError as exc:
+                checker.log_error(f"Trade ideas records unreadable: {exc}", details=details)
                 all_good = False
             event_details = {**details, "event_count": len(events)}
             checker.log_success(
