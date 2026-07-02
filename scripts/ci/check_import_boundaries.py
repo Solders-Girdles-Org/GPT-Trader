@@ -165,6 +165,10 @@ CROSS_SLICE_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset(
         ("live_trade", "strategy_tools"),
         # engines/strategy.py trade-idea proposal workflow service.
         ("live_trade", "trade_ideas"),
+        # Paper execution lane consumes APPROVED ideas via TradeIdeaService and
+        # drives paper/mock brokers only (docs/decisions/adopt-five-role-composition.md).
+        ("idea_execution", "trade_ideas"),
+        ("idea_execution", "brokerages"),
         # RegimeAwareProposer overlays regime state; PositionSizer bridge
         # enriches sizing on trade-idea proposal records.
         ("trade_ideas", "intelligence"),
