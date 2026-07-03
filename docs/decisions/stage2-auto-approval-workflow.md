@@ -77,6 +77,10 @@ id, reason prefix, and envelope evidence.
   oldest-review-first; returns every skipped idea with its violations.
 - CLI: `gpt-trader ideas approve --auto-sweep` is the only trigger. No
   scheduler ships with this decision.
+- The scheduled Stage 1 paper cycle remains human-approval-only. System
+  approvals created by this sweep are audited `approved` records, but the
+  Stage 1 cycle skips them until a separate Stage 2 execution gate is accepted
+  and implemented.
 - Enabling the flag in operation remains gated by the rubric's Stage 1 → 2
   promotion gates (track-record depth, eligibility pass rate, attribution
   coverage, risk calibration, expectancy, kill-switch drill, daily-loss breaker

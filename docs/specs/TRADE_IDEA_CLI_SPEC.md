@@ -572,6 +572,9 @@ Stage 2 auto-approval inside the budget envelope
 - DECISION_ID and `--reason` are refused alongside `--auto-sweep`
   (`INVALID_ARGUMENT`); the sweep records its own audited reasons.
 - Manual trigger only — no scheduler ships with this surface.
+- Scheduled Stage 1 paper-cycle execution stays human-approval-only: system
+  approvals from the sweep remain audited `approved` records, but the Stage 1
+  cycle skips them until a separate Stage 2 execution gate exists.
 
 ### `ideas reject` / `request-changes` / `cancel`
 

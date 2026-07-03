@@ -41,10 +41,12 @@ from gpt_trader.features.idea_execution.executor import (
 )
 from gpt_trader.features.trade_ideas import (
     ActorType,
+    AuditAction,
     MarketSnapshot,
     Proposer,
     TradeIdeaService,
     TradeIdeaState,
+    TradeIdeaView,
     market_snapshot_to_payload,
 )
 from gpt_trader.features.trade_ideas.report import build_trade_idea_track_record_report
@@ -75,6 +77,13 @@ paper-only.
 
 def _instrument_key(instrument: str) -> str:
     return instrument.casefold()
+
+
+def _latest_approval_actor_type(view: TradeIdeaView) -> ActorType | None:
+    for event in reversed(view.events):
+        if event.action is AuditAction.APPROVED:
+            return event.actor_type
+    return None
 
 
 class PaperCycleLockError(ValidationError):
@@ -399,6 +408,19 @@ class PaperCycleRunner:
                     {
                         "decision_id": decision_id,
                         "reason": f"state changed to {view.state.value} during the turn",
+                    }
+                )
+                continue
+            approval_actor_type = _latest_approval_actor_type(view)
+            if approval_actor_type is not ActorType.HUMAN:
+                actor = approval_actor_type.value if approval_actor_type else "none"
+                skipped.append(
+                    {
+                        "decision_id": decision_id,
+                        "reason": (
+                            "approval actor_type "
+                            f"'{actor}' is not executable by the Stage-1 paper cycle"
+                        ),
                     }
                 )
                 continue
