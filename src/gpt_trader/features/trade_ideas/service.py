@@ -608,7 +608,8 @@ class TradeIdeaService:
 
     def update_budget(self, budget: RiskBudget, actor_type: ActorType, actor_id: str) -> None:
         """Enact a new budget version, subject to the autonomy-mode policy."""
-        resolution = self._decision_autonomy(now=self._now())
+        now = self._now()
+        resolution = self._decision_autonomy(now=now)
         policy = ApprovalPolicy(resolution.mode)
         violations = [
             *self._autonomy_resolution_violations(resolution),
@@ -627,6 +628,10 @@ class TradeIdeaService:
                 budget=budget,
             )
         )
+        # The enacted budget is part of this decision: re-check the ratchet
+        # against it so tightening max_daily_loss_pct below already-realized
+        # same-day losses lowers the level now, not at some later decision.
+        self._decision_autonomy(now=now)
 
     # -- lifecycle actions -------------------------------------------------
 
@@ -1007,6 +1012,8 @@ class TradeIdeaService:
             request=request,
             budget=effective_budget,
             budget_source=budget_source,
+            active_autonomy_mode=autonomy_resolution.mode,
+            active_autonomy_source=autonomy_resolution.source,
             export_time=export_time,
             approval_policy_violations=policy_violations,
         )

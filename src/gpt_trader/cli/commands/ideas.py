@@ -2839,17 +2839,30 @@ def _handle_autonomy_show(args: Namespace) -> CliResponse:
         service = _service(args)
         resolution = service.peek_autonomy()
         payload = resolution.to_dict()
+        evidence: list[str] = []
         if resolution.version is not None:
-            entry = service.autonomy_history()[-1]
-            payload["changed_at"] = entry.timestamp.isoformat()
-            payload["actor_type"] = entry.actor_type.value
-            payload["actor_id"] = entry.actor_id
-            payload["reason"] = entry.reason
-            payload["evidence"] = list(entry.evidence)
+            # Second read of the log: guard it and pin provenance to the
+            # resolved version, so a concurrent append or corruption between
+            # the two reads can neither crash `show` (the resolved state must
+            # stay an exit-0 answer) nor attach another entry's provenance.
+            try:
+                entries = service.autonomy_history()
+            except AutonomyIntegrityError:
+                entries = []
+            tail = entries[-1] if entries else None
+            if tail is not None and tail.version == resolution.version:
+                payload["changed_at"] = tail.timestamp.isoformat()
+                payload["actor_type"] = tail.actor_type.value
+                payload["actor_id"] = tail.actor_id
+                payload["reason"] = tail.reason
+                evidence = list(tail.evidence)
+                payload["evidence"] = evidence
     except Exception as error:
         return _mapped_error(command, args, error)
-    text = _budget_text(payload)
-    return _success(command, args, payload, text)
+    lines = [f"{key}: {value}" for key, value in payload.items() if key != "evidence"]
+    for item in evidence:
+        lines.append(f"evidence: {item}")
+    return _success(command, args, payload, "\n".join(lines))
 
 
 def _handle_autonomy_history(args: Namespace) -> CliResponse:

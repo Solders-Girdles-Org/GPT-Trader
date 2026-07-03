@@ -257,6 +257,34 @@ def test_ratchet_fires_at_budget_decision_boundary(service: TradeIdeaService) ->
     assert service.autonomy_history()[-1].actor_id == RATCHET_ACTOR_ID
 
 
+def test_tightening_daily_cap_below_realized_losses_ratchets_in_the_same_call(
+    service: TradeIdeaService,
+) -> None:
+    """Enacting a budget is a decision: the ratchet must see the new cap now."""
+    attest_account_equity(service)
+    _enter_bounded_autonomy(service)
+    _record_same_day_realized_loss(service, decision_id="trade-20260612-loss", loss_percent="-8")
+    assert service.current_autonomy().mode is AutonomyMode.BOUNDED_AUTONOMY
+
+    current = service.current_budget()
+    tightened = RiskBudget.from_dict(
+        {
+            **current.to_dict(),
+            "version": current.version + 1,
+            "max_daily_loss_pct": "5",
+            "reason": "Tighten the daily cap below today's realized losses",
+        }
+    )
+    service.update_budget(tightened, actor_type=ActorType.HUMAN, actor_id="rj")
+
+    resolution = service.current_autonomy()
+    assert resolution.mode is AutonomyMode.HUMAN_APPROVED_EXECUTION
+    latest = service.autonomy_history()[-1]
+    assert latest.actor_id == RATCHET_ACTOR_ID
+    assert "max_daily_loss_pct=5" in latest.evidence[0]
+    assert f"risk budget version {tightened.version}" in latest.evidence[0]
+
+
 def test_no_ratchet_without_a_breach(service: TradeIdeaService) -> None:
     attest_account_equity(service)
     _enter_bounded_autonomy(service)

@@ -408,7 +408,11 @@ already exist (`IDEA_NOT_FOUND` otherwise). Service/audit layer enforces the
     failure mode, and do-not-trade conditions.
   - `policy_budget_snapshot` with the current persisted/default risk budget and
     approval-policy violations evaluated at the export/evaluation timestamp
-    recorded as `policy_budget_snapshot.evaluated_at`.
+    recorded as `policy_budget_snapshot.evaluated_at`. Its `autonomy_mode` (and
+    `autonomy_mode_source`) is the resolved active level the violations were
+    evaluated against, which can differ from the mode the idea claimed at
+    proposal time (`decision_metadata.autonomy_mode` preserves the record
+    field).
   - `broker_ticket.source_record` copied from the immutable `TradeIdea` plus a
     derived broker-neutral export ticket.
   - `venue_request`, `venue_payload`, and sanitized provenance for created,
