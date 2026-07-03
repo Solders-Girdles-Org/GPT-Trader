@@ -177,7 +177,7 @@ def test_replay_tournament_rejects_min_history_below_strategy_floor(
 
     assert exit_code == 1
     assert response["errors"][0]["code"] == CliErrorCode.INVALID_ARGUMENT.value
-    assert "--min-history must be at least 23" in response["errors"][0]["message"]
+    assert "--min-history must be at least 20" in response["errors"][0]["message"]
 
 
 def test_replay_tournament_rejects_unknown_proposer_id(

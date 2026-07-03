@@ -704,7 +704,7 @@ def register(subparsers: Any) -> None:
         type=_positive_int_value,
         help=(
             "Minimum historical candles before evaluating snapshots "
-            "(default: the strategy's long-MA period + crossover lookback)"
+            "(default: the strategy's warm-up floor, max(long-MA period, RSI period + 1))"
         ),
     )
     strategy_replay.add_argument(
@@ -1436,15 +1436,16 @@ def _resolve_replay_min_history(
     return requested_min_history
 
 
-# The baseline strategy family detects MA crossovers over a fixed 3-bar
-# lookback inside ``decide``; its windows are not CLI-tunable because the
-# parity lane replays the live configuration as-is.
-_STRATEGY_CROSSOVER_LOOKBACK = 3
-
-
 def _default_strategy_replay_min_history() -> int:
+    """The strategy's own warm-up floor: ``decide`` holds below this history.
+
+    Matches the live insufficient-data gate exactly (windows are not
+    CLI-tunable because the parity lane replays the live configuration
+    as-is); anything stricter would silently skip early snapshots the live
+    strategy would have evaluated.
+    """
     config = BaseStrategyConfig()
-    return max(config.long_ma_period, config.rsi_period + 1) + _STRATEGY_CROSSOVER_LOOKBACK
+    return max(config.long_ma_period, config.rsi_period + 1)
 
 
 def _resolve_strategy_replay_min_history(args: Namespace) -> int:
@@ -1457,9 +1458,9 @@ def _resolve_strategy_replay_min_history(args: Namespace) -> int:
         raise CandleInputError(
             (
                 f"--min-history must be at least {required_min_history} for the "
-                f"baseline strategy family (long-MA {config.long_ma_period}, "
-                f"RSI {config.rsi_period}, "
-                f"crossover lookback {_STRATEGY_CROSSOVER_LOOKBACK})"
+                f"baseline strategy family: decide() holds below "
+                f"max(long-MA {config.long_ma_period}, "
+                f"RSI {config.rsi_period} + 1) candles"
             ),
             field="min_history",
         )

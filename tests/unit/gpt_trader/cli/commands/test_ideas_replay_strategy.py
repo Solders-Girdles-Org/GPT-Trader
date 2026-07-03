@@ -20,7 +20,7 @@ from gpt_trader.cli.response import CliErrorCode
 AS_OF = datetime(2026, 6, 12, 12, 0, tzinfo=UTC)
 # 26 flat closes then a four-bar rise: once the rise enters the window, the
 # strategy's 5/20 MA crossover and bullish trend clear the entry gate for the
-# snapshots evaluated after the default 23-candle minimum history.
+# snapshots evaluated after the default 20-candle warm-up floor.
 RISING_CLOSES = ["100"] * 26 + ["102", "104", "106", "108"]
 FLAT_CLOSES = ["100"] * 30
 
@@ -83,7 +83,9 @@ def test_replay_strategy_json_output_returns_replay_report(
     assert response["command"] == "ideas replay strategy"
     data = response["data"]
     assert data["proposer_id"] == "snapshot-strategy-baseline-spot"
-    assert data["snapshots_evaluated"] == len(RISING_CLOSES) - 23
+    # Default min-history is the strategy's live warm-up floor (20), so the
+    # replay evaluates every snapshot the live strategy would have evaluated.
+    assert data["snapshots_evaluated"] == len(RISING_CLOSES) - 20
     assert data["ideas_proposed"] >= 1
 
 
@@ -109,7 +111,7 @@ def test_replay_strategy_rejects_min_history_below_strategy_requirements(
     assert exit_code == 1
     assert response["errors"][0]["code"] == CliErrorCode.INVALID_ARGUMENT.value
     assert response["errors"][0]["details"]["field"] == "min_history"
-    assert "--min-history must be at least 23" in response["errors"][0]["message"]
+    assert "--min-history must be at least 20" in response["errors"][0]["message"]
 
 
 def test_replay_strategy_help_documents_read_only_contract(
