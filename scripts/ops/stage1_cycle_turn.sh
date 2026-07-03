@@ -14,9 +14,19 @@ cd "${REPO_ROOT}"
 : "${CYCLE_SYMBOLS:=BTC-USD,ETH-USD}"
 : "${CYCLE_GRANULARITY:=ONE_HOUR}"
 : "${CYCLE_LOOKBACK:=200}"
+# Space-separated proposer names; empty means the CLI default (all proposers).
+: "${CYCLE_PROPOSERS:=}"
 
+PROPOSER_FLAGS=()
+for proposer in ${CYCLE_PROPOSERS}; do
+  PROPOSER_FLAGS+=(--proposer "${proposer}")
+done
+
+# ${arr[@]+...} guards the empty-array expansion under set -u on bash 3.2
+# (the macOS system bash that the launchd example invokes).
 exec uv run gpt-trader ideas cycle --from-coinbase \
   --symbols "${CYCLE_SYMBOLS}" \
   --granularity "${CYCLE_GRANULARITY}" \
   --lookback "${CYCLE_LOOKBACK}" \
+  ${PROPOSER_FLAGS[@]+"${PROPOSER_FLAGS[@]}"} \
   --format json

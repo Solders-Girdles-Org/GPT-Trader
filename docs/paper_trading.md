@@ -172,8 +172,10 @@ the honest-day procedure above.
 
 The default conservative configuration lives in
 `scripts/ops/stage1_cycle_turn.sh` (BTC-USD/ETH-USD, ONE_HOUR candles,
-lookback 200, all proposers). Symbols, granularity, and lookback are
-env-overridable there; cadence belongs only in the scheduler entry.
+lookback 200, all proposers). Symbols, granularity, lookback, and the
+proposer set are env-overridable there (`CYCLE_SYMBOLS`, `CYCLE_GRANULARITY`,
+`CYCLE_LOOKBACK`, and space-separated `CYCLE_PROPOSERS`, for example
+`CYCLE_PROPOSERS=baseline`); cadence belongs only in the scheduler entry.
 
 ### launchd (macOS)
 
@@ -216,6 +218,8 @@ launchctl kickstart gui/$(id -u)/com.gpt-trader.stage1-cycle   # run one turn no
 ### cron
 
 ```cron
+# cron starts jobs with a minimal PATH; uv must be reachable
+PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
 5 * * * * /ABSOLUTE/PATH/TO/GPT-Trader/scripts/ops/stage1_cycle_turn.sh >> /tmp/gpt-trader-stage1-cycle.log 2>&1
 ```
 
