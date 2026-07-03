@@ -68,6 +68,7 @@ markers. Regenerating cannot drift from the files.
 <!-- BEGIN GENERATED DECISION INDEX -->
 | Date | Decision | Status |
 |------|----------|--------|
+| 2026-07-03 | [MIT license for the public repository](adopt-mit-license.md) | accepted |
 | 2026-07-02 | [Account snapshot command — wire a real provider or remove it](account-snapshot-wire-or-remove.md) | accepted |
 | 2026-07-02 | [Adopt a measured-outcome operating rubric](adopt-measured-outcome-rubric.md) | accepted |
 | 2026-07-02 | [Canonical risk-limit vocabulary — budget vs runtime limits](canonical-risk-limit-vocabulary.md) | accepted |

@@ -3,6 +3,7 @@ name = "gpt-trader"
 version = "0.1.0"
 description = "Coinbase Advanced Trade trading system with DI container, live spot/CFM futures support, and strategy tooling."
 readme = "README.md"
+license = "MIT"
 authors = [{name = "RJ + GPT-5"}]
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -50,7 +51,7 @@ agent-dedupe = "gpt_trader.agents.cli:dedupe"
 agent-pr-ready = "gpt_trader.agents.cli:pr_ready"
 
 [build-system]
-requires = ["setuptools>=69", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]

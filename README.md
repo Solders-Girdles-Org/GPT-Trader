@@ -190,3 +190,8 @@ Full documentation index: [docs/README.md](docs/README.md). AI agents start at
 This project uses **dependency injection** via `ApplicationContainer` in `src/gpt_trader/app/`. The legacy `orchestration/` layer was removed during the DI migration; prefer `app/` and `features/` paths.
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for details.
+
+## License
+
+MIT — see [LICENSE](LICENSE). Decision record:
+[docs/decisions/adopt-mit-license.md](docs/decisions/adopt-mit-license.md).
