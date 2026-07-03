@@ -669,7 +669,7 @@ MARKET_DATA_FLOW_NODES = [
         "id": "price_tick_store",
         "label": "PriceTickStore",
         "type": "state",
-        "path": "src/gpt_trader/features/live_trade/engines/price_tick_store.py",
+        "path": "src/gpt_trader/features/recorder/price_tick_store.py",
         "cluster": "state",
     },
     {

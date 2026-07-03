@@ -22,6 +22,8 @@ def mock_context():
     context.config.max_concurrent_rest_calls = 5  # Required for semaphore init
     context.broker.get_ticker.return_value = {"price": "50000.00"}
     context.risk_manager._start_of_day_equity = Decimal("1000.0")
+    # No injected recorder state: the engine builds its own fallback store.
+    context.price_tick_store = None
     return context
 
 

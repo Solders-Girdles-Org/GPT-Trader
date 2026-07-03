@@ -71,10 +71,6 @@ from gpt_trader.features.live_trade.engines.position_formatting import (
     positions_to_status_format,
     resolve_close_order,
 )
-from gpt_trader.features.live_trade.engines.price_tick_store import (
-    EVENT_PRICE_TICK,
-    PriceTickStore,
-)
 from gpt_trader.features.live_trade.engines.runtime.coordinator import RuntimeEngine
 from gpt_trader.features.live_trade.engines.runtime.models import (
     RuntimeDependency,
@@ -120,6 +116,10 @@ from gpt_trader.features.live_trade.lifecycle import (
 from gpt_trader.features.live_trade.strategies.baseline import (
     Action,
     Decision,
+)
+from gpt_trader.features.recorder import (
+    EVENT_PRICE_TICK,
+    PriceTickStore,
 )
 from gpt_trader.features.strategy_tools import (
     StrategySignalToTradeIdeaAdapter,
@@ -174,8 +174,9 @@ class TradingEngine(BaseEngine):
         self._rehydrated = False
         self._cycle_count = 0
 
-        # Initialize price tick store for state recovery
-        self._price_tick_store = PriceTickStore(
+        # Recording state is recorder-owned and injected by the composition
+        # root (bot.py); the fallback covers directly constructed engines.
+        self._price_tick_store = context.price_tick_store or PriceTickStore(
             event_store=context.event_store,
             symbols=list(context.config.symbols),
             bot_id=context.bot_id,

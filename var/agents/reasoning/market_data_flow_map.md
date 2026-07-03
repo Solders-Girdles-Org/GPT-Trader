@@ -27,7 +27,7 @@ Generated: 1970-01-01T00:00:00+00:00
 ## Runtime State
 | ID | Label | Path |
 |----|-------|------|
-| price_tick_store | PriceTickStore | `src/gpt_trader/features/live_trade/engines/price_tick_store.py` |
+| price_tick_store | PriceTickStore | `src/gpt_trader/features/recorder/price_tick_store.py` |
 | runtime_mark_windows | RuntimeStateProtocol.mark_windows | `src/gpt_trader/app/protocols.py` |
 | runtime_orderbook_snapshots | RuntimeStateProtocol.orderbook_snapshots | `src/gpt_trader/app/protocols.py` |
 | runtime_trade_aggregators | RuntimeStateProtocol.trade_aggregators | `src/gpt_trader/app/protocols.py` |

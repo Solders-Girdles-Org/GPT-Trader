@@ -52,6 +52,7 @@ src/gpt_trader/features/
 │   └── sizing/          # Kelly criterion position sizing
 ├── live_trade/          # Production trading engine
 ├── optimize/            # Parameter optimisation experiments
+├── recorder/            # Market-data recording (price ticks; five-role recorder arm)
 ├── strategy_dev/        # Strategy config profiles, registry, and config-diff helpers
 ├── strategy_tools/      # Shared helpers for strategy slices
 └── trade_ideas/         # Broker-neutral trade-idea records, workflow, audit log

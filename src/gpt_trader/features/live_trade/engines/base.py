@@ -20,6 +20,7 @@ if TYPE_CHECKING:
         BrokerProtocol,
     )  # Protocol import is OK
     from gpt_trader.features.live_trade.risk.protocols import RiskManagerProtocol
+    from gpt_trader.features.recorder import PriceTickStore
     from gpt_trader.monitoring.notifications.service import NotificationService
     from gpt_trader.persistence.orders_store import OrdersStore
     from gpt_trader.utilities.async_tools.bounded_to_thread import BoundedToThread
@@ -40,6 +41,7 @@ class CoordinatorContext:
         orders_store: Orders persistence for crash recovery.
         notification_service: Notification delivery.
         bot_id: Bot identifier for logging.
+        price_tick_store: Recorder-owned price tick recording/recovery state.
     """
 
     config: BotConfig
@@ -53,6 +55,7 @@ class CoordinatorContext:
     orders_store: OrdersStore | None = None
     notification_service: NotificationService | None = None
     bot_id: str = ""
+    price_tick_store: PriceTickStore | None = None
 
     def with_updates(self, **overrides: Any) -> CoordinatorContext:
         return replace(self, **overrides)

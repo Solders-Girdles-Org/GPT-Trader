@@ -848,7 +848,7 @@
       ],
       "code_references": [
         {
-          "line": 932,
+          "line": 933,
           "path": "src/gpt_trader/features/live_trade/engines/strategy.py",
           "reader": "os.getenv"
         }

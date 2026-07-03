@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from gpt_trader.features.live_trade.engines.price_tick_store import (
+from gpt_trader.features.recorder import (
     EVENT_PRICE_TICK,
     MAX_PRICE_HISTORY,
     PriceTickStore,
@@ -70,9 +70,7 @@ def test_rehydrate_calls_strategy_callback_even_with_no_restores() -> None:
 def test_record_price_tick_persists_and_updates_history(monkeypatch) -> None:
     event_store = MagicMock()
     store = PriceTickStore(event_store=event_store, symbols=["BTC-USD"], bot_id="bot-1")
-    monkeypatch.setattr(
-        "gpt_trader.features.live_trade.engines.price_tick_store.time.time", lambda: 123.0
-    )
+    monkeypatch.setattr("gpt_trader.features.recorder.price_tick_store.time.time", lambda: 123.0)
 
     store.record_price_tick("BTC-USD", Decimal("10"))
 
@@ -108,9 +106,7 @@ def test_record_price_tick_enforces_max_history() -> None:
 async def test_record_price_tick_async_offloads_store_to_thread(monkeypatch) -> None:
     event_store = MagicMock()
     store = PriceTickStore(event_store=event_store, symbols=["BTC-USD"], bot_id="bot-1")
-    monkeypatch.setattr(
-        "gpt_trader.features.live_trade.engines.price_tick_store.time.time", lambda: 456.0
-    )
+    monkeypatch.setattr("gpt_trader.features.recorder.price_tick_store.time.time", lambda: 456.0)
 
     await store.record_price_tick_async("BTC-USD", Decimal("42000"))
 

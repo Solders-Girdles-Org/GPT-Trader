@@ -90,6 +90,7 @@ class TestTradingBotInitialization:
             event_store=mock_container.event_store,
             orders_store=mock_container.orders_store,
             notification_service=mock_container.notification_service,
+            price_tick_store=ANY,
         )
         assert bot.context is not None
 
