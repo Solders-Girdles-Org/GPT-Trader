@@ -73,6 +73,8 @@ from gpt_trader.features.trade_ideas import (
     ActorType,
     AuditAction,
     AuditIntegrityError,
+    AutonomyIntegrityError,
+    AutonomyMode,
     BaselineProposer,
     BaselineProposerConfig,
     BudgetIntegrityError,
@@ -1155,6 +1157,39 @@ def register(subparsers: Any) -> None:
     )
     budget_set.set_defaults(handler=_handle_budget_set, subcommand="budget set")
 
+    autonomy = ideas_subparsers.add_parser(
+        "autonomy", help="Inspect or change the audited autonomy level"
+    )
+    autonomy_subparsers = autonomy.add_subparsers(dest="autonomy_command", required=True)
+
+    autonomy_show = autonomy_subparsers.add_parser(
+        "show", help="Show the resolved autonomy level and its provenance"
+    )
+    _add_common_options(autonomy_show)
+    autonomy_show.set_defaults(handler=_handle_autonomy_show, subcommand="autonomy show")
+
+    autonomy_history = autonomy_subparsers.add_parser(
+        "history", help="List every audited autonomy-level version"
+    )
+    _add_common_options(autonomy_history)
+    autonomy_history.set_defaults(handler=_handle_autonomy_history, subcommand="autonomy history")
+
+    autonomy_set = autonomy_subparsers.add_parser(
+        "set", help="Change the autonomy level through the audited service path"
+    )
+    _add_common_options(autonomy_set)
+    _add_actor_options(autonomy_set)
+    autonomy_set.add_argument(
+        "--mode",
+        required=True,
+        choices=tuple(mode.value for mode in AutonomyMode),
+        help="Autonomy level to record",
+    )
+    autonomy_set.add_argument(
+        "--reason", required=True, help="Rationale recorded in the autonomy log"
+    )
+    autonomy_set.set_defaults(handler=_handle_autonomy_set, subcommand="autonomy set")
+
     audit = ideas_subparsers.add_parser("audit", help="Read and verify the audit log")
     audit_subparsers = audit.add_subparsers(dest="audit_command", required=True)
 
@@ -1595,7 +1630,7 @@ def _baseline_config_from_proposer_id(
         long_window = int(parts[3])
     except ValueError as error:
         raise CandleInputError(
-            ("Unsupported proposer id " f"'{proposer_id}'; expected numeric MA windows"),
+            (f"Unsupported proposer id '{proposer_id}'; expected numeric MA windows"),
             field="proposers",
         ) from error
     if short_window <= 0 or long_window <= 0:
@@ -2798,6 +2833,81 @@ def _handle_budget_set(args: Namespace) -> CliResponse:
     return _success(command, args, payload, text)
 
 
+def _handle_autonomy_show(args: Namespace) -> CliResponse:
+    command = "ideas autonomy show"
+    try:
+        service = _service(args)
+        resolution = service.peek_autonomy()
+        payload = resolution.to_dict()
+        evidence: list[str] = []
+        if resolution.version is not None:
+            # Second read of the log: guard it and pin provenance to the
+            # resolved version, so a concurrent append or corruption between
+            # the two reads can neither crash `show` (the resolved state must
+            # stay an exit-0 answer) nor attach another entry's provenance.
+            try:
+                entries = service.autonomy_history()
+            except AutonomyIntegrityError:
+                entries = []
+            tail = entries[-1] if entries else None
+            if tail is not None and tail.version == resolution.version:
+                payload["changed_at"] = tail.timestamp.isoformat()
+                payload["actor_type"] = tail.actor_type.value
+                payload["actor_id"] = tail.actor_id
+                payload["reason"] = tail.reason
+                evidence = list(tail.evidence)
+                payload["evidence"] = evidence
+    except Exception as error:
+        return _mapped_error(command, args, error)
+    lines = [f"{key}: {value}" for key, value in payload.items() if key != "evidence"]
+    for item in evidence:
+        lines.append(f"evidence: {item}")
+    return _success(command, args, payload, "\n".join(lines))
+
+
+def _handle_autonomy_history(args: Namespace) -> CliResponse:
+    command = "ideas autonomy history"
+    try:
+        service = _service(args)
+        entries = service.autonomy_history()
+    except Exception as error:
+        return _mapped_error(command, args, error)
+    payload = {
+        "count": len(entries),
+        "entries": [entry.to_dict() for entry in entries],
+    }
+    lines = [_status_line(command, "OK", f"versions={len(entries)}")]
+    for entry in entries:
+        line = (
+            f"v{entry.version} {entry.timestamp.isoformat()} {entry.mode.value} "
+            f"by {entry.actor_type.value}:{entry.actor_id} — {entry.reason}"
+        )
+        lines.append(line)
+        for item in entry.evidence:
+            lines.append(f"  evidence: {item}")
+    return _success(command, args, payload, "\n".join(lines), was_noop=not entries)
+
+
+def _handle_autonomy_set(args: Namespace) -> CliResponse:
+    command = "ideas autonomy set"
+    reason_error = _reason_error(command, args)
+    if reason_error is not None:
+        return reason_error
+    try:
+        service = _service(args)
+        entry = service.set_autonomy_mode(
+            AutonomyMode(args.mode),
+            actor_type=ActorType.HUMAN,
+            actor_id=_actor_id(args),
+            reason=args.reason,
+        )
+    except Exception as error:
+        return _mapped_error(command, args, error)
+    payload = entry.to_dict()
+    text = _status_line(command, "OK", f"mode={entry.mode.value}, version={entry.version}")
+    return _success(command, args, payload, text)
+
+
 def _handle_audit_list(args: Namespace) -> CliResponse:
     command = "ideas audit list"
     filter_error = _audit_filter_error(command, args)
@@ -3196,7 +3306,7 @@ def _mapped_error(command: str, args: Namespace, error: Exception) -> CliRespons
             str(error),
             details=_error_context(error),
         )
-    if isinstance(error, (AuditIntegrityError, BudgetIntegrityError)):
+    if isinstance(error, (AuditIntegrityError, AutonomyIntegrityError, BudgetIntegrityError)):
         return _failure(
             command,
             args,

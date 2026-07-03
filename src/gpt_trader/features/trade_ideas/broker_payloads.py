@@ -18,6 +18,7 @@ from gpt_trader.errors import ValidationError
 from gpt_trader.features.trade_ideas.audit import AuditAction, AuditEvent
 from gpt_trader.features.trade_ideas.budget import RiskBudget
 from gpt_trader.features.trade_ideas.models import (
+    AutonomyMode,
     BrokerTicket,
     TicketStatus,
     TicketVenue,
@@ -93,6 +94,8 @@ def build_broker_neutral_ticket_payload(
     request: BrokerTicketExportRequest,
     budget: RiskBudget,
     budget_source: str,
+    active_autonomy_mode: AutonomyMode,
+    active_autonomy_source: str,
     export_time: datetime,
     approval_policy_violations: list[str],
 ) -> dict[str, Any]:
@@ -144,7 +147,12 @@ def build_broker_neutral_ticket_payload(
         },
         "policy_budget_snapshot": {
             "evaluated_at": export_time.isoformat(),
-            "autonomy_mode": idea.autonomy_mode.value,
+            # The mode the export's violations were evaluated against — the
+            # resolved active level from the autonomy state log, which can
+            # differ from the mode the idea claimed at proposal time
+            # (decision_metadata.autonomy_mode preserves that record field).
+            "autonomy_mode": active_autonomy_mode.value,
+            "autonomy_mode_source": active_autonomy_source,
             "risk_budget_source": budget_source,
             "risk_budget": budget.to_dict(),
             "approval_policy_violations": approval_policy_violations,
