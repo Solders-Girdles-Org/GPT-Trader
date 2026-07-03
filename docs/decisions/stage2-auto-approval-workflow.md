@@ -79,10 +79,11 @@ id, reason prefix, and envelope evidence.
   violations.
 - CLI: `gpt-trader ideas approve --auto-sweep` is the only trigger. No
   scheduler ships with this decision.
-- The scheduled Stage 1 paper cycle remains human-approval-only. System
-  approvals created by this sweep are audited `approved` records, but the
-  Stage 1 cycle skips them until a separate Stage 2 execution gate is accepted
-  and implemented.
+- System approvals created by this sweep are audited `approved` records. Paper
+  execution is scoped by the later
+  [stage2-execution-gate](stage2-execution-gate.md): without that gate's
+  default-off execution flag and audited `bounded_autonomy` mode, the paper
+  cycle preserves its previous skip behavior.
 - Enabling the flag in operation remains gated by the rubric's Stage 1 → 2
   promotion gates (track-record depth, eligibility pass rate, attribution
   coverage, risk calibration, expectancy, kill-switch drill, daily-loss breaker

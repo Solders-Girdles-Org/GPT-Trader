@@ -11,6 +11,7 @@ the append-only audit log.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -22,8 +23,12 @@ from gpt_trader.errors import ValidationError
 from gpt_trader.features.brokerages.mock import DeterministicBroker
 from gpt_trader.features.brokerages.paper import HybridPaperBroker
 from gpt_trader.features.trade_ideas import (
+    AUTO_APPROVAL_ACTOR_ID,
     ActorType,
     AuditAction,
+    AuditEvent,
+    AutonomyMode,
+    AutonomyResolution,
     PaperFillEvent,
     PaperFillReconciler,
     PaperFillReconciliationEntry,
@@ -45,6 +50,8 @@ PaperBroker = DeterministicBroker | HybridPaperBroker
 
 PAPER_EXECUTION_VENUE = TicketVenue.PAPER.value
 DEFAULT_PAPER_EXECUTION_ACTOR_ID = "paper-idea-executor"
+AUTO_EXECUTION_ENV_VAR = "GPT_TRADER_IDEAS_AUTO_EXECUTION"
+_AUTO_EXECUTION_ENABLED_VALUES = frozenset({"1", "true", "yes", "on"})
 
 
 class PaperOnlyLaneError(ValidationError):
@@ -62,6 +69,12 @@ class PaperExecutionError(ValidationError):
     so admission refuses reruns; the operator resolves it with ``ideas cancel``
     or ``ideas mark-filled`` rather than by executing again.
     """
+
+
+@dataclass(frozen=True, slots=True)
+class _PaperExecutionAdmission:
+    view: TradeIdeaView
+    submission_evidence: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,11 +117,66 @@ def _require_paper_broker(broker: object) -> PaperBroker:
     return broker  # type: ignore[return-value]
 
 
-def _latest_approval_actor_type(view: TradeIdeaView) -> ActorType | None:
+def resolve_auto_execution_enabled() -> bool:
+    """True only when the operator explicitly enabled system-approved paper execution.
+
+    Deliberately environment-only, with no argument override: enabling the
+    Stage 2 execution gate is an operator configuration act, never something
+    an interface can pass in (docs/decisions/stage2-execution-gate.md).
+    """
+    configured = os.environ.get(AUTO_EXECUTION_ENV_VAR, "").strip().casefold()
+    return configured in _AUTO_EXECUTION_ENABLED_VALUES
+
+
+def _latest_approval_event(view: TradeIdeaView) -> AuditEvent | None:
     for event in reversed(view.events):
         if event.action is AuditAction.APPROVED:
-            return event.actor_type
+            return event
     return None
+
+
+def _human_approval_required_error(decision_id: str, actor: str) -> IdeaNotExecutableError:
+    return IdeaNotExecutableError(
+        f"Idea {decision_id} is not executable: latest approval "
+        f"actor_type is '{actor}', paper execution requires human approval",
+        field="approval_actor_type",
+        value=actor,
+    )
+
+
+def _gate_evidence(
+    approval_event: AuditEvent,
+    resolution: AutonomyResolution,
+) -> tuple[str, ...]:
+    version = resolution.version if resolution.version is not None else "none"
+    return (
+        f"{AUTO_EXECUTION_ENV_VAR}=enabled",
+        f"autonomy_state version {version} mode={resolution.mode.value} "
+        f"(source={resolution.source})",
+        f"approval_actor actor_type={approval_event.actor_type.value} "
+        f"actor_id={approval_event.actor_id}",
+    )
+
+
+def paper_auto_execution_gate_evidence(
+    service: TradeIdeaService,
+    approval_event: AuditEvent | None,
+    *,
+    now: datetime,
+) -> tuple[str, ...] | None:
+    """Return submission evidence when a system approval passes the Stage 2 gate."""
+    if approval_event is None:
+        return None
+    if approval_event.actor_type is not ActorType.SYSTEM:
+        return None
+    if approval_event.actor_id != AUTO_APPROVAL_ACTOR_ID:
+        return None
+    if not resolve_auto_execution_enabled():
+        return None
+    resolution = service.resolve_execution_autonomy(now=now)
+    if resolution.mode is not AutonomyMode.BOUNDED_AUTONOMY:
+        return None
+    return _gate_evidence(approval_event, resolution)
 
 
 class PaperIdeaExecutor:
@@ -143,6 +211,9 @@ class PaperIdeaExecutor:
         (already being executed) and FILLED — is refused so the lane can never
         double-execute or resurrect a terminal record.
         """
+        return self._resolve_execution_admission(decision_id).view
+
+    def _resolve_execution_admission(self, decision_id: str) -> _PaperExecutionAdmission:
         view = self._service.get(decision_id)
 
         if view.state is not TradeIdeaState.APPROVED:
@@ -153,15 +224,20 @@ class PaperIdeaExecutor:
                 value=view.state.value,
             )
 
-        approval_actor_type = _latest_approval_actor_type(view)
-        if approval_actor_type is not ActorType.HUMAN:
-            actor = approval_actor_type.value if approval_actor_type else "none"
-            raise IdeaNotExecutableError(
-                f"Idea {decision_id} is not executable: latest approval "
-                f"actor_type is '{actor}', paper execution requires human approval",
-                field="approval_actor_type",
-                value=actor,
+        approval_event = _latest_approval_event(view)
+        submission_evidence: tuple[str, ...] = ()
+        if approval_event is None or approval_event.actor_type is not ActorType.HUMAN:
+            actor = approval_event.actor_type.value if approval_event else "none"
+            submission_evidence = (
+                paper_auto_execution_gate_evidence(
+                    self._service,
+                    approval_event,
+                    now=self._now_factory(),
+                )
+                or ()
             )
+            if not submission_evidence:
+                raise _human_approval_required_error(decision_id, actor)
 
         expires_at = view.idea.time_horizon.expires_at
         if expires_at is not None and expires_at <= self._now_factory():
@@ -171,7 +247,7 @@ class PaperIdeaExecutor:
                 value=expires_at.isoformat(),
             )
 
-        return view
+        return _PaperExecutionAdmission(view=view, submission_evidence=submission_evidence)
 
     def execute(
         self,
@@ -188,7 +264,8 @@ class PaperIdeaExecutor:
         reconciles persisted paper fills — so its payload-conflict and dedupe
         checks also guard the machine leg.
         """
-        view = self.resolve_approved_idea(decision_id)
+        admission = self._resolve_execution_admission(decision_id)
+        view = admission.view
         symbol = view.idea.instrument
         side = _order_side(view.idea)
         quantity = _order_quantity(view.idea)
@@ -201,6 +278,7 @@ class PaperIdeaExecutor:
             external_order_id=client_order_id,
             reason=f"Paper executor submitting market {side} {quantity} {symbol}",
             actor_type=ActorType.SYSTEM,
+            evidence=admission.submission_evidence,
         )
 
         order = self._broker.place_order(

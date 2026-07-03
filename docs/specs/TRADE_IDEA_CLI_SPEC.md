@@ -573,9 +573,22 @@ Stage 2 auto-approval inside the budget envelope
 - DECISION_ID and `--reason` are refused alongside `--auto-sweep`
   (`INVALID_ARGUMENT`); the sweep records its own audited reasons.
 - Manual trigger only — no scheduler ships with this surface.
-- Scheduled Stage 1 paper-cycle execution stays human-approval-only: system
-  approvals from the sweep remain audited `approved` records, but the Stage 1
-  cycle skips them until a separate Stage 2 execution gate exists.
+- Paper execution of system approvals is separately gated by
+  `docs/decisions/stage2-execution-gate.md`: the latest approval must be the
+  auto-sweep system actor, `GPT_TRADER_IDEAS_AUTO_EXECUTION` must be enabled,
+  and the audited autonomy log must resolve to `bounded_autonomy` at execution
+  time. Without both gates, `execute-paper` and `ideas cycle` preserve the
+  previous typed refusal / audited skip behavior.
+
+### `ideas execute-paper`
+
+- Executes one approved idea against the offline deterministic paper broker and
+  records the `submitted`/`filled` lifecycle through `PaperIdeaExecutor`.
+- Human-approved ideas execute as before. System-approved ideas execute only
+  under the Stage 2 execution gate (`GPT_TRADER_IDEAS_AUTO_EXECUTION=1` plus
+  audited `bounded_autonomy`, latest approval actor `auto-approval-sweep`).
+- No live broker/account/API is reachable from this command; the paper broker
+  type allowlist remains the execution boundary.
 
 ### `ideas reject` / `request-changes` / `cancel`
 

@@ -39,6 +39,7 @@ from gpt_trader.cli.response import CliError, CliErrorCode, CliResponse, RawCliO
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.brokerages.mock import DeterministicBroker
 from gpt_trader.features.idea_execution import (
+    AUTO_EXECUTION_ENV_VAR,
     DEFAULT_PAPER_EXECUTION_ACTOR_ID,
     PaperCycleRunner,
     PaperIdeaExecutor,
@@ -1031,11 +1032,13 @@ def register(subparsers: Any) -> None:
         "execute-paper",
         help="Execute an APPROVED idea against the offline deterministic paper broker",
         description=(
-            "Machine leg of the Stage 1 paper lane: place a simulated market order "
-            "for an approved idea (client_order_id = decision id) and record the "
-            "submission and fill through TradeIdeaService. Only the deterministic "
-            "paper broker is reachable from this command; it never contacts a live "
-            "broker or account."
+            "Machine leg of the paper lane: place a simulated market order for a "
+            "human-approved idea, or for an auto-sweep system-approved idea only "
+            f"when {AUTO_EXECUTION_ENV_VAR}=1 and audited bounded_autonomy both "
+            "pass (client_order_id = decision id), then record the submission and "
+            "fill through TradeIdeaService. Only the deterministic paper broker is "
+            "reachable from this command; it never contacts a live broker or "
+            "account."
         ),
     )
     _add_common_options(execute_paper)
@@ -1060,10 +1063,12 @@ def register(subparsers: Any) -> None:
         description=(
             "One scheduled turn of the Stage 1 paper loop: sweep expired ideas, run "
             "the selected proposers over one market snapshot, paper-execute ideas a "
-            "human already approved (priced from the same snapshot), and append one "
-            "manifest row of evidence. Recurrence comes from an external scheduler "
-            "(launchd/cron); this command never decides a cadence, never approves "
-            "ideas, and never contacts a live broker or account."
+            "human already approved, plus gated auto-sweep system approvals when "
+            "the Stage 2 paper-execution gate passes (priced from the same "
+            "snapshot), and append one manifest row of evidence. Recurrence comes "
+            "from an external scheduler (launchd/cron); this command never decides "
+            "a cadence, never approves ideas, and never contacts a live broker or "
+            "account."
         ),
     )
     _add_common_options(cycle)

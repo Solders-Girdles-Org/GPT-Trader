@@ -1,9 +1,9 @@
 {
   "env_template_path": "config/environments/.env.template",
   "summary": {
-    "code_only": 124,
+    "code_only": 125,
     "template_only": 0,
-    "total": 175
+    "total": 176
   },
   "variables": [
     {
@@ -1196,6 +1196,22 @@
       ],
       "in_env_template": false,
       "name": "GPT_TRADER_IDEAS_AUTO_APPROVAL",
+      "template_default": "",
+      "template_references": []
+    },
+    {
+      "code_paths": [
+        "src/gpt_trader/features/idea_execution/executor.py"
+      ],
+      "code_references": [
+        {
+          "line": 127,
+          "path": "src/gpt_trader/features/idea_execution/executor.py",
+          "reader": "os.environ.get"
+        }
+      ],
+      "in_env_template": false,
+      "name": "GPT_TRADER_IDEAS_AUTO_EXECUTION",
       "template_default": "",
       "template_references": []
     },

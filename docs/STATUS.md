@@ -15,7 +15,7 @@ Verify file/function/issue references before relying on them; they reflect the
 dated snapshot below. The next work is the live GitHub issue queue,
 never a list copied here.
 
-## Snapshot (2026-07-01)
+## Snapshot (2026-07-03)
 
 Stage definitions live in [DIRECTION.md](DIRECTION.md#the-ladder); this is only
 the state per stage.
@@ -24,7 +24,7 @@ the state per stage.
 |-------|-------|
 | **0 — Rails** | **Complete** — all rubric evidence shipped and tested |
 | **1 — Human-approved loop** | **In progress (runtime routing wired, default-off)** — reviewer tooling, attribution, real-data snapshot proposal (#1031), paper-fill reconciliation (#1035), and the strategy-signal adapter are operator-usable; the live strategy path can now be routed through the approval workflow behind a default-off gate (#1033), but that gate ships off |
-| **2 — Bounded autonomy** | Not started |
+| **2 — Bounded autonomy** | Mechanisms started, operational promotion not entered — default-off auto-approval and paper auto-execution gates exist for system-approved ideas, but enabling them remains an operator act gated on measured outcomes |
 | **3 — Self-directed entity** | Not started |
 
 ## Stage 0 — Rails (complete)
@@ -59,6 +59,21 @@ existing spine rather than a second proposer brain — see
 Enabling and reviewing the path is documented in the
 [Trade-Idea Interface Design Notes](specs/TRADE_IDEA_INTERFACES_DESIGN_NOTES.md#live-strategy-signal-routing-default-off).
 Track precise per-ticket status in the issue queue, not here.
+
+## Stage 2 — Bounded autonomy (mechanisms started, not operationally entered)
+
+The first Stage 2 mechanisms now exist as default-off paper-only gates:
+`ideas approve --auto-sweep` can write system approvals inside the budget
+envelope only when `GPT_TRADER_IDEAS_AUTO_APPROVAL` is enabled and the audited
+autonomy log resolves to `bounded_autonomy`; the paper execution lane admits
+those system approvals only when `GPT_TRADER_IDEAS_AUTO_EXECUTION` is also
+enabled and the autonomy log still resolves to `bounded_autonomy` at execution
+time. The execution gate reuses the daily-loss ratchet, so a breach lowers the
+mode before remaining system-approved ideas can execute.
+
+This is mechanism state, not a promotion claim. Live order submission remains
+out of scope, and operationally flipping either flag remains an operator act
+gated by the measured-outcome rubric.
 
 ## The structural fact
 

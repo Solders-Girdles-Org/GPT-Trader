@@ -160,20 +160,26 @@ uv run gpt-trader ideas audit verify
 ```
 
 Every step stamps an actor into the append-only audit log; proposals come from
-`ai` actors, approvals from `human` actors, and `execute-paper` lifecycle
-events from the `paper-idea-executor` system actor under the `paper` venue.
-None of these commands touch a live broker or account. Ideas that expire
-unreviewed are swept with `uv run gpt-trader ideas expire`.
+`ai` actors, human review approvals from `human` actors, and `execute-paper`
+lifecycle events from the `paper-idea-executor` system actor under the `paper`
+venue. System approvals from `ideas approve --auto-sweep` reach paper execution
+only when the operator separately enables `GPT_TRADER_IDEAS_AUTO_EXECUTION` and
+the audited autonomy log resolves to `bounded_autonomy`. None of these commands
+touch a live broker or account. Ideas that expire unreviewed are swept with
+`uv run gpt-trader ideas expire`.
 
 ## Scheduled Stage 1 Turns (Unattended Operation)
 
-`ideas cycle` runs exactly one turn of the Stage 1 loop — lock, snapshot,
-expire sweep, proposers, paper-execute already-APPROVED ideas priced from the
-turn's own snapshot, report/queue artifacts, one manifest row. Recurrence
-comes from an external scheduler (launchd or cron); the command never decides
-a cadence, never approves ideas, and never contacts a live broker or account.
-Approvals remain a human event: review the queue between turns exactly as in
-the honest-day procedure above.
+`ideas cycle` runs exactly one turn of the paper loop — lock, snapshot, expire
+sweep, proposers, paper-execute already-APPROVED ideas priced from the turn's
+own snapshot, report/queue artifacts, one manifest row. Recurrence comes from
+an external scheduler (launchd or cron); the command never decides a cadence,
+never approves ideas, and never contacts a live broker or account. Approvals
+remain a separate event: review the queue between turns exactly as in the
+honest-day procedure above, or use the default-off auto-approval and
+auto-execution gates documented in
+[stage2-auto-approval-workflow](decisions/stage2-auto-approval-workflow.md) and
+[stage2-execution-gate](decisions/stage2-execution-gate.md).
 
 Prerequisite: attest account equity once before scheduling turns
 (`ideas budget set --account-equity <equity> --actor <you> --reason "..."`,
