@@ -4,6 +4,11 @@ The adapter is intentionally outside ``features.trade_ideas`` so the
 broker-neutral trade-idea slice does not import live strategy modules. It maps
 an existing strategy signal into a complete ``TradeIdea`` and, when requested,
 submits that idea through ``TradeIdeaService.propose`` only.
+
+Sizing is advisory by default. When a ``TradeIdeaPositionSizingBridge`` is
+injected, mapped ideas instead carry executable sizing (positive quantity and
+notional, estimated ``max_loss.amount``) computed against the same offline
+equity/budget inputs ``BaselineProposer`` uses — never live account state.
 """
 
 from __future__ import annotations
@@ -30,7 +35,9 @@ from gpt_trader.features.trade_ideas import (
     TimeHorizon,
     TradeDirection,
     TradeIdea,
+    TradeIdeaPositionSizingBridge,
     TradeIdeaService,
+    TradeIdeaSizingContext,
     TradeIdeaView,
     evaluate_eligibility,
 )
@@ -90,16 +97,26 @@ class StrategySignalToTradeIdeaAdapterConfig:
 class StrategySignalToTradeIdeaAdapter:
     """Map strategy decisions to proposed trade ideas without execution side effects."""
 
-    def __init__(self, config: StrategySignalToTradeIdeaAdapterConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: StrategySignalToTradeIdeaAdapterConfig | None = None,
+        *,
+        sizing_bridge: TradeIdeaPositionSizingBridge | None = None,
+    ) -> None:
         self._config = config or StrategySignalToTradeIdeaAdapterConfig()
+        self._sizing_bridge = sizing_bridge
 
     @property
     def enabled(self) -> bool:
         return self._config.enabled
 
+    def actor_id(self, strategy_name: str) -> str:
+        """Stable AI actor id for a strategy, independent of any single signal."""
+        return f"{_safe_slug(self._config.proposer_id_prefix)}-{_safe_slug(strategy_name)}"
+
     def proposer_id(self, context: StrategySignalContext) -> str:
         """Return the stable AI actor id recorded on proposal events."""
-        return f"{_safe_slug(self._config.proposer_id_prefix)}-{_safe_slug(context.strategy_name)}"
+        return self.actor_id(context.strategy_name)
 
     def map_decision(
         self,
@@ -170,6 +187,54 @@ class StrategySignalToTradeIdeaAdapter:
             target=target,
         )
         reason = _idea_reason(decision, context)
+        confidence = _confidence(confidence_value)
+        data_used = self._data_used(decision, context, as_of, confidence_value)
+
+        if self._sizing_bridge is None:
+            max_loss = MaxLoss(
+                percent_of_account=config.risk_per_idea_pct,
+                assumptions=(
+                    f"Strategy bridge uses a {config.stop_loss_pct}% stop from current mark {mark}",
+                    "Sizing remains advisory until a human approves the idea",
+                ),
+            )
+            sizing_recommendation = SizingRecommendation(
+                rationale=(
+                    f"Size so a stop-out near {stop_level} risks no more than "
+                    f"{config.risk_per_idea_pct}% of account equity"
+                ),
+            )
+        else:
+            # Size against the worst permitted long entry (the top of the entry
+            # zone): a fill at entry_upper is explicitly allowed, so the
+            # persisted risk snapshot must not assume a cheaper fill at the mark.
+            sizing = self._sizing_bridge.recommend(
+                TradeIdeaSizingContext(
+                    symbol=context.symbol,
+                    current_price=entry_upper,
+                    confidence_label=confidence.label,
+                    stop_loss_distance=entry_upper - stop_level,
+                    take_profit_distance=target - entry_upper,
+                    max_loss_pct=config.risk_per_idea_pct,
+                )
+            )
+            stop_distance_pct = ((entry_upper - stop_level) / entry_upper * 100).quantize(
+                Decimal("0.01")
+            )
+            max_loss = MaxLoss(
+                amount=sizing.estimated_loss_amount,
+                percent_of_account=sizing.estimated_loss_pct,
+                assumptions=(
+                    f"Strategy bridge uses a {config.stop_loss_pct}% stop from current mark {mark}",
+                    f"PositionSizer notional {sizing.recommendation.notional} implies "
+                    f"an estimated stop-out loss of {sizing.estimated_loss_amount}",
+                    f"Risk budget cap remains {sizing.effective_max_loss_pct}% per idea",
+                    f"Sized at the worst permitted entry {entry_upper}; stop distance "
+                    f"is {stop_distance_pct}% from there",
+                ),
+            )
+            sizing_recommendation = sizing.recommendation
+            data_used = (*data_used, sizing.data_used)
 
         return TradeIdea(
             decision_id=self._decision_id(decision, context, as_of),
@@ -183,25 +248,14 @@ class StrategySignalToTradeIdeaAdapter:
             entry_zone=EntryZone(lower=entry_lower, upper=entry_upper),
             invalidation=f"Close below the strategy stop level {stop_level}",
             target_exit=f"Take profit near {target} or exit at expiry",
-            max_loss=MaxLoss(
-                percent_of_account=config.risk_per_idea_pct,
-                assumptions=(
-                    f"Strategy bridge uses a {config.stop_loss_pct}% stop from current mark {mark}",
-                    "Sizing remains advisory until a human approves the idea",
-                ),
-            ),
-            sizing_recommendation=SizingRecommendation(
-                rationale=(
-                    f"Size so a stop-out near {stop_level} risks no more than "
-                    f"{config.risk_per_idea_pct}% of account equity"
-                ),
-            ),
+            max_loss=max_loss,
+            sizing_recommendation=sizing_recommendation,
             time_horizon=TimeHorizon(
                 expected_hold=config.expected_hold,
                 expires_at=as_of + timedelta(hours=config.expiry_hours),
             ),
-            data_used=self._data_used(decision, context, as_of, confidence_value),
-            confidence=_confidence(confidence_value),
+            data_used=data_used,
+            confidence=confidence,
             failure_mode=(
                 "Strategy signal fails if price rejects the entry zone and closes below "
                 "the mapped invalidation level"

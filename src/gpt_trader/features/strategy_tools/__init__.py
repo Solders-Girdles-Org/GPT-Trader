@@ -7,6 +7,10 @@ from gpt_trader.features.strategy_tools.filters import (
     create_conservative_filters,
 )
 from gpt_trader.features.strategy_tools.guards import RiskGuards, create_standard_risk_guards
+from gpt_trader.features.strategy_tools.snapshot_proposer import (
+    SnapshotDecider,
+    SnapshotStrategyProposer,
+)
 from gpt_trader.features.strategy_tools.trade_idea_adapter import (
     StrategyDecisionSignal,
     StrategySignalContext,
@@ -17,6 +21,8 @@ from gpt_trader.features.strategy_tools.trade_idea_adapter import (
 __all__ = [
     "MarketConditionFilters",
     "RiskGuards",
+    "SnapshotDecider",
+    "SnapshotStrategyProposer",
     "StrategyDecisionSignal",
     "StrategyEnhancements",
     "StrategySignalContext",
