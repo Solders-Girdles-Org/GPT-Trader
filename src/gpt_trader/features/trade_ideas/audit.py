@@ -37,6 +37,7 @@ class ActorType(str, Enum):
 class AuditAction(str, Enum):
     PROPOSED = "proposed"
     CHANGED = "changed"
+    AUTO_APPROVAL_SKIPPED = "auto_approval_skipped"
     APPROVED = "approved"
     REJECTED = "rejected"
     SUBMITTED = "submitted"
@@ -52,6 +53,7 @@ class AuditIntegrityError(ValidationError):
 _ACTION_AFTER_STATES: dict[AuditAction, TradeIdeaState] = {
     AuditAction.PROPOSED: TradeIdeaState.PROPOSED,
     AuditAction.CHANGED: TradeIdeaState.NEEDS_CHANGES,
+    AuditAction.AUTO_APPROVAL_SKIPPED: TradeIdeaState.PROPOSED,
     AuditAction.APPROVED: TradeIdeaState.APPROVED,
     AuditAction.REJECTED: TradeIdeaState.REJECTED,
     AuditAction.SUBMITTED: TradeIdeaState.SUBMITTED,

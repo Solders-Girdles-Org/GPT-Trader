@@ -115,7 +115,7 @@ gpt-trader ideas
 │   ├── export       same filters as list [--format json|csv] [--output PATH]
 │   │                [--output-dir DIR]
 │   └── show         DECISION_ID
-├── approve          DECISION_ID --reason TEXT
+├── approve          DECISION_ID --reason TEXT | --auto-sweep
 ├── reject           DECISION_ID --reason TEXT
 ├── request-changes  DECISION_ID --reason TEXT
 ├── cancel           DECISION_ID --reason TEXT
@@ -547,6 +547,35 @@ uv run gpt-trader ideas export-ticket \
     - 2 tickets already approved; budget allows 2 concurrent approved tickets
     - Idea expired at 2026-06-11T20:00:00+00:00; approve nothing stale
   ```
+
+### `ideas approve --auto-sweep`
+
+Stage 2 auto-approval inside the budget envelope
+(`docs/decisions/stage2-auto-approval-workflow.md`) over
+`service.auto_approve_sweep()`.
+
+- Doubly gated, both refusals loud (`POLICY_VIOLATION`, never a silent no-op):
+  the `GPT_TRADER_IDEAS_AUTO_APPROVAL` feature flag must be explicitly enabled
+  (default off; environment-only, no argument override), and the audited
+  autonomy log must resolve to `bounded_autonomy`.
+- Sweeps `proposed` ideas oldest-review-first; each idea is re-checked against
+  the full approval policy with `actor_type=SYSTEM` and the mode is re-resolved
+  per decision so the daily-loss ratchet can halt a sweep mid-pass.
+- Zero violations → audited `approved` event with system actor
+  (`auto-approval-sweep`), an `auto-approval:` prefix plus a following space,
+  and budget-envelope evidence (autonomy version, budget version, exposure
+  numbers). Any violation → the idea stays `proposed` and is reported under
+  `data["skipped"]` with its violations, with an audited
+  `auto_approval_skipped` event preserving the proposed state.
+- `data` = `evaluated_at`, `autonomy_mode`, `autonomy_version`, `counts`,
+  `approved` (view summaries), `skipped` (decision_id + violations).
+  `was_noop=True` when the proposed queue is empty.
+- DECISION_ID and `--reason` are refused alongside `--auto-sweep`
+  (`INVALID_ARGUMENT`); the sweep records its own audited reasons.
+- Manual trigger only — no scheduler ships with this surface.
+- Scheduled Stage 1 paper-cycle execution stays human-approval-only: system
+  approvals from the sweep remain audited `approved` records, but the Stage 1
+  cycle skips them until a separate Stage 2 execution gate exists.
 
 ### `ideas reject` / `request-changes` / `cancel`
 

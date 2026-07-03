@@ -23,6 +23,7 @@ from gpt_trader.features.brokerages.mock import DeterministicBroker
 from gpt_trader.features.brokerages.paper import HybridPaperBroker
 from gpt_trader.features.trade_ideas import (
     ActorType,
+    AuditAction,
     PaperFillEvent,
     PaperFillReconciler,
     PaperFillReconciliationEntry,
@@ -103,6 +104,13 @@ def _require_paper_broker(broker: object) -> PaperBroker:
     return broker  # type: ignore[return-value]
 
 
+def _latest_approval_actor_type(view: TradeIdeaView) -> ActorType | None:
+    for event in reversed(view.events):
+        if event.action is AuditAction.APPROVED:
+            return event.actor_type
+    return None
+
+
 class PaperIdeaExecutor:
     """Executes APPROVED trade ideas against a paper broker.
 
@@ -143,6 +151,16 @@ class PaperIdeaExecutor:
                 f"{view.state.value}, lane requires {TradeIdeaState.APPROVED.value}",
                 field="state",
                 value=view.state.value,
+            )
+
+        approval_actor_type = _latest_approval_actor_type(view)
+        if approval_actor_type is not ActorType.HUMAN:
+            actor = approval_actor_type.value if approval_actor_type else "none"
+            raise IdeaNotExecutableError(
+                f"Idea {decision_id} is not executable: latest approval "
+                f"actor_type is '{actor}', paper execution requires human approval",
+                field="approval_actor_type",
+                value=actor,
             )
 
         expires_at = view.idea.time_horizon.expires_at
