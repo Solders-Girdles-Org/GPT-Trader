@@ -189,6 +189,8 @@ def _apply_profile_kwargs(config: BotConfig, profile_kwargs: dict[str, Any]) -> 
         config.strategy_signal_proposals_enabled = profile_kwargs[
             "strategy_signal_proposals_enabled"
         ]
+    if "risk_budget_runtime_seed_enabled" in profile_kwargs:
+        config.risk_budget_runtime_seed_enabled = profile_kwargs["risk_budget_runtime_seed_enabled"]
 
     if "enable_shorts" in profile_kwargs:
         config.enable_shorts = profile_kwargs["enable_shorts"]

@@ -518,6 +518,7 @@ class ProfileLoader:
             "use_limit_orders": schema.execution.use_limit_orders,
             "market_order_fallback": schema.execution.market_order_fallback,
             "strategy_signal_proposals_enabled": schema.execution.strategy_signal_proposals,
+            "risk_budget_runtime_seed_enabled": schema.execution.risk_budget_runtime_seed,
             # Monitoring
             "log_level": schema.monitoring.log_level,
             "status_interval": schema.monitoring.update_interval,
@@ -626,6 +627,7 @@ def _schema_to_bot_config(
         "dry_run": schema.execution.dry_run,
         "mock_broker": schema.execution.mock_broker,
         "strategy_signal_proposals_enabled": schema.execution.strategy_signal_proposals,
+        "risk_budget_runtime_seed_enabled": schema.execution.risk_budget_runtime_seed,
         "log_level": schema.monitoring.log_level,
         "status_interval": schema.monitoring.update_interval,
         "status_enabled": schema.monitoring.status_enabled,

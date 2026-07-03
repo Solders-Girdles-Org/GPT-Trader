@@ -117,3 +117,11 @@ def test_apply_profile_kwargs_maps_strategy_signal_proposals_gate() -> None:
     services._apply_profile_kwargs(config, {"strategy_signal_proposals_enabled": True})
 
     assert config.strategy_signal_proposals_enabled is True
+
+
+def test_apply_profile_kwargs_maps_risk_budget_runtime_seed_gate() -> None:
+    config = BotConfig(risk_budget_runtime_seed_enabled=False)
+
+    services._apply_profile_kwargs(config, {"risk_budget_runtime_seed_enabled": True})
+
+    assert config.risk_budget_runtime_seed_enabled is True
