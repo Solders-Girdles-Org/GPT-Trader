@@ -162,6 +162,7 @@ def test_report_summarizes_workflow_quality_closeouts_and_profit_loss(
     assert data["proposal_volume"]["resubmission_count"] == 1
     assert data["workflow"]["event_counts"] == {
         "approved": 1,
+        "auto_approval_skipped": 0,
         "cancelled": 0,
         "expired": 1,
         "filled": 1,
