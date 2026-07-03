@@ -17,6 +17,11 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, cast
 
+from gpt_trader.core.risk_units import (
+    fraction_to_pct_points,
+    pct_points_to_fraction,
+    same_trading_day,
+)
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.trade_ideas.audit import (
     ActorType,
@@ -25,6 +30,21 @@ from gpt_trader.features.trade_ideas.audit import (
     AuditIntegrityError,
     TradeIdeaAuditLog,
     new_event_id,
+)
+from gpt_trader.features.trade_ideas.autonomy import (
+    AUTONOMY_RANK,
+    AUTONOMY_SOURCE_FAIL_CLOSED,
+    AUTONOMY_SOURCE_LOG,
+    AUTONOMY_SOURCE_SEEDED_DEFAULT,
+    DEFAULT_AUTONOMY_MODE,
+    RATCHET_ACTOR_ID,
+    AutonomyIntegrityError,
+    AutonomyResolution,
+    AutonomyStateEntry,
+    AutonomyStateLog,
+    autonomy_transition_violations,
+    daily_loss_breach_evidence,
+    resolve_autonomy,
 )
 from gpt_trader.features.trade_ideas.broker_payloads import (
     BrokerTicketExportRequest,
@@ -44,6 +64,7 @@ from gpt_trader.features.trade_ideas.closeout import (
     MaxLossSnapshot,
 )
 from gpt_trader.features.trade_ideas.models import (
+    AutonomyMode,
     ConfidenceLabel,
     TicketStatus,
     TicketVenue,
@@ -148,7 +169,7 @@ def _decimal_to_str(value: Decimal | None) -> str | None:
 def _percent_of_amount(amount: Decimal, equity: Decimal) -> Decimal | None:
     if equity <= 0:
         return None
-    return amount / equity * Decimal("100")
+    return fraction_to_pct_points(amount / equity)
 
 
 def _equity_from_max_loss_amount_percent(
@@ -190,12 +211,6 @@ def _absolute_notional(idea: TradeIdea) -> Decimal | None:
     if notional is None:
         return None
     return abs(notional)
-
-
-def _same_day(timestamp: datetime, now: datetime) -> bool:
-    if now.tzinfo is None or now.utcoffset() is None:
-        return timestamp.date() == now.date()
-    return timestamp.astimezone(now.tzinfo).date() == now.date()
 
 
 def _page_items(
@@ -242,14 +257,13 @@ class TradeIdeaService:
         self,
         root: Path,
         *,
-        policy: ApprovalPolicy | None = None,
         now_factory: Callable[[], datetime] = _utc_now,
     ) -> None:
         self._store = TradeIdeaStore(root / "records")
         self._audit = TradeIdeaAuditLog(root / "audit.jsonl")
         self._closeouts = CloseoutAttributionLog(root / "closeout_attributions.jsonl")
         self._budget_log = RiskBudgetLog(root / "risk_budget.jsonl")
-        self._policy = policy or ApprovalPolicy()
+        self._autonomy_log = AutonomyStateLog(root / "autonomy_state.jsonl")
         self._now = now_factory
 
     @property
@@ -281,6 +295,141 @@ class TradeIdeaService:
         )
         return DEFAULT_RISK_BUDGET
 
+    # -- autonomy ----------------------------------------------------------
+
+    def peek_autonomy(self) -> AutonomyResolution:
+        """Resolve the active autonomy mode without seeding the log (read-only paths)."""
+        return resolve_autonomy(self._autonomy_log)
+
+    def current_autonomy(self) -> AutonomyResolution:
+        """Resolve the active mode, seeding the accepted default on first use."""
+        resolution = self.peek_autonomy()
+        if resolution.source != AUTONOMY_SOURCE_SEEDED_DEFAULT:
+            return resolution
+        self._autonomy_log.append(
+            AutonomyStateEntry(
+                version=1,
+                timestamp=self._now(),
+                mode=DEFAULT_AUTONOMY_MODE,
+                actor_type=ActorType.SYSTEM,
+                actor_id="seed-defaults",
+                reason=(
+                    "Seeded default accepted in docs/decisions/persistent-autonomy-state.md: "
+                    "human approval required for every execution"
+                ),
+            )
+        )
+        return AutonomyResolution(
+            mode=DEFAULT_AUTONOMY_MODE,
+            version=1,
+            source=AUTONOMY_SOURCE_LOG,
+        )
+
+    def autonomy_history(self) -> list[AutonomyStateEntry]:
+        """Return the full audited autonomy-level history (raises on a broken log)."""
+        return self._autonomy_log.history()
+
+    def set_autonomy_mode(
+        self,
+        mode: AutonomyMode,
+        *,
+        actor_type: ActorType,
+        actor_id: str,
+        reason: str,
+        evidence: tuple[str, ...] = (),
+    ) -> AutonomyStateEntry:
+        """Enact an autonomy-level change through the audited log.
+
+        Raising (or re-affirming) the level requires a human actor; lowering is
+        open to any actor so the breach ratchet can act without a human.
+        """
+        resolution = self.current_autonomy()
+        if resolution.source == AUTONOMY_SOURCE_FAIL_CLOSED:
+            raise AutonomyIntegrityError(
+                "Autonomy state log is unreadable or integrity-broken; repair it "
+                f"before changing the level: {resolution.error}",
+                field="autonomy_state_log",
+                value=str(self._autonomy_log.path),
+            )
+        violations = autonomy_transition_violations(
+            current_mode=resolution.mode,
+            requested_mode=mode,
+            actor_type=actor_type,
+        )
+        if violations:
+            raise PolicyViolationError(
+                "Autonomy change refused: " + "; ".join(violations), violations
+            )
+        entry = AutonomyStateEntry(
+            version=(resolution.version or 0) + 1,
+            timestamp=self._now(),
+            mode=mode,
+            actor_type=actor_type,
+            actor_id=actor_id,
+            reason=reason,
+            evidence=evidence,
+        )
+        self._autonomy_log.append(entry)
+        return entry
+
+    def _decision_autonomy(
+        self,
+        *,
+        now: datetime,
+        budget: RiskBudget | None = None,
+        budget_context: ApprovalBudgetContext | None = None,
+    ) -> AutonomyResolution:
+        """Resolve the mode at a decision boundary, applying the automatic ratchet.
+
+        When the resolved level grants more than human-approved execution and
+        the same-trading-day realized loss has breached ``max_daily_loss_pct``,
+        the level ratchets down to ``human_approved_execution`` with the breach
+        evidence appended to the autonomy log before the decision proceeds.
+        """
+        resolution = self.current_autonomy()
+        if resolution.source == AUTONOMY_SOURCE_FAIL_CLOSED:
+            return resolution
+        if AUTONOMY_RANK[resolution.mode] <= AUTONOMY_RANK[AutonomyMode.HUMAN_APPROVED_EXECUTION]:
+            return resolution
+        active_budget = budget if budget is not None else self.current_budget()
+        context = (
+            budget_context if budget_context is not None else self.approval_budget_context(now=now)
+        )
+        evidence = daily_loss_breach_evidence(
+            same_day_realized_loss_pct=context.same_day_realized_loss_pct,
+            max_daily_loss_pct=active_budget.max_daily_loss_pct,
+            budget_version=active_budget.version,
+            moment=now,
+        )
+        if evidence is None:
+            return resolution
+        entry = AutonomyStateEntry(
+            version=(resolution.version or 0) + 1,
+            timestamp=now,
+            mode=AutonomyMode.HUMAN_APPROVED_EXECUTION,
+            actor_type=ActorType.SYSTEM,
+            actor_id=RATCHET_ACTOR_ID,
+            reason=(
+                "Automatic ratchet-down: same-trading-day realized loss breached max_daily_loss_pct"
+            ),
+            evidence=evidence,
+        )
+        self._autonomy_log.append(entry)
+        return AutonomyResolution(
+            mode=entry.mode,
+            version=entry.version,
+            source=AUTONOMY_SOURCE_LOG,
+        )
+
+    @staticmethod
+    def _autonomy_resolution_violations(resolution: AutonomyResolution) -> list[str]:
+        if resolution.source != AUTONOMY_SOURCE_FAIL_CLOSED:
+            return []
+        return [
+            "autonomy state resolution failed closed to "
+            f"'{resolution.mode.value}': {resolution.error}"
+        ]
+
     def approval_violations(
         self,
         idea: TradeIdea,
@@ -288,17 +437,22 @@ class TradeIdeaService:
         actor_type: ActorType = ActorType.HUMAN,
     ) -> list[str]:
         """Return every current-policy reason an idea could not be approved."""
-        return self._policy.approval_violations(
-            idea,
-            actor_type=actor_type,
-            budget=self.current_budget(),
-            open_approved_count=self.open_approved_count(),
-            now=self._now(),
-            review_started_at=self._review_started_at(idea.decision_id),
-            budget_context=self.approval_budget_context(
-                exclude_decision_id=idea.decision_id,
+        resolution = self.current_autonomy()
+        policy = ApprovalPolicy(resolution.mode)
+        return [
+            *self._autonomy_resolution_violations(resolution),
+            *policy.approval_violations(
+                idea,
+                actor_type=actor_type,
+                budget=self.current_budget(),
+                open_approved_count=self.open_approved_count(),
+                now=self._now(),
+                review_started_at=self._review_started_at(idea.decision_id),
+                budget_context=self.approval_budget_context(
+                    exclude_decision_id=idea.decision_id,
+                ),
             ),
-        )
+        ]
 
     def approval_budget_context(
         self,
@@ -329,7 +483,7 @@ class TradeIdeaService:
             ):
                 open_ideas.append(idea)
                 continue
-            if closeout is not None and _same_day(closeout.timestamp, evaluation_time):
+            if closeout is not None and same_trading_day(closeout.timestamp, evaluation_time):
                 if (
                     event.after_state is TradeIdeaState.FILLED
                     or _closeout_has_realized_profit_loss(closeout)
@@ -389,7 +543,9 @@ class TradeIdeaService:
         open_notional_headroom_pct = None
         if account_equity is not None and account_equity > 0:
             open_notional_pct = _percent_of_amount(context.open_notional, account_equity)
-            max_open_notional = account_equity * budget.max_open_notional_pct / Decimal("100")
+            max_open_notional = account_equity * pct_points_to_fraction(
+                budget.max_open_notional_pct
+            )
             open_notional_headroom = max(max_open_notional - context.open_notional, Decimal("0"))
             open_notional_headroom_pct = max(
                 budget.max_open_notional_pct - (open_notional_pct or Decimal("0")),
@@ -452,7 +608,13 @@ class TradeIdeaService:
 
     def update_budget(self, budget: RiskBudget, actor_type: ActorType, actor_id: str) -> None:
         """Enact a new budget version, subject to the autonomy-mode policy."""
-        violations = self._policy.budget_change_violations(actor_type)
+        now = self._now()
+        resolution = self._decision_autonomy(now=now)
+        policy = ApprovalPolicy(resolution.mode)
+        violations = [
+            *self._autonomy_resolution_violations(resolution),
+            *policy.budget_change_violations(actor_type),
+        ]
         if violations:
             raise PolicyViolationError(
                 "Budget change refused: " + "; ".join(violations), violations
@@ -466,6 +628,10 @@ class TradeIdeaService:
                 budget=budget,
             )
         )
+        # The enacted budget is part of this decision: re-check the ratchet
+        # against it so tightening max_daily_loss_pct below already-realized
+        # same-day losses lowers the level now, not at some later decision.
+        self._decision_autonomy(now=now)
 
     # -- lifecycle actions -------------------------------------------------
 
@@ -563,17 +729,30 @@ class TradeIdeaService:
 
     def approve(self, decision_id: str, actor_id: str, reason: str) -> TradeIdeaView:
         idea = self._require_idea(decision_id)
-        violations = self._policy.approval_violations(
-            idea,
-            actor_type=ActorType.HUMAN,
-            budget=self.current_budget(),
-            open_approved_count=self.open_approved_count(),
-            now=self._now(),
-            review_started_at=self._review_started_at(decision_id),
-            budget_context=self.approval_budget_context(
-                exclude_decision_id=decision_id,
-            ),
+        now = self._now()
+        budget = self.current_budget()
+        budget_context = self.approval_budget_context(
+            exclude_decision_id=decision_id,
+            now=now,
         )
+        resolution = self._decision_autonomy(
+            now=now,
+            budget=budget,
+            budget_context=budget_context,
+        )
+        policy = ApprovalPolicy(resolution.mode)
+        violations = [
+            *self._autonomy_resolution_violations(resolution),
+            *policy.approval_violations(
+                idea,
+                actor_type=ActorType.HUMAN,
+                budget=budget,
+                open_approved_count=self.open_approved_count(),
+                now=now,
+                review_started_at=self._review_started_at(decision_id),
+                budget_context=budget_context,
+            ),
+        ]
         if violations:
             raise PolicyViolationError(
                 f"Approval of '{decision_id}' refused: " + "; ".join(violations), violations
@@ -652,13 +831,16 @@ class TradeIdeaService:
         """Expire all stale ideas that can legally transition to expired."""
         now = self._now()
         budget = self._budget_log.current() or DEFAULT_RISK_BUDGET
+        # Review-latency checks are autonomy-mode independent; a static policy
+        # is safe here and keeps the expiry sweep read-only on the autonomy log.
+        policy = ApprovalPolicy()
         expired: list[TradeIdeaView] = []
         for view in self.list_views():
             if view.state not in EXPIRABLE_STATES:
                 continue
             expires_at = view.idea.time_horizon.expires_at
             idea_expired = expires_at is not None and expires_at <= now
-            review_latency_violation = self._policy.review_latency_violation(
+            review_latency_violation = policy.review_latency_violation(
                 review_started_at=self._review_started_at_from_events(view.events),
                 budget=budget,
                 now=now,
@@ -788,18 +970,25 @@ class TradeIdeaService:
         effective_budget = budget or DEFAULT_RISK_BUDGET
         export_time = self._now()
         expires_at = view.idea.time_horizon.expires_at
-        policy_violations = self._policy.approval_violations(
-            view.idea,
-            actor_type=ActorType.HUMAN,
-            budget=effective_budget,
-            open_approved_count=self._open_approved_count_excluding(decision_id),
-            now=export_time,
-            review_started_at=self._review_started_at_from_events(view.events),
-            budget_context=self.approval_budget_context(
-                exclude_decision_id=decision_id,
+        # Render-only export: resolve the mode without seeding or ratcheting
+        # the autonomy log, mirroring the non-mutating budget read above.
+        autonomy_resolution = self.peek_autonomy()
+        policy = ApprovalPolicy(autonomy_resolution.mode)
+        policy_violations = [
+            *self._autonomy_resolution_violations(autonomy_resolution),
+            *policy.approval_violations(
+                view.idea,
+                actor_type=ActorType.HUMAN,
+                budget=effective_budget,
+                open_approved_count=self._open_approved_count_excluding(decision_id),
                 now=export_time,
+                review_started_at=self._review_started_at_from_events(view.events),
+                budget_context=self.approval_budget_context(
+                    exclude_decision_id=decision_id,
+                    now=export_time,
+                ),
             ),
-        )
+        ]
         if (
             view.state is TradeIdeaState.APPROVED
             and expires_at is not None
@@ -823,6 +1012,8 @@ class TradeIdeaService:
             request=request,
             budget=effective_budget,
             budget_source=budget_source,
+            active_autonomy_mode=autonomy_resolution.mode,
+            active_autonomy_source=autonomy_resolution.source,
             export_time=export_time,
             approval_policy_violations=policy_violations,
         )
@@ -852,8 +1043,7 @@ class TradeIdeaService:
             ) from error
         if idea is None:
             raise AuditIntegrityError(
-                f"Stored trade idea '{decision_id}' is missing audit record_hash "
-                f"'{record_hash}'",
+                f"Stored trade idea '{decision_id}' is missing audit record_hash '{record_hash}'",
                 field="record_hash",
                 value=record_hash,
             )
@@ -1477,11 +1667,15 @@ def _queue_expiration(
 def create_trade_idea_service(
     root: Path | None = None,
     *,
-    policy: ApprovalPolicy | None = None,
     now_factory: Callable[[], datetime] = _utc_now,
 ) -> TradeIdeaService:
-    """Resolve root (arg > GPT_TRADER_IDEAS_ROOT > default) and build the service."""
-    return TradeIdeaService(resolve_ideas_root(root), policy=policy, now_factory=now_factory)
+    """Resolve root (arg > GPT_TRADER_IDEAS_ROOT > default) and build the service.
+
+    The autonomy mode is deliberately not injectable: it resolves through the
+    audited autonomy state log at each decision boundary
+    (docs/decisions/persistent-autonomy-state.md).
+    """
+    return TradeIdeaService(resolve_ideas_root(root), now_factory=now_factory)
 
 
 def _validate_audit_venue(venue: str) -> str:

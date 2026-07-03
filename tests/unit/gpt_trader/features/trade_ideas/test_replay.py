@@ -322,3 +322,24 @@ def test_replay_scoring_does_not_mutate_live_closeout_records(tmp_path: Path) ->
     assert result.outcome is ReplayOutcome.TARGET_HIT
     assert service.get_closeout_attribution(idea.decision_id) is None
     assert not service.closeout_log.path.exists()
+
+
+def test_replay_granularity_table_agrees_with_recorder_builder() -> None:
+    """Replay's private granularity table must match the recorder builder's.
+
+    The frozen trade_ideas dependency set (core, errors, itself) forbids
+    replay from importing the recorder's shared helper, so the two tables
+    are kept in exact agreement here instead — a snapshot the builder can
+    produce must never be rejected or mis-scored by replay, and vice versa.
+    """
+    from gpt_trader.features.recorder.snapshot_builder import (
+        _CANONICAL_GRANULARITY_BY_ALIAS,
+        granularity_duration,
+    )
+    from gpt_trader.features.trade_ideas.replay import _GRANULARITY_DURATION_BY_ALIAS
+
+    recorder_table = {
+        alias: granularity_duration(alias) for alias in _CANONICAL_GRANULARITY_BY_ALIAS
+    }
+
+    assert _GRANULARITY_DURATION_BY_ALIAS == recorder_table

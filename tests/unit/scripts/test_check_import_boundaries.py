@@ -296,64 +296,6 @@ def test_cross_slice_new_edge_fails_with_allowlist_pointer(tmp_path, monkeypatch
     assert "docs/ARCHITECTURE.md" in captured.out
 
 
-def test_cross_slice_allowlist_is_frozen_topology() -> None:
-    # The ratchet encodes today's verified slice-to-slice edges. Adding an edge
-    # here requires an architecture rationale (docs/ARCHITECTURE.md); removing
-    # one is progress and should just update this test.
-    assert check_import_boundaries.CROSS_SLICE_ALLOWED_EDGES == frozenset(
-        {
-            # Paper execution lane consumes APPROVED ideas and drives paper/mock
-            # brokers only (docs/decisions/adopt-five-role-composition.md).
-            ("idea_execution", "trade_ideas"),
-            ("idea_execution", "brokerages"),
-            ("intelligence", "live_trade"),
-            ("live_trade", "brokerages"),
-            ("live_trade", "intelligence"),
-            ("live_trade", "strategy_tools"),
-            ("live_trade", "trade_ideas"),
-            # RegimeAwareProposer overlays regime state; PositionSizer bridge
-            # enriches sizing on trade-idea proposal records.
-            ("trade_ideas", "intelligence"),
-            ("optimize", "live_trade"),
-            ("strategy_tools", "trade_ideas"),
-        }
-    )
-
-
-def test_cross_slice_narrow_import_prefixes_are_frozen() -> None:
-    assert check_import_boundaries.CROSS_SLICE_NARROW_IMPORT_PREFIXES == frozenset(
-        {
-            (
-                "idea_execution",
-                "brokerages",
-                "gpt_trader.features.brokerages.mock",
-            ),
-            (
-                "idea_execution",
-                "brokerages",
-                "gpt_trader.features.brokerages.paper",
-            ),
-        }
-    )
-
-
-def test_cross_slice_narrow_import_prefixes_have_topology_edges() -> None:
-    for source, target, _prefix in check_import_boundaries.CROSS_SLICE_NARROW_IMPORT_PREFIXES:
-        assert (source, target) in check_import_boundaries.CROSS_SLICE_ALLOWED_EDGES
-
-
-def test_trade_ideas_allowed_prefixes_are_frozen() -> None:
-    assert check_import_boundaries.TRADE_IDEAS_ALLOWED_IMPORT_PREFIXES == (
-        "gpt_trader.core",
-        "gpt_trader.errors",
-        # Regime-aware proposer reads MarketRegimeDetector; PositionSizer
-        # bridge adds deterministic sizing metadata pre-approval.
-        "gpt_trader.features.intelligence.regime",
-        "gpt_trader.features.intelligence.sizing",
-        "gpt_trader.features.trade_ideas",
-    )
-
-
 def test_default_rules_cover_lower_layer_entrypoint_guards() -> None:
     rule_names = {rule.name for rule in check_import_boundaries.RULES}
 

@@ -23,6 +23,20 @@ def strict_container_mode(monkeypatch):
     monkeypatch.setenv("GPT_TRADER_STRICT_CONTAINER", "1")
 
 
+@pytest.fixture(autouse=True)
+def isolated_ideas_root(tmp_path_factory, monkeypatch):
+    """Pin the trade-ideas root away from any real on-disk state.
+
+    With risk_budget_runtime_seed_enabled on by default (#1120), every
+    ApplicationContainer startup resolves the active RiskBudget from the
+    ideas root. Without this pin, tests that build a container would read
+    whatever risk_budget.jsonl exists under the developer's CWD. Tests that
+    care about specific budget contents set GPT_TRADER_IDEAS_ROOT (or pass
+    an explicit root) themselves, which overrides this fixture.
+    """
+    monkeypatch.setenv("GPT_TRADER_IDEAS_ROOT", str(tmp_path_factory.mktemp("isolated-ideas-root")))
+
+
 @pytest.fixture
 def application_container(mock_config):
     """Provide an ApplicationContainer for tests that need it.

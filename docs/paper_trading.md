@@ -125,6 +125,11 @@ uv run gpt-trader ideas snapshot build --from-coinbase \
 # 2. Propose from the recorded snapshot (deterministic proposer, ai actor)
 uv run gpt-trader ideas propose-baseline --snapshot var/data/snapshots/paper-day.json
 
+# 2-alt. Or run a live-trade strategy as the proposer over the same snapshot
+#        (the strategy->proposer parity lane; same audited service, ai actor)
+uv run gpt-trader ideas propose-strategy --snapshot var/data/snapshots/paper-day.json \
+  --strategy baseline-spot
+
 # 3. Review the queue and decide (human actions)
 uv run gpt-trader ideas queue-status
 uv run gpt-trader ideas list --state proposed
@@ -159,6 +164,124 @@ Every step stamps an actor into the append-only audit log; proposals come from
 events from the `paper-idea-executor` system actor under the `paper` venue.
 None of these commands touch a live broker or account. Ideas that expire
 unreviewed are swept with `uv run gpt-trader ideas expire`.
+
+## Scheduled Stage 1 Turns (Unattended Operation)
+
+`ideas cycle` runs exactly one turn of the Stage 1 loop — lock, snapshot,
+expire sweep, proposers, paper-execute already-APPROVED ideas priced from the
+turn's own snapshot, report/queue artifacts, one manifest row. Recurrence
+comes from an external scheduler (launchd or cron); the command never decides
+a cadence, never approves ideas, and never contacts a live broker or account.
+Approvals remain a human event: review the queue between turns exactly as in
+the honest-day procedure above.
+
+Prerequisite: attest account equity once before scheduling turns
+(`ideas budget set --account-equity <equity> --actor <you> --reason "..."`,
+step 0 of the honest day above). Proposal sizing and the approval gate both
+denominate against the attested equity; on an unattested root the cycle still
+runs, but every sized proposal fails approval with `account_equity_snapshot
+is required to verify max_open_notional_pct budget exposure` until a human
+attests equity.
+
+The default conservative configuration lives in
+`scripts/ops/stage1_cycle_turn.sh` (BTC-USD/ETH-USD, ONE_HOUR candles,
+lookback 200, default proposers `baseline` and `regime-aware`). Symbols,
+granularity, lookback, and the proposer set are env-overridable there
+(`CYCLE_SYMBOLS`, `CYCLE_GRANULARITY`, `CYCLE_LOOKBACK`, and space-separated
+`CYCLE_PROPOSERS`, for example `CYCLE_PROPOSERS=baseline`); cadence belongs
+only in the scheduler entry.
+
+Strategy-backed proposers — the live strategy library running over the turn's
+snapshot through the `Proposer` contract — are opt-in until replay parity is
+demonstrated: pass `--proposer strategy-baseline-spot` (or
+`strategy-baseline-perps`, `strategy-mean-reversion`,
+`strategy-regime-switcher`; all emit long-only spot ideas), or set
+`CYCLE_PROPOSERS="baseline regime-aware strategy-baseline-spot"`. Each
+strategy proposes only past its own live warm-up floor: the baseline family
+and mean reversion need 20 candles, while the regime switcher holds until its
+detector confirms a regime at 54 candles — keep `--lookback` comfortably
+above that (the default 200 is). For sub-cent symbols the proposal price
+levels quantize to zero at the default precision and fail closed; pass a
+finer `--price-precision` for the turn.
+
+### launchd (macOS)
+
+Save as `~/Library/LaunchAgents/com.gpt-trader.stage1-cycle.plist`, replacing
+the repository path, then `launchctl load` it:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.gpt-trader.stage1-cycle</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/ABSOLUTE/PATH/TO/GPT-Trader/scripts/ops/stage1_cycle_turn.sh</string>
+  </array>
+  <!-- Cadence lives here, not in code: hourly at :05 -->
+  <key>StartCalendarInterval</key>
+  <array><dict><key>Minute</key><integer>5</integer></dict></array>
+  <key>StandardOutPath</key>
+  <string>/tmp/gpt-trader-stage1-cycle.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/gpt-trader-stage1-cycle.log</string>
+</dict>
+</plist>
+```
+
+```bash
+launchctl load ~/Library/LaunchAgents/com.gpt-trader.stage1-cycle.plist
+launchctl kickstart gui/$(id -u)/com.gpt-trader.stage1-cycle   # run one turn now
+```
+
+### cron
+
+```cron
+5 * * * * /ABSOLUTE/PATH/TO/GPT-Trader/scripts/ops/stage1_cycle_turn.sh >> /tmp/gpt-trader-stage1-cycle.log 2>&1
+```
+
+Both schedulers start jobs with a minimal `PATH`; the wrapper prepends
+`~/.local/bin` (Astral `uv` installer), `/opt/homebrew/bin`, and
+`/usr/local/bin` itself, so neither entry needs environment configuration.
+
+### Overlap and failure semantics
+
+- The turn takes a lock on `<ideas-root>/cycle`. An overlapping invocation
+  fails fast with a validation error ("Another paper-cycle turn is already
+  running") and appends **no** manifest row — the running turn's row is the
+  evidence for that slot, so a schedule that occasionally overlaps is safe.
+- A failed turn (network down, bad snapshot) appends an honest
+  `"outcome": "failed"` row with the error and exits nonzero. Failed turns are
+  evidence too; do not delete them.
+
+### Evidence: consecutive unattended days
+
+Every turn appends exactly one JSON line to
+`<ideas-root>/cycle/manifest.jsonl` (default ideas root
+`var/data/trade_ideas`). A day counts toward the streak when it has at least
+one manifest row and every row that day completed:
+
+```bash
+python3 - <<'EOF'
+import datetime, json, pathlib
+
+manifest = pathlib.Path("var/data/trade_ideas/cycle/manifest.jsonl")
+days: dict[datetime.date, bool] = {}
+for line in manifest.read_text().splitlines():
+    row = json.loads(line)
+    day = datetime.date.fromisoformat(row["started_at"][:10])
+    days[day] = days.get(day, True) and row["outcome"] == "completed"
+
+streak, day = 0, max(days, default=None)
+while day in days and days[day]:
+    streak += 1
+    day -= datetime.timedelta(days=1)
+print(f"consecutive clean days: {streak} (through {max(days, default='n/a')})")
+EOF
+```
 
 ## Readiness Evidence Inputs
 

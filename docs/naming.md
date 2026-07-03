@@ -34,6 +34,13 @@ The automated naming scan loads its banned pattern list from
 - **Format:** `snake_case` for mutable state; `UPPER_SNAKE_CASE` for constants.
 - **Rules:** Prefer full words; use domain terms that match docs (`portfolio`, `position`, `exposure`).
 - **Quantity terminology:** `qty` is approved for trading domain use (see glossary); prefer `quantity` for non-trading contexts.
+- **Percentage unit suffixes:** fields suffixed `_pct` hold **percent points**
+  (`Decimal("10")` means 10%); fields suffixed `_fraction` hold **unit
+  fractions** (`0.10` means 10%). Convert between the two only through
+  `gpt_trader.core.risk_units` (per the accepted decision
+  `docs/decisions/canonical-risk-limit-vocabulary.md`). Pre-existing `_pct`
+  fields holding fractions (e.g. `RiskConfig.daily_loss_limit_pct`) are
+  transitional exceptions scheduled for migration under issue #1120.
 - **Banned abbreviations:** `amt` (prefer `amount`), `cfg` (prefer `config`).
 
 ### 2.5 Configuration Keys & Environment Variables

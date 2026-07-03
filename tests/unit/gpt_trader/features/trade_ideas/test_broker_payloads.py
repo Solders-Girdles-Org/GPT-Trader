@@ -13,6 +13,8 @@ from tests.unit.gpt_trader.features.trade_ideas.conftest import (
 
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.trade_ideas import (
+    ActorType,
+    AutonomyMode,
     InvalidTransitionError,
     PolicyViolationError,
     TimeHorizon,
@@ -333,3 +335,34 @@ def test_export_broker_ticket_policy_violations_use_export_time(
     assert latest_event["action"] == "filled"
     assert latest_event["timestamp"] != policy_budget_snapshot["evaluated_at"]
     assert terminal_event["timestamp"] != policy_budget_snapshot["evaluated_at"]
+
+
+def test_export_reports_resolved_active_autonomy_mode(service: TradeIdeaService) -> None:
+    """policy_budget_snapshot carries the mode the violations were evaluated
+    against (the resolved active level), while decision_metadata preserves the
+    mode the idea claimed at proposal time."""
+    idea = build_trade_idea()
+    service.propose(idea, actor_id="idea-generator-v1")
+    service.approve(idea.decision_id, actor_id="rj", reason="Risk verified")
+    service.set_autonomy_mode(
+        AutonomyMode.RESEARCH_ONLY,
+        actor_type=ActorType.HUMAN,
+        actor_id="rj",
+        reason="Pause approvals during incident review",
+    )
+
+    payload = service.export_broker_ticket_payload(
+        idea.decision_id,
+        venue="manual",
+        venue_order_type="operator_selected",
+        time_in_force="operator_selected",
+    )
+
+    policy_budget_snapshot = _mapping(payload["policy_budget_snapshot"])
+    decision_metadata = _mapping(payload["decision_metadata"])
+    assert policy_budget_snapshot["autonomy_mode"] == "research_only"
+    assert policy_budget_snapshot["autonomy_mode_source"] == "autonomy_state_log"
+    assert decision_metadata["autonomy_mode"] == "human_approved_execution"
+    violations = policy_budget_snapshot["approval_policy_violations"]
+    assert isinstance(violations, list)
+    assert any(isinstance(item, str) and "research_only" in item for item in violations)

@@ -731,41 +731,52 @@ def _bar_outcome_price(
     return None
 
 
+# Must stay in agreement with the recorder snapshot builder's granularity
+# alias table, but the frozen trade_ideas dependency set (core, errors, itself)
+# forbids importing it from gpt_trader.features.recorder; agreement is pinned
+# by tests instead.
+_GRANULARITY_DURATION_BY_ALIAS = {
+    "1M": timedelta(minutes=1),
+    "1MIN": timedelta(minutes=1),
+    "1MINUTE": timedelta(minutes=1),
+    "ONE_MINUTE": timedelta(minutes=1),
+    "5M": timedelta(minutes=5),
+    "5MIN": timedelta(minutes=5),
+    "5MINUTE": timedelta(minutes=5),
+    "FIVE_MINUTE": timedelta(minutes=5),
+    "15M": timedelta(minutes=15),
+    "15MIN": timedelta(minutes=15),
+    "15MINUTE": timedelta(minutes=15),
+    "FIFTEEN_MINUTE": timedelta(minutes=15),
+    "30M": timedelta(minutes=30),
+    "30MIN": timedelta(minutes=30),
+    "30MINUTE": timedelta(minutes=30),
+    "THIRTY_MINUTE": timedelta(minutes=30),
+    "1H": timedelta(hours=1),
+    "1HR": timedelta(hours=1),
+    "1HOUR": timedelta(hours=1),
+    "ONE_HOUR": timedelta(hours=1),
+    "2H": timedelta(hours=2),
+    "2HR": timedelta(hours=2),
+    "2HOUR": timedelta(hours=2),
+    "TWO_HOUR": timedelta(hours=2),
+    "4H": timedelta(hours=4),
+    "4HR": timedelta(hours=4),
+    "4HOUR": timedelta(hours=4),
+    "FOUR_HOUR": timedelta(hours=4),
+    "6H": timedelta(hours=6),
+    "6HR": timedelta(hours=6),
+    "6HOUR": timedelta(hours=6),
+    "SIX_HOUR": timedelta(hours=6),
+    "1D": timedelta(days=1),
+    "1DAY": timedelta(days=1),
+    "ONE_DAY": timedelta(days=1),
+}
+
+
 def _granularity_duration(granularity: str) -> timedelta | None:
     normalized = granularity.strip().upper().replace("-", "_")
-    return {
-        "1M": timedelta(minutes=1),
-        "1MIN": timedelta(minutes=1),
-        "1MINUTE": timedelta(minutes=1),
-        "ONE_MINUTE": timedelta(minutes=1),
-        "5M": timedelta(minutes=5),
-        "5MIN": timedelta(minutes=5),
-        "5MINUTE": timedelta(minutes=5),
-        "FIVE_MINUTE": timedelta(minutes=5),
-        "15M": timedelta(minutes=15),
-        "15MIN": timedelta(minutes=15),
-        "15MINUTE": timedelta(minutes=15),
-        "FIFTEEN_MINUTE": timedelta(minutes=15),
-        "30M": timedelta(minutes=30),
-        "30MIN": timedelta(minutes=30),
-        "30MINUTE": timedelta(minutes=30),
-        "THIRTY_MINUTE": timedelta(minutes=30),
-        "1H": timedelta(hours=1),
-        "1HR": timedelta(hours=1),
-        "1HOUR": timedelta(hours=1),
-        "ONE_HOUR": timedelta(hours=1),
-        "2H": timedelta(hours=2),
-        "2HR": timedelta(hours=2),
-        "2HOUR": timedelta(hours=2),
-        "TWO_HOUR": timedelta(hours=2),
-        "6H": timedelta(hours=6),
-        "6HR": timedelta(hours=6),
-        "6HOUR": timedelta(hours=6),
-        "SIX_HOUR": timedelta(hours=6),
-        "1D": timedelta(days=1),
-        "1DAY": timedelta(days=1),
-        "ONE_DAY": timedelta(days=1),
-    }.get(normalized)
+    return _GRANULARITY_DURATION_BY_ALIAS.get(normalized)
 
 
 def _result(

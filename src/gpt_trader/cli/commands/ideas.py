@@ -21,7 +21,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, cast
 
-from gpt_trader.app.config import BotConfig
+from gpt_trader.app.config import BotConfig, MeanReversionConfig
 from gpt_trader.app.runtime import resolve_runtime_paths
 from gpt_trader.cli import options
 from gpt_trader.cli.commands.ideas_input import (
@@ -44,6 +44,28 @@ from gpt_trader.features.idea_execution import (
     PaperIdeaExecutor,
 )
 from gpt_trader.features.intelligence.regime import RegimeConfig
+from gpt_trader.features.live_trade.strategies.baseline import (
+    BaselinePerpsStrategy,
+    BaseStrategyConfig,
+    SpotStrategy,
+)
+from gpt_trader.features.live_trade.strategies.mean_reversion import MeanReversionStrategy
+from gpt_trader.features.live_trade.strategies.regime_switcher import RegimeSwitchingStrategy
+from gpt_trader.features.recorder import (
+    DEFAULT_COINBASE_BASE_URL,
+    DEFAULT_SNAPSHOT_SOURCE_LABEL,
+    MarketSnapshotBuildRequest,
+    build_coinbase_market_snapshot,
+    canonical_granularity,
+)
+from gpt_trader.features.strategy_tools import (
+    SNAPSHOT_STRATEGY_PROPOSER_PREFIX,
+    SnapshotDecideDrive,
+    SnapshotStrategyProposer,
+    StrategyFactory,
+    StrategySignalToTradeIdeaAdapter,
+    StrategySignalToTradeIdeaAdapterConfig,
+)
 from gpt_trader.features.trade_ideas import (
     DEFAULT_TIME_IN_FORCE,
     DEFAULT_VENUE_ORDER_TYPE,
@@ -51,6 +73,8 @@ from gpt_trader.features.trade_ideas import (
     ActorType,
     AuditAction,
     AuditIntegrityError,
+    AutonomyIntegrityError,
+    AutonomyMode,
     BaselineProposer,
     BaselineProposerConfig,
     BudgetIntegrityError,
@@ -58,8 +82,6 @@ from gpt_trader.features.trade_ideas import (
     ConfidenceLabel,
     InvalidTransitionError,
     MarketSnapshot,
-    MarketSnapshotBuilder,
-    MarketSnapshotBuildRequest,
     OptimizeBaselineCandidate,
     OptimizeBaselineReplayReport,
     PaperFillReconciler,
@@ -83,7 +105,6 @@ from gpt_trader.features.trade_ideas import (
     TradeIdeaSizingOutput,
     TradeIdeaState,
     UnknownTradeIdeaError,
-    canonical_granularity,
     canonical_ticket_json,
     create_trade_idea_service,
     is_safe_decision_id,
@@ -112,7 +133,18 @@ from gpt_trader.features.trade_ideas.report import (
 from gpt_trader.persistence.event_store import EventStore
 
 VENUE_CHOICES = ("coinbase", "manual")
-CYCLE_PROPOSER_CHOICES = ("baseline", "regime-aware")
+# --strategy flag values: live-trade strategies runnable as snapshot proposers.
+# The CLI is the composition root — it constructs the strategy so the
+# strategy_tools slice never imports live_trade (SnapshotDecider is structural).
+# "ensemble" is deliberately absent (#1164 stage 3 deferral): its combiner
+# mutates hysteresis state inside combine() and decide() swallows signal
+# failures with a bare print, so its decisions are not yet explainable from
+# recorded data alone; it joins this list once that surface is audited.
+STRATEGY_PROPOSER_CHOICES = ("baseline-spot", "baseline-perps", "mean-reversion", "regime-switcher")
+# cycle --proposer / replay tournament ids for the same strategies.
+STRATEGY_BACKED_PROPOSER_IDS = tuple(f"strategy-{name}" for name in STRATEGY_PROPOSER_CHOICES)
+DEFAULT_CYCLE_PROPOSERS = ("baseline", "regime-aware")
+CYCLE_PROPOSER_CHOICES = (*DEFAULT_CYCLE_PROPOSERS, *STRATEGY_BACKED_PROPOSER_IDS)
 PAPER_RECONCILIATION_PROFILE_CHOICES = tuple(sorted({*options.PROFILE_CHOICES, "mock"}))
 TEXT_JSON_FORMATS = ("text", "json")
 REPORT_FORMATS = ("text", "json", "csv")
@@ -207,6 +239,45 @@ def register(subparsers: Any) -> None:
         subcommand="propose-regime-aware",
     )
 
+    propose_strategy = ideas_subparsers.add_parser(
+        "propose-strategy",
+        help="Generate proposals by running a live-trade strategy over a snapshot fixture",
+        description=(
+            "Run a live-trade strategy as a deterministic snapshot proposer over a local "
+            "JSON market snapshot and persist ideas through the audited trade-idea service. "
+            "This command reads no broker, account, credential, canary, or preflight data."
+        ),
+    )
+    _add_common_options(propose_strategy)
+    _add_actor_options(propose_strategy, default_description="snapshot-strategy proposer id")
+    propose_strategy.add_argument(
+        "--snapshot",
+        type=Path,
+        required=True,
+        help="Read a local MarketSnapshot JSON fixture",
+    )
+    propose_strategy.add_argument(
+        "--strategy",
+        required=True,
+        choices=STRATEGY_PROPOSER_CHOICES,
+        help="Live-trade strategy to run as the snapshot proposer",
+    )
+    propose_strategy.add_argument(
+        "--price-precision",
+        type=_positive_decimal_value,
+        default=Decimal("0.01"),
+        help=(
+            "Price quantization step for entry/stop/target levels; "
+            "pass a finer value for sub-cent symbols"
+        ),
+    )
+    propose_strategy.add_argument(
+        "--reason",
+        default="Strategy-backed proposer generated idea from local snapshot",
+        help="Audit reason",
+    )
+    propose_strategy.set_defaults(handler=_handle_propose_strategy, subcommand="propose-strategy")
+
     snapshot = ideas_subparsers.add_parser(
         "snapshot",
         help="Build read-only market snapshots for proposer runs",
@@ -276,12 +347,12 @@ def register(subparsers: Any) -> None:
     )
     snapshot_build.add_argument(
         "--source-label",
-        default="coinbase:market-candles",
+        default=DEFAULT_SNAPSHOT_SOURCE_LABEL,
         help="Source label stamped into snapshot metadata",
     )
     snapshot_build.add_argument(
         "--coinbase-base-url",
-        default="https://api.coinbase.com",
+        default=DEFAULT_COINBASE_BASE_URL,
         help="Coinbase API base URL for market-data reads",
     )
     snapshot_build.set_defaults(handler=_handle_snapshot_build, subcommand="snapshot build")
@@ -602,6 +673,60 @@ def register(subparsers: Any) -> None:
         subcommand="replay regime-aware",
     )
 
+    strategy_replay = replay_subparsers.add_parser(
+        "strategy",
+        help="Replay a live-trade strategy as a snapshot proposer over candle history",
+        description=(
+            "Feed a local OHLCV candle fixture to a live-trade strategy running as a "
+            "deterministic snapshot proposer and summarize replay scoring. "
+            "This command is broker-free and read-only."
+        ),
+    )
+    _add_output_options(strategy_replay)
+    strategy_replay.add_argument(
+        "--file",
+        type=Path,
+        required=True,
+        help="JSON fixture with a top-level candles array of OHLCV bars",
+    )
+    strategy_replay.add_argument(
+        "--symbol", required=True, help="Symbol represented by the candles"
+    )
+    strategy_replay.add_argument(
+        "--granularity",
+        required=True,
+        help="Candle granularity, for example ONE_HOUR, 1H, or 1D",
+    )
+    strategy_replay.add_argument(
+        "--source",
+        default="fixture:candles",
+        help="Source label stamped into point-in-time replay snapshots",
+    )
+    strategy_replay.add_argument(
+        "--strategy",
+        required=True,
+        choices=STRATEGY_PROPOSER_CHOICES,
+        help="Live-trade strategy to replay as the snapshot proposer",
+    )
+    strategy_replay.add_argument(
+        "--min-history",
+        type=_positive_int_value,
+        help=(
+            "Minimum historical candles before evaluating snapshots "
+            "(default: the selected strategy's own warm-up floor)"
+        ),
+    )
+    strategy_replay.add_argument(
+        "--price-precision",
+        type=_positive_decimal_value,
+        default=Decimal("0.01"),
+        help=(
+            "Price quantization step for entry/stop/target levels; "
+            "pass a finer value for sub-cent symbols"
+        ),
+    )
+    strategy_replay.set_defaults(handler=_handle_replay_strategy, subcommand="replay strategy")
+
     tournament = replay_subparsers.add_parser(
         "tournament",
         help="Replay multiple proposers head-to-head over candle history",
@@ -633,7 +758,11 @@ def register(subparsers: Any) -> None:
     tournament.add_argument(
         "--proposers",
         required=True,
-        help=("Comma-separated proposer ids, for example " "baseline-ma-2-4,baseline-ma-3-5"),
+        help=(
+            "Comma-separated proposer ids: baseline-ma-<short>-<long> or "
+            f"strategy-backed ids ({', '.join(STRATEGY_BACKED_PROPOSER_IDS)}), "
+            "for example baseline-ma-2-4,strategy-baseline-spot"
+        ),
     )
     tournament.add_argument(
         "--min-history",
@@ -950,12 +1079,12 @@ def register(subparsers: Any) -> None:
     )
     cycle.add_argument(
         "--coinbase-base-url",
-        default="https://api.coinbase.com",
+        default=DEFAULT_COINBASE_BASE_URL,
         help="Coinbase API base URL for market-data reads",
     )
     cycle.add_argument(
         "--source-label",
-        default="coinbase:market-candles",
+        default=DEFAULT_SNAPSHOT_SOURCE_LABEL,
         help="Source label stamped into snapshot metadata",
     )
     cycle.add_argument(
@@ -965,7 +1094,17 @@ def register(subparsers: Any) -> None:
         choices=CYCLE_PROPOSER_CHOICES,
         help=(
             "Proposer to run this turn; repeatable "
-            f"(default: {', '.join(CYCLE_PROPOSER_CHOICES)})"
+            f"(default: {', '.join(DEFAULT_CYCLE_PROPOSERS)}; strategy-backed "
+            "proposers are opt-in until replay parity is demonstrated)"
+        ),
+    )
+    cycle.add_argument(
+        "--price-precision",
+        type=_positive_decimal_value,
+        default=Decimal("0.01"),
+        help=(
+            "Price quantization step for proposal price levels this turn; "
+            "pass a finer value for sub-cent symbols"
         ),
     )
     cycle.add_argument(
@@ -1017,6 +1156,39 @@ def register(subparsers: Any) -> None:
         ),
     )
     budget_set.set_defaults(handler=_handle_budget_set, subcommand="budget set")
+
+    autonomy = ideas_subparsers.add_parser(
+        "autonomy", help="Inspect or change the audited autonomy level"
+    )
+    autonomy_subparsers = autonomy.add_subparsers(dest="autonomy_command", required=True)
+
+    autonomy_show = autonomy_subparsers.add_parser(
+        "show", help="Show the resolved autonomy level and its provenance"
+    )
+    _add_common_options(autonomy_show)
+    autonomy_show.set_defaults(handler=_handle_autonomy_show, subcommand="autonomy show")
+
+    autonomy_history = autonomy_subparsers.add_parser(
+        "history", help="List every audited autonomy-level version"
+    )
+    _add_common_options(autonomy_history)
+    autonomy_history.set_defaults(handler=_handle_autonomy_history, subcommand="autonomy history")
+
+    autonomy_set = autonomy_subparsers.add_parser(
+        "set", help="Change the autonomy level through the audited service path"
+    )
+    _add_common_options(autonomy_set)
+    _add_actor_options(autonomy_set)
+    autonomy_set.add_argument(
+        "--mode",
+        required=True,
+        choices=tuple(mode.value for mode in AutonomyMode),
+        help="Autonomy level to record",
+    )
+    autonomy_set.add_argument(
+        "--reason", required=True, help="Rationale recorded in the autonomy log"
+    )
+    autonomy_set.set_defaults(handler=_handle_autonomy_set, subcommand="autonomy set")
 
     audit = ideas_subparsers.add_parser("audit", help="Read and verify the audit log")
     audit_subparsers = audit.add_subparsers(dest="audit_command", required=True)
@@ -1306,11 +1478,60 @@ def _resolve_replay_min_history(
     return requested_min_history
 
 
+def _strategy_replay_floor(strategy_name: str) -> tuple[int, str]:
+    """One strategy's warm-up floor and why: ``decide`` holds below it.
+
+    Matches the live insufficient-data gate exactly (configurations are not
+    CLI-tunable because the parity lane replays the live configuration
+    as-is); anything stricter would silently skip early snapshots the live
+    strategy would have evaluated.
+    """
+    if strategy_name in ("baseline-spot", "baseline-perps"):
+        config = BaseStrategyConfig()
+        floor = max(config.long_ma_period, config.rsi_period + 1)
+        reason = (
+            f"decide() holds below max(long-MA {config.long_ma_period}, "
+            f"RSI {config.rsi_period} + 1) candles"
+        )
+        return floor, reason
+    if strategy_name == "mean-reversion":
+        mean_reversion_config = MeanReversionConfig()
+        floor = mean_reversion_config.lookback_window
+        reason = f"decide() holds below the {floor}-candle Z-Score lookback window"
+        return floor, reason
+    # regime-switcher: the regime stays UNKNOWN (decide() holds) until the
+    # detector's long EMA initializes and min_regime_ticks consecutive
+    # classifications confirm the first regime; that always exceeds the
+    # delegate strategies' own 20-candle floors at live defaults.
+    regime_config = RegimeConfig()
+    floor = regime_config.long_ema_period + regime_config.min_regime_ticks - 1
+    reason = (
+        f"the regime stays UNKNOWN below long-EMA {regime_config.long_ema_period} "
+        f"+ min-regime-ticks {regime_config.min_regime_ticks} - 1 candles"
+    )
+    return floor, reason
+
+
+def _resolve_strategy_replay_min_history(args: Namespace) -> int:
+    required_min_history, floor_reason = _strategy_replay_floor(args.strategy)
+    requested_min_history = cast(int | None, args.min_history)
+    if requested_min_history is None:
+        return required_min_history
+    if requested_min_history < required_min_history:
+        raise CandleInputError(
+            (
+                f"--min-history must be at least {required_min_history} for "
+                f"{args.strategy}: {floor_reason}"
+            ),
+            field="min_history",
+        )
+    return requested_min_history
+
+
 def _resolve_tournament_min_history(
     args: Namespace,
-    configs: list[BaselineProposerConfig],
+    minimum_history: int,
 ) -> int:
-    minimum_history = max(_default_replay_min_history(config) for config in configs)
     requested_min_history = cast(int | None, args.min_history)
     if requested_min_history is None:
         return minimum_history
@@ -1357,8 +1578,9 @@ def _baseline_replay_config_from_args(
     )
 
 
-def _tournament_baseline_configs(args: Namespace) -> list[BaselineProposerConfig]:
-    configs: list[BaselineProposerConfig] = []
+def _tournament_entries(args: Namespace) -> list[tuple[Proposer, int]]:
+    """Build (proposer, required_min_history) pairs from the --proposers ids."""
+    entries: list[tuple[Proposer, int]] = []
     seen: set[str] = set()
     proposer_ids = [item.strip() for item in args.proposers.split(",") if item.strip()]
     if not proposer_ids:
@@ -1372,8 +1594,21 @@ def _tournament_baseline_configs(args: Namespace) -> list[BaselineProposerConfig
                 field="proposers",
             )
         seen.add(proposer_id)
-        configs.append(_baseline_config_from_proposer_id(args, proposer_id))
-    return configs
+        if proposer_id in STRATEGY_BACKED_PROPOSER_IDS:
+            strategy_name = proposer_id.removeprefix("strategy-")
+            entries.append(
+                (
+                    _snapshot_strategy_proposer(
+                        strategy_name,
+                        price_precision=args.price_precision,
+                    ),
+                    _strategy_replay_floor(strategy_name)[0],
+                )
+            )
+        else:
+            config = _baseline_config_from_proposer_id(args, proposer_id)
+            entries.append((BaselineProposer(config), _default_replay_min_history(config)))
+    return entries
 
 
 def _baseline_config_from_proposer_id(
@@ -1383,7 +1618,11 @@ def _baseline_config_from_proposer_id(
     parts = proposer_id.split("-")
     if len(parts) != 4 or parts[0] != "baseline" or parts[1] != "ma":
         raise CandleInputError(
-            ("Unsupported proposer id " f"'{proposer_id}'; expected baseline-ma-<short>-<long>"),
+            (
+                f"Unsupported proposer id '{proposer_id}'; expected "
+                "baseline-ma-<short>-<long> or one of "
+                f"{', '.join(STRATEGY_BACKED_PROPOSER_IDS)}"
+            ),
             field="proposers",
         )
     try:
@@ -1391,7 +1630,7 @@ def _baseline_config_from_proposer_id(
         long_window = int(parts[3])
     except ValueError as error:
         raise CandleInputError(
-            ("Unsupported proposer id " f"'{proposer_id}'; expected numeric MA windows"),
+            (f"Unsupported proposer id '{proposer_id}'; expected numeric MA windows"),
             field="proposers",
         ) from error
     if short_window <= 0 or long_window <= 0:
@@ -1486,6 +1725,71 @@ def _handle_propose_regime_aware(args: Namespace) -> CliResponse:
     )
 
 
+def _mean_reversion_snapshot_strategy() -> MeanReversionStrategy:
+    """Fresh live-default strategy; the caller-owned CooldownState starts clear."""
+    return MeanReversionStrategy(MeanReversionConfig())
+
+
+def _regime_switcher_snapshot_strategy() -> RegimeSwitchingStrategy:
+    """Fresh switcher with a fresh MarketRegimeDetector, spot-lane delegates."""
+    return RegimeSwitchingStrategy(
+        trend_strategy_factory=SpotStrategy,
+        mean_reversion_strategy_factory=_mean_reversion_snapshot_strategy,
+        enable_shorts=False,
+    )
+
+
+# Composition-root recipe per --strategy choice. The baseline family and mean
+# reversion decide from the mark window alone (mean reversion's cooldown is a
+# caller-owned CooldownState that stays inert on the lane's flat book), so one
+# final-bar decide reproduces the live decision. The regime switcher's
+# MarketRegimeDetector accumulates state per decide call, so it is driven per
+# candle: a fresh detector warmed from the snapshot's own closes (#1164
+# stage 3).
+_STRATEGY_PROPOSER_SPECS: dict[str, tuple[StrategyFactory, SnapshotDecideDrive]] = {
+    "baseline-spot": (SpotStrategy, "final-bar"),
+    "baseline-perps": (BaselinePerpsStrategy, "final-bar"),
+    "mean-reversion": (_mean_reversion_snapshot_strategy, "final-bar"),
+    "regime-switcher": (_regime_switcher_snapshot_strategy, "per-candle"),
+}
+
+
+def _snapshot_strategy_proposer(
+    strategy_name: str,
+    *,
+    price_precision: Decimal,
+    sizing_bridge: TradeIdeaPositionSizingBridge | None = None,
+) -> SnapshotStrategyProposer:
+    """Compose a live-trade strategy onto the snapshot ``Proposer`` contract."""
+    adapter = StrategySignalToTradeIdeaAdapter(
+        StrategySignalToTradeIdeaAdapterConfig(
+            enabled=True,
+            proposer_id_prefix=SNAPSHOT_STRATEGY_PROPOSER_PREFIX,
+            price_precision=price_precision,
+        ),
+        sizing_bridge=sizing_bridge or TradeIdeaPositionSizingBridge(),
+    )
+    strategy_factory, drive = _STRATEGY_PROPOSER_SPECS[strategy_name]
+    return SnapshotStrategyProposer(
+        strategy_factory,
+        strategy_name=strategy_name,
+        adapter=adapter,
+        drive=drive,
+    )
+
+
+def _handle_propose_strategy(args: Namespace) -> CliResponse:
+    return _handle_propose_from_snapshot(
+        args,
+        "ideas propose-strategy",
+        lambda service: _snapshot_strategy_proposer(
+            args.strategy,
+            price_precision=args.price_precision,
+            sizing_bridge=_LazyBudgetSizingBridge(service),
+        ),
+    )
+
+
 def _handle_propose_from_snapshot(
     args: Namespace,
     command: str,
@@ -1569,25 +1873,12 @@ async def _build_coinbase_market_snapshot(
     args: Namespace,
     request: MarketSnapshotBuildRequest,
 ) -> MarketSnapshot:
-    from gpt_trader.backtesting.data.fetcher import CoinbaseHistoricalFetcher
-    from gpt_trader.features.brokerages.coinbase.client import CoinbaseClient
-
-    client = CoinbaseClient(
+    # Snapshot production is recorder-owned; the CLI only adapts arguments.
+    return await build_coinbase_market_snapshot(
+        request,
         base_url=args.coinbase_base_url,
-        auth=None,
-        api_mode="advanced",
+        source_label=args.source_label,
     )
-    try:
-        builder = MarketSnapshotBuilder(
-            CoinbaseHistoricalFetcher(client=client),
-            source_label=args.source_label,
-        )
-        return await builder.build(request)
-    finally:
-        try:
-            client.close()
-        except Exception:  # noqa: BLE001
-            pass
 
 
 def _snapshot_symbols(value: str) -> tuple[str, ...]:
@@ -1960,6 +2251,29 @@ def _handle_replay_baseline(args: Namespace) -> CliResponse:
     return _success(command, args, payload, text, was_noop=replay_report.ideas_proposed == 0)
 
 
+def _handle_replay_strategy(args: Namespace) -> CliResponse:
+    command = "ideas replay strategy"
+    try:
+        _validate_replay_granularity(args.granularity)
+        candles = _load_candle_fixture(args.file)
+        min_history = _resolve_strategy_replay_min_history(args)
+        report = TradeIdeaReplayRunner(
+            _snapshot_strategy_proposer(
+                args.strategy,
+                price_precision=args.price_precision,
+            ),
+            config=ReplayRunnerConfig(source=args.source, min_history=min_history),
+        ).run_series(symbol=args.symbol, granularity=args.granularity, candles=candles)
+    except CandleInputError as error:
+        return _input_error(command, args, error)
+    except Exception as error:
+        return _mapped_error(command, args, error)
+
+    payload = report.to_dict()
+    text = _replay_report_text(report, command=command)
+    return _success(command, args, payload, text, was_noop=report.ideas_proposed == 0)
+
+
 def _handle_replay_regime_aware(args: Namespace) -> CliResponse:
     command = "ideas replay regime-aware"
     try:
@@ -2000,10 +2314,12 @@ def _handle_replay_tournament(args: Namespace) -> CliResponse:
     try:
         _validate_replay_granularity(args.granularity)
         candles = _load_candle_fixture(args.file)
-        proposer_configs = _tournament_baseline_configs(args)
-        min_history = _resolve_tournament_min_history(args, proposer_configs)
+        entries = _tournament_entries(args)
+        min_history = _resolve_tournament_min_history(
+            args, max(required for _, required in entries)
+        )
         report = TradeIdeaReplayTournamentRunner(
-            [BaselineProposer(config) for config in proposer_configs],
+            [proposer for proposer, _ in entries],
             config=ReplayRunnerConfig(source=args.source, min_history=min_history),
         ).run_series(symbol=args.symbol, granularity=args.granularity, candles=candles)
     except CandleInputError as error:
@@ -2380,12 +2696,29 @@ def _handle_execute_paper(args: Namespace) -> CliResponse:
     return _success(command, args, result.to_dict(), text)
 
 
-_CYCLE_PROPOSER_FACTORIES: dict[str, Callable[[TradeIdeaService], Proposer]] = {
-    "baseline": lambda service: BaselineProposer(sizing_bridge=_LazyBudgetSizingBridge(service)),
-    "regime-aware": lambda service: RegimeAwareProposer(
-        sizing_bridge=_LazyBudgetSizingBridge(service)
-    ),
-}
+def _cycle_proposer(
+    name: str,
+    service: TradeIdeaService,
+    price_precision: Decimal,
+) -> Proposer:
+    sizing_bridge = _LazyBudgetSizingBridge(service)
+    if name == "baseline":
+        return BaselineProposer(
+            BaselineProposerConfig(price_precision=price_precision),
+            sizing_bridge=sizing_bridge,
+        )
+    if name == "regime-aware":
+        return RegimeAwareProposer(
+            RegimeAwareProposerConfig(
+                baseline_config=BaselineProposerConfig(price_precision=price_precision)
+            ),
+            sizing_bridge=sizing_bridge,
+        )
+    return _snapshot_strategy_proposer(
+        name.removeprefix("strategy-"),
+        price_precision=price_precision,
+        sizing_bridge=sizing_bridge,
+    )
 
 
 def _handle_cycle(args: Namespace) -> CliResponse:
@@ -2426,11 +2759,13 @@ def _handle_cycle(args: Namespace) -> CliResponse:
                 return snapshot, snapshot.source
 
         service = _service(args)
-        selected_proposers = tuple(dict.fromkeys(args.proposers or CYCLE_PROPOSER_CHOICES))
+        selected_proposers = tuple(dict.fromkeys(args.proposers or DEFAULT_CYCLE_PROPOSERS))
         runner = PaperCycleRunner(
             service,
             cycle_root=resolve_ideas_root(getattr(args, "ideas_root", None)) / "cycle",
-            proposers=[_CYCLE_PROPOSER_FACTORIES[name](service) for name in selected_proposers],
+            proposers=[
+                _cycle_proposer(name, service, args.price_precision) for name in selected_proposers
+            ],
             broker=DeterministicBroker(),
             execute_approved=args.execute_approved,
         )
@@ -2495,6 +2830,81 @@ def _handle_budget_set(args: Namespace) -> CliResponse:
 
     payload = new_budget.to_dict()
     text = _status_line(command, "OK", f"version={new_budget.version}")
+    return _success(command, args, payload, text)
+
+
+def _handle_autonomy_show(args: Namespace) -> CliResponse:
+    command = "ideas autonomy show"
+    try:
+        service = _service(args)
+        resolution = service.peek_autonomy()
+        payload = resolution.to_dict()
+        evidence: list[str] = []
+        if resolution.version is not None:
+            # Second read of the log: guard it and pin provenance to the
+            # resolved version, so a concurrent append or corruption between
+            # the two reads can neither crash `show` (the resolved state must
+            # stay an exit-0 answer) nor attach another entry's provenance.
+            try:
+                entries = service.autonomy_history()
+            except AutonomyIntegrityError:
+                entries = []
+            tail = entries[-1] if entries else None
+            if tail is not None and tail.version == resolution.version:
+                payload["changed_at"] = tail.timestamp.isoformat()
+                payload["actor_type"] = tail.actor_type.value
+                payload["actor_id"] = tail.actor_id
+                payload["reason"] = tail.reason
+                evidence = list(tail.evidence)
+                payload["evidence"] = evidence
+    except Exception as error:
+        return _mapped_error(command, args, error)
+    lines = [f"{key}: {value}" for key, value in payload.items() if key != "evidence"]
+    for item in evidence:
+        lines.append(f"evidence: {item}")
+    return _success(command, args, payload, "\n".join(lines))
+
+
+def _handle_autonomy_history(args: Namespace) -> CliResponse:
+    command = "ideas autonomy history"
+    try:
+        service = _service(args)
+        entries = service.autonomy_history()
+    except Exception as error:
+        return _mapped_error(command, args, error)
+    payload = {
+        "count": len(entries),
+        "entries": [entry.to_dict() for entry in entries],
+    }
+    lines = [_status_line(command, "OK", f"versions={len(entries)}")]
+    for entry in entries:
+        line = (
+            f"v{entry.version} {entry.timestamp.isoformat()} {entry.mode.value} "
+            f"by {entry.actor_type.value}:{entry.actor_id} — {entry.reason}"
+        )
+        lines.append(line)
+        for item in entry.evidence:
+            lines.append(f"  evidence: {item}")
+    return _success(command, args, payload, "\n".join(lines), was_noop=not entries)
+
+
+def _handle_autonomy_set(args: Namespace) -> CliResponse:
+    command = "ideas autonomy set"
+    reason_error = _reason_error(command, args)
+    if reason_error is not None:
+        return reason_error
+    try:
+        service = _service(args)
+        entry = service.set_autonomy_mode(
+            AutonomyMode(args.mode),
+            actor_type=ActorType.HUMAN,
+            actor_id=_actor_id(args),
+            reason=args.reason,
+        )
+    except Exception as error:
+        return _mapped_error(command, args, error)
+    payload = entry.to_dict()
+    text = _status_line(command, "OK", f"mode={entry.mode.value}, version={entry.version}")
     return _success(command, args, payload, text)
 
 
@@ -2896,7 +3306,7 @@ def _mapped_error(command: str, args: Namespace, error: Exception) -> CliRespons
             str(error),
             details=_error_context(error),
         )
-    if isinstance(error, (AuditIntegrityError, BudgetIntegrityError)):
+    if isinstance(error, (AuditIntegrityError, AutonomyIntegrityError, BudgetIntegrityError)):
         return _failure(
             command,
             args,

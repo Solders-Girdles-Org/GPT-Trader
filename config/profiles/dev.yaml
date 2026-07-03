@@ -21,7 +21,6 @@ strategy:
   rsi_oversold: 30
 
 risk_management:
-  max_leverage: 5
   max_position_size: 10000
   position_fraction: 0.1
   enable_shorts: true

@@ -95,6 +95,18 @@ def strategy_parameter_space() -> list[ParameterDefinition]:
             default=0.5,
             description="Minimum confidence threshold for entry signals",
         ),
+        # Leverage cap (PerpsStrategyConfig.max_leverage; the bot-level
+        # BotRiskConfig.max_leverage alias was retired in #1120 stage 3, so
+        # this routes to the strategy section on apply)
+        ParameterDefinition(
+            name="max_leverage",
+            parameter_type=ParameterType.INTEGER,
+            low=1,
+            high=10,
+            step=1,
+            default=10,
+            description="Maximum allowed leverage",
+        ),
         # Signal Weights (should sum to ~1.0)
         ParameterDefinition(
             name="crossover_weight",
@@ -142,15 +154,6 @@ def risk_parameter_space() -> list[ParameterDefinition]:
             step=1,
             default=5,
             description="Target leverage for positions",
-        ),
-        ParameterDefinition(
-            name="max_leverage",
-            parameter_type=ParameterType.INTEGER,
-            low=1,
-            high=10,
-            step=1,
-            default=10,
-            description="Maximum allowed leverage",
         ),
         ParameterDefinition(
             name="position_fraction",

@@ -215,8 +215,7 @@ def _load_profile_config(profile_name: str) -> BotConfig:
     profile_enum = Profile(profile_name)
     loader = ProfileLoader()
     schema = loader.load(profile_enum)
-    kwargs = loader.to_bot_config_kwargs(schema, profile_enum)
-    return BotConfig(**kwargs)
+    return loader.build_bot_config(schema, profile_enum)
 
 
 def _build_position_state(position: Any) -> dict[str, Any] | None:
@@ -243,7 +242,7 @@ def _select_strategy(config: BotConfig, *, ensemble_profile: str | None = None) 
     strategy = create_strategy(config)
 
     # Backtesting defaults to spot-safe behavior when shorts are disabled.
-    if config.strategy_type == "baseline" and not config.enable_shorts:
+    if config.strategy_type == "baseline" and not config.active_enable_shorts:
         return SpotStrategy(config=config.strategy)
 
     if config.strategy_type == "regime_switcher":
@@ -476,8 +475,7 @@ async def run_backtest(
     if strategy_type is not None:
         config.strategy_type = cast(StrategyType, strategy_type)
     if enable_shorts is not None:
-        config.enable_shorts = enable_shorts
-        config.mean_reversion.enable_shorts = enable_shorts
+        config.set_enable_shorts(enable_shorts)
     config.regime_switcher_trend_mode = cast(
         Literal["delegate", "regime_follow"], regime_trend_mode
     )
@@ -939,8 +937,7 @@ def main() -> int:
         if args.strategy_type is not None:
             config.strategy_type = cast(StrategyType, args.strategy_type)
         if enable_shorts is not None:
-            config.enable_shorts = enable_shorts
-            config.mean_reversion.enable_shorts = enable_shorts
+            config.set_enable_shorts(enable_shorts)
         config.regime_switcher_trend_mode = cast(
             Literal["delegate", "regime_follow"], args.regime_trend_mode
         )

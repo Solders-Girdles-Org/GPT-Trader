@@ -54,9 +54,9 @@ Rules of thumb:
 
 Examples in this repo:
 - Security validation surface: `gpt_trader.security.validate` (facade over `src/gpt_trader/security/`).
-- Intelligence contracts: `src/gpt_trader/features/intelligence/contracts.py`
-  (import via `gpt_trader.features.intelligence.contracts` for types like `RegimeType`,
-  `EnsembleConfig`, `PositionSizingConfig`).
+- Intelligence surfaces: `gpt_trader.features.intelligence.regime` and
+  `gpt_trader.features.intelligence.sizing` (import these for types like `RegimeType`,
+  `RegimeConfig`, `PositionSizingConfig`).
 
 ## Import boundary guard
 

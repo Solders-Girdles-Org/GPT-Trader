@@ -48,10 +48,11 @@ src/gpt_trader/features/
 ├── brokerages/          # Exchange integrations
 ├── data/                # Data acquisition helpers
 ├── idea_execution/      # Paper-only execution lane for APPROVED trade ideas
-├── intelligence/        # Strategy intelligence (sizing, regime, ensemble)
+├── intelligence/        # Strategy intelligence (sizing, regime)
 │   └── sizing/          # Kelly criterion position sizing
 ├── live_trade/          # Production trading engine
 ├── optimize/            # Parameter optimisation experiments
+├── recorder/            # Market-data recording (price ticks; five-role recorder arm)
 ├── strategy_dev/        # Strategy config profiles, registry, and config-diff helpers
 ├── strategy_tools/      # Shared helpers for strategy slices
 └── trade_ideas/         # Broker-neutral trade-idea records, workflow, audit log
@@ -487,10 +488,13 @@ universe: [BTC, ETH, SOL, XRP, LTC, ADA, DOGE, BCH, AVAX, LINK]
 profile: canary
 broker: coinbase
 positions: 0.01 BTC max
-daily_loss_limit_pct: 1%
 trading_window: 14:00-15:00 UTC
 circuit_breakers: multiple
 ```
+
+> Risk appetite (daily loss limit, exposure cap) is not a profile setting: it
+> derives from the active RiskBudget at engine startup
+> (`docs/decisions/canonical-risk-limit-vocabulary.md`).
 
 ### Production Profile
 ```yaml

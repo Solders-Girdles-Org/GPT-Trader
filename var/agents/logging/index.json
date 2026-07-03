@@ -28,7 +28,7 @@
       "collateral_update",
       "collect_runtime_guard_state"
     ],
-    "total_events": 125
+    "total_events": 126
   },
   "usage": {
     "correlation": "Use correlation_id field to trace requests across logs",

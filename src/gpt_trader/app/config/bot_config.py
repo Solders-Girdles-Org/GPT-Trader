@@ -11,7 +11,7 @@ import os
 import warnings
 from dataclasses import dataclass, field, fields, replace
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args, get_origin
+from typing import TYPE_CHECKING, Any, Literal, get_args, get_origin
 
 # Import canonical defaults (top-10 symbols).
 
@@ -82,16 +82,21 @@ class HealthThresholdsConfig:
 
 @dataclass
 class BotRiskConfig:
-    """Bot-level risk/position sizing configuration.
+    """Bot-level position sizing configuration.
 
-    Holds position sizing, leverage, and loss control parameters.
+    Holds position sizing and stop/target parameters.
     Compatible with optimization framework 'risk' section output.
 
     Note: Distinct from risk.model.RiskConfig which is for the risk manager.
+    Risk-appetite fields (daily loss limit, exposure cap, leverage
+    permissions) live on the canonical RiskBudget and are seeded into the
+    runtime RiskConfig at startup — see
+    docs/decisions/canonical-risk-limit-vocabulary.md (#1120). The former
+    ``daily_loss_limit_pct`` and ``max_leverage`` transitional aliases have
+    been retired.
     """
 
     target_leverage: int = 1
-    max_leverage: int = 5
     position_fraction: Decimal = Decimal("0.1")
     max_position_size: Decimal = Decimal("1000")
     stop_loss_pct: Decimal = Decimal("0.02")
@@ -101,9 +106,6 @@ class BotRiskConfig:
     reduce_only_threshold: Decimal | None = None
     # Optional paper equity override for dry-run observation mode.
     dry_run_equity_usd: Decimal | None = None
-    # Daily loss limit as percentage of equity (0.05 = 5%)
-    # When daily loss exceeds this, reduce-only mode is triggered
-    daily_loss_limit_pct: float = 0.05
 
 
 @dataclass
@@ -161,7 +163,7 @@ class BotConfig:
 
     Supports nested access:
     - Strategy: config.strategy.short_ma_period, config.strategy.long_ma_period, etc.
-    - Risk: config.risk.max_leverage, config.risk.position_fraction, etc.
+    - Risk: config.risk.position_fraction, config.risk.stop_loss_pct, etc.
     """
 
     # Nested configurations
@@ -188,7 +190,6 @@ class BotConfig:
     interval: int = 60  # seconds
     max_cycles: int | None = None
     derivatives_enabled: bool = False
-    enable_shorts: bool = False
     reduce_only_mode: bool = False
     time_in_force: str = "GTC"
     enable_order_preview: bool = False
@@ -199,6 +200,16 @@ class BotConfig:
     # engine enters proposal-only mode and never places orders while the gate is
     # on. See docs/DIRECTION.md, docs/STATUS.md, docs/architecture/SEAMS.md.
     strategy_signal_proposals_enabled: bool = False
+    # Stage 2 derivation seam (default ON). When enabled, the runtime risk
+    # manager's appetite fields (daily_loss_limit_pct, max_exposure_pct) are
+    # seeded from the active RiskBudget version at engine startup, and the
+    # budget's permissions gate shorts and CFM leverage. The budget defaults
+    # are LOOSER than the legacy runtime defaults (10% daily loss / 100%
+    # exposure vs 5% / 80%); the loosened breaker band is pinned by the
+    # MOCK_BROKER regression in
+    # tests/integration/test_risk_budget_seeded_breaker.py. See
+    # docs/decisions/canonical-risk-limit-vocabulary.md (#1120).
+    risk_budget_runtime_seed_enabled: bool = True
     market_order_fallback: bool = True
     # Enabled by default for resiliency; disable only for controlled troubleshooting.
     order_submission_retries_enabled: bool = True
@@ -283,31 +294,23 @@ class BotConfig:
 
     @property
     def active_enable_shorts(self) -> bool:
-        """Get enable_shorts from active strategy config (canonical source).
+        """Get enable_shorts from the active strategy config (canonical source).
 
-        Derives enable_shorts from the strategy config based on strategy_type.
-        Warns once if top-level enable_shorts differs from strategy config.
+        The former top-level ``BotConfig.enable_shorts`` transitional alias
+        has been retired (#1120 stage 3); the per-strategy flags are the only
+        source. Use :meth:`set_enable_shorts` to route a profile-level intent
+        onto them.
         """
-        import warnings
-
-        # Get canonical value from active strategy
         if self.strategy_type == "mean_reversion":
-            canonical = self.mean_reversion.enable_shorts
-        else:
-            # baseline, ensemble use strategy config
-            canonical = getattr(self.strategy, "enable_shorts", False)
+            return self.mean_reversion.enable_shorts
+        # baseline, ensemble, regime_switcher use strategy config
+        return getattr(self.strategy, "enable_shorts", False)
 
-        # Warn on mismatch (once per process)
-        if self.enable_shorts != canonical and not BotConfig._enable_shorts_sync_warned:
-            warnings.warn(
-                f"BotConfig.enable_shorts={self.enable_shorts} differs from "
-                f"strategy config ({canonical}). Strategy config is canonical.",
-                UserWarning,
-                stacklevel=2,
-            )
-            BotConfig._enable_shorts_sync_warned = True
-
-        return canonical
+    def set_enable_shorts(self, enabled: bool) -> None:
+        """Route a shorts on/off intent onto the canonical strategy configs."""
+        if hasattr(self.strategy, "enable_shorts"):
+            self.strategy.enable_shorts = enabled
+        self.mean_reversion.enable_shorts = enabled
 
     @classmethod
     def from_profile(
@@ -320,9 +323,6 @@ class BotConfig:
         """Create a config from a profile name or enum."""
         # Type ignore: kwargs unpacking is dynamic, but we trust the caller to provide valid fields
         return cls(profile=profile, dry_run=dry_run, mock_broker=mock_broker, **kwargs)  # type: ignore[arg-type]
-
-    # Single-shot sync warning for enable_shorts mismatch
-    _enable_shorts_sync_warned: ClassVar[bool] = False
 
     @classmethod
     def from_env(cls) -> "BotConfig":
@@ -359,22 +359,15 @@ class BotConfig:
             """Get risk Decimal env var with RISK_ prefix taking precedence."""
             return Decimal(_risk_env(key, default))
 
-        def _risk_float(key: str, default: float) -> float:
-            """Get risk float env var with RISK_ prefix taking precedence."""
-            return float(_risk_env(key, str(default)))
-
         # Map RISK_MAX_POSITION_PCT_PER_SYMBOL -> position_fraction
         position_fraction_raw = os.getenv("RISK_MAX_POSITION_PCT_PER_SYMBOL", "0.1")
 
         risk = BotRiskConfig(
             max_position_size=_risk_decimal("MAX_POSITION_SIZE", "1000"),
-            max_leverage=_risk_int("MAX_LEVERAGE", 5),
             target_leverage=_risk_int("TARGET_LEVERAGE", 1),
             stop_loss_pct=_risk_decimal("STOP_LOSS_PCT", "0.02"),
             take_profit_pct=_risk_decimal("TAKE_PROFIT_PCT", "0.04"),
             position_fraction=Decimal(position_fraction_raw),
-            # Daily loss limit as percentage (0.05 = 5%)
-            daily_loss_limit_pct=_risk_float("DAILY_LOSS_LIMIT_PCT", 0.05),
         )
 
         # Derivatives = CFM US futures (INTX perpetuals removed). Source enablement
@@ -537,12 +530,10 @@ class BotConfig:
             schema = ProfileSchema.from_yaml(data, data.get("profile_name", "custom"))
 
             risk = BotRiskConfig(
-                max_leverage=schema.risk.max_leverage,
                 max_position_size=schema.risk.max_position_size,
                 position_fraction=schema.risk.position_fraction,
                 stop_loss_pct=schema.risk.stop_loss_pct,
                 take_profit_pct=schema.risk.take_profit_pct,
-                daily_loss_limit_pct=schema.risk.daily_loss_limit_pct,
             )
 
             strategy = PerpsStrategyConfig(
@@ -560,11 +551,11 @@ class BotConfig:
                 "interval": schema.trading.interval,
                 "risk": risk,
                 "strategy": strategy,
-                "enable_shorts": schema.risk.enable_shorts,
                 "time_in_force": schema.execution.time_in_force,
                 "dry_run": schema.execution.dry_run,
                 "mock_broker": schema.execution.mock_broker,
                 "strategy_signal_proposals_enabled": schema.execution.strategy_signal_proposals,
+                "risk_budget_runtime_seed_enabled": schema.execution.risk_budget_runtime_seed,
                 "log_level": schema.monitoring.log_level,
                 "status_interval": schema.monitoring.update_interval,
                 "status_enabled": schema.monitoring.status_enabled,
@@ -574,7 +565,9 @@ class BotConfig:
             if schema.trading.mode == "reduce_only":
                 config_data["reduce_only_mode"] = True
 
-            return cls(**config_data)
+            config = cls(**config_data)
+            config.set_enable_shorts(schema.risk.enable_shorts)
+            return config
 
         strategy_data = data.get("strategy", {})
         if not isinstance(strategy_data, dict):

@@ -11,6 +11,7 @@ from gpt_trader.features.live_trade.engines.strategy import (
     TradingEngine,
 )
 from gpt_trader.features.live_trade.strategies.baseline import BaselinePerpsStrategy
+from gpt_trader.features.recorder import PriceTickStore
 
 pytest_plugins = ["tests.unit.gpt_trader.features.live_trade.state_recovery_test_helpers"]
 
@@ -46,6 +47,19 @@ class TestTradingEngineRecordPriceTick:
         # Should not raise
         engine._record_price_tick("BTC-PERP", Decimal("50000.00"))
         assert context_without_store.event_store is None
+
+    def test_engine_uses_injected_price_tick_store(
+        self, context_with_store: CoordinatorContext, application_container
+    ) -> None:
+        """Recorder-owned tick state injected via context replaces engine construction."""
+        injected = PriceTickStore(event_store=None, symbols=["BTC-PERP"], bot_id="test-bot")
+
+        engine = TradingEngine(context_with_store.with_updates(price_tick_store=injected))
+        engine._record_price_tick("BTC-PERP", Decimal("50000.00"))
+
+        assert engine._price_tick_store is injected
+        assert engine.price_history is injected.price_history
+        assert list(injected.price_history["BTC-PERP"]) == [Decimal("50000.00")]
 
 
 class TestStrategyRehydrate:

@@ -33,6 +33,7 @@ from gpt_trader.features.live_trade.order_value_extraction import (
     extract_order_identifier,
     stringify_order_value,
 )
+from gpt_trader.features.recorder import PriceTickStore
 from gpt_trader.monitoring.alert_types import AlertSeverity
 from gpt_trader.persistence.orders_store import OrderRecord, OrderStatus
 from gpt_trader.utilities.async_tools import BoundedToThread
@@ -104,6 +105,14 @@ class TradingBot:
             use_dedicated_executor=use_dedicated_executor,
         )
 
+        # Recording state is constructed here, not inside the engine, so the
+        # recorder role can outlive execution (five-role composition).
+        self._price_tick_store = PriceTickStore(
+            event_store=self._event_store,
+            symbols=list(config.symbols),
+            bot_id="",
+        )
+
         # Setup context
         self.context = CoordinatorContext(
             config=config,
@@ -115,6 +124,7 @@ class TradingBot:
             event_store=self._event_store,
             orders_store=self._orders_store,
             notification_service=self._notification_service,
+            price_tick_store=self._price_tick_store,
         )
 
         self.engine = TradingEngine(self.context)

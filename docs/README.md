@@ -10,7 +10,7 @@ linked docs). When adding a doc, first read
 of where each kind of fact lives — then link the new doc in the best-fit section
 below.
 
-### Doc layout and metadata
+## Doc Layout and Metadata
 
 Each doc carries a frontmatter block with a single required field:
 
@@ -99,7 +99,7 @@ cannot provide. The metadata block and reachability are enforced by
 - [Naming Suppressions](naming_suppressions.md) - Strict mode behavior and how to suppress
 - [Security](SECURITY.md) - Security practices and considerations
 - [Deprecations](DEPRECATIONS.md) - Deprecated modules and shims (CI-checked)
-- Research backtests: adapter order intent keys live in `Development Guidelines`
+- Research backtests — adapter order-intent keys are documented in [Development Guidelines](DEVELOPMENT_GUIDELINES.md)
 
 ## Configuration
 
@@ -118,6 +118,7 @@ profile name itself is never execution approval.
 | Profile | Broker / data | Role |
 |---------|---------------|------|
 | **dev** | Mock broker | Development and testing |
+| **paper** | Real data, mock execution | Strategy checks without exchange orders |
 | **observe** | Real data, blocked execution | Account and market observation |
 | **canary** | Live broker, tightly capped | Live-validation asset; runs require recorded approval |
 | **prod** | Live broker | Live-operation asset; runs require explicit approval and monitoring |
@@ -127,7 +128,7 @@ profile name itself is never execution approval.
 - [Environment Variable Inventory](../var/agents/configuration/environment_variables.md) - Full, code-derived reference
 - Default: Spot trading with JWT authentication
 - CFM futures (US) require `TRADING_MODES=cfm` + `CFM_ENABLED=1`
-- INTX perps were removed ([decision record](decisions/intx-default-derivatives-venue.md), [Deprecations](DEPRECATIONS.md)); `COINBASE_ENABLE_INTX_PERPS` is a deprecated alias (a truthy value warns and substitutes for `CFM_ENABLED=1` only; `TRADING_MODES` must still include `cfm`; falsey/unset values are ignored)
+- INTX perps were removed ([decision record](decisions/intx-default-derivatives-venue.md)); `COINBASE_ENABLE_INTX_PERPS` survives only as a deprecated alias — semantics in [Deprecations](DEPRECATIONS.md)
 
 ## Additional Resources
 
