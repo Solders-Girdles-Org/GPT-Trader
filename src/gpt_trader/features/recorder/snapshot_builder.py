@@ -1,11 +1,16 @@
-"""Build proposer-safe market snapshots from historical candle sources."""
+"""Build proposer-safe market snapshots from historical candle sources.
+
+Recorder-owned snapshot production: the builder turns read-only candle
+history into the point-in-time ``MarketSnapshot`` artifact defined by the
+trade-idea contract (``features/trade_ideas/snapshot.py``).
+"""
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, Protocol
+from typing import Protocol
 
 from gpt_trader.core import Candle
 from gpt_trader.features.trade_ideas.snapshot import (
@@ -185,32 +190,6 @@ class MarketSnapshotBuilder:
             ),
             series=tuple(series),
         )
-
-
-def market_snapshot_to_payload(snapshot: MarketSnapshot) -> dict[str, Any]:
-    """Serialize a ``MarketSnapshot`` into the fixture shape accepted by the CLI."""
-    return {
-        "as_of": snapshot.as_of.isoformat(),
-        "source": snapshot.source,
-        "series": [
-            {
-                "symbol": symbol_series.symbol,
-                "granularity": symbol_series.granularity,
-                "candles": [
-                    {
-                        "ts": candle.ts.isoformat(),
-                        "open": str(candle.open),
-                        "high": str(candle.high),
-                        "low": str(candle.low),
-                        "close": str(candle.close),
-                        "volume": str(candle.volume),
-                    }
-                    for candle in symbol_series.candles
-                ],
-            }
-            for symbol_series in snapshot.series
-        ],
-    }
 
 
 def granularity_duration(granularity: str) -> timedelta | None:

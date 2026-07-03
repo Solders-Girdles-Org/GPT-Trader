@@ -8,8 +8,10 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from gpt_trader.backtesting.data.fetcher import CoinbaseHistoricalFetcher
 from gpt_trader.core import Candle
+from gpt_trader.features.brokerages.coinbase.historical_candles import (
+    CoinbaseHistoricalFetcher,
+)
 
 
 @pytest.mark.asyncio

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from gpt_trader.core import Candle
 from gpt_trader.errors import ValidationError
@@ -82,3 +83,29 @@ class MarketSnapshot:
             if symbol_series.symbol == symbol:
                 return symbol_series
         return None
+
+
+def market_snapshot_to_payload(snapshot: MarketSnapshot) -> dict[str, Any]:
+    """Serialize a ``MarketSnapshot`` into the fixture shape accepted by the CLI."""
+    return {
+        "as_of": snapshot.as_of.isoformat(),
+        "source": snapshot.source,
+        "series": [
+            {
+                "symbol": symbol_series.symbol,
+                "granularity": symbol_series.granularity,
+                "candles": [
+                    {
+                        "ts": candle.ts.isoformat(),
+                        "open": str(candle.open),
+                        "high": str(candle.high),
+                        "low": str(candle.low),
+                        "close": str(candle.close),
+                        "volume": str(candle.volume),
+                    }
+                    for candle in symbol_series.candles
+                ],
+            }
+            for symbol_series in snapshot.series
+        ],
+    }

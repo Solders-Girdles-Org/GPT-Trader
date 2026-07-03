@@ -8,7 +8,7 @@
 # Priorities: high | medium | low
 #
 version: 1
-generated_at: '2026-07-03T11:23:38.505319+00:00'
+generated_at: '2026-07-03T12:08:50.879499+00:00'
 summary:
   total_clusters: 208
   by_priority:
@@ -1111,9 +1111,9 @@ clusters:
     rationale: Consolidate 6 test files into single parametrized file
     status: pending
     added: '2026-07-01'
-  62d110ee39da:
+  1819d650bc6c:
     type: source_fanout
-    description: 84 test files import gpt_trader.core
+    description: 85 test files import gpt_trader.core
     files:
     - tests/unit/gpt_trader/backtesting/simulation/test_accounting.py
     - tests/unit/gpt_trader/backtesting/simulation/test_fill_model.py
@@ -1122,7 +1122,6 @@ clusters:
     - tests/unit/gpt_trader/backtesting/simulation/test_simulated_broker.py
     - tests/unit/gpt_trader/backtesting/simulation/test_simulated_broker_market.py
     - tests/unit/gpt_trader/backtesting/simulation/test_simulated_broker_trading.py
-    - tests/unit/gpt_trader/backtesting/test_coinbase_historical_fetcher_edges.py
     - tests/unit/gpt_trader/backtesting/test_guarded_backtest_flow.py
     - tests/unit/gpt_trader/backtesting/test_historical_data.py
     - tests/unit/gpt_trader/backtesting/test_historical_data_manager_quality_edges.py
@@ -1145,6 +1144,7 @@ clusters:
     - tests/unit/gpt_trader/features/brokerages/coinbase/test_coinbase_perp_rules_and_quantize.py
     - tests/unit/gpt_trader/features/brokerages/coinbase/test_coinbase_product_catalog.py
     - tests/unit/gpt_trader/features/brokerages/coinbase/test_coinbase_system.py
+    - tests/unit/gpt_trader/features/brokerages/coinbase/test_historical_candles_edges.py
     - tests/unit/gpt_trader/features/brokerages/coinbase/test_http_request_layer.py
     - tests/unit/gpt_trader/features/brokerages/coinbase/test_retry_behaviour.py
     - tests/unit/gpt_trader/features/brokerages/coinbase/test_specs_enforce_perps_rules.py
@@ -1191,6 +1191,8 @@ clusters:
     - tests/unit/gpt_trader/features/live_trade/test_bot_flatten_and_stop_audit.py
     - tests/unit/gpt_trader/features/live_trade/test_risk.py
     - tests/unit/gpt_trader/features/live_trade/test_risk_time_windows.py
+    - tests/unit/gpt_trader/features/recorder/test_snapshot_builder.py
+    - tests/unit/gpt_trader/features/recorder/test_snapshot_source.py
     - tests/unit/gpt_trader/features/trade_ideas/test_baseline_proposer.py
     - tests/unit/gpt_trader/features/trade_ideas/test_optimize_bridge.py
     - tests/unit/gpt_trader/features/trade_ideas/test_regime_proposer.py
@@ -1198,17 +1200,16 @@ clusters:
     - tests/unit/gpt_trader/features/trade_ideas/test_replay_level_extraction.py
     - tests/unit/gpt_trader/features/trade_ideas/test_replay_runner.py
     - tests/unit/gpt_trader/features/trade_ideas/test_snapshot.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_snapshot_builder.py
     source_modules:
     - gpt_trader.core
     decision: merge
     target_location: tests/unit/gpt_trader/backtesting/simulation/test_core.py
-    expected_file_delta: -83
+    expected_file_delta: -84
     priority: low
-    rationale: Consolidate 84 test files into single parametrized file
+    rationale: Consolidate 85 test files into single parametrized file
     status: pending
     added: '2026-07-03'
-  41c35386d0c0:
+  09c973a62ae5:
     type: source_fanout
     description: 61 test files import gpt_trader.features.trade_ideas
     files:
@@ -1240,6 +1241,7 @@ clusters:
     - tests/unit/gpt_trader/features/idea_execution/test_cycle_evidence.py
     - tests/unit/gpt_trader/features/idea_execution/test_executor.py
     - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_proposals.py
+    - tests/unit/gpt_trader/features/recorder/test_snapshot_builder.py
     - tests/unit/gpt_trader/features/strategy_tools/test_trade_idea_adapter.py
     - tests/unit/gpt_trader/features/trade_ideas/test_audit.py
     - tests/unit/gpt_trader/features/trade_ideas/test_baseline_proposer.py
@@ -1269,7 +1271,6 @@ clusters:
     - tests/unit/gpt_trader/features/trade_ideas/test_service_query.py
     - tests/unit/gpt_trader/features/trade_ideas/test_service_venue_boundary.py
     - tests/unit/gpt_trader/features/trade_ideas/test_snapshot.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_snapshot_builder.py
     - tests/unit/gpt_trader/features/trade_ideas/test_store.py
     - tests/unit/gpt_trader/features/trade_ideas/test_workflow.py
     - tests/unit/gpt_trader/preflight/test_checks_trade_ideas.py

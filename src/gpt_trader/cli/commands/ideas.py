@@ -44,6 +44,13 @@ from gpt_trader.features.idea_execution import (
     PaperIdeaExecutor,
 )
 from gpt_trader.features.intelligence.regime import RegimeConfig
+from gpt_trader.features.recorder import (
+    DEFAULT_COINBASE_BASE_URL,
+    DEFAULT_SNAPSHOT_SOURCE_LABEL,
+    MarketSnapshotBuildRequest,
+    build_coinbase_market_snapshot,
+    canonical_granularity,
+)
 from gpt_trader.features.trade_ideas import (
     DEFAULT_TIME_IN_FORCE,
     DEFAULT_VENUE_ORDER_TYPE,
@@ -58,8 +65,6 @@ from gpt_trader.features.trade_ideas import (
     ConfidenceLabel,
     InvalidTransitionError,
     MarketSnapshot,
-    MarketSnapshotBuilder,
-    MarketSnapshotBuildRequest,
     OptimizeBaselineCandidate,
     OptimizeBaselineReplayReport,
     PaperFillReconciler,
@@ -83,7 +88,6 @@ from gpt_trader.features.trade_ideas import (
     TradeIdeaSizingOutput,
     TradeIdeaState,
     UnknownTradeIdeaError,
-    canonical_granularity,
     canonical_ticket_json,
     create_trade_idea_service,
     is_safe_decision_id,
@@ -276,12 +280,12 @@ def register(subparsers: Any) -> None:
     )
     snapshot_build.add_argument(
         "--source-label",
-        default="coinbase:market-candles",
+        default=DEFAULT_SNAPSHOT_SOURCE_LABEL,
         help="Source label stamped into snapshot metadata",
     )
     snapshot_build.add_argument(
         "--coinbase-base-url",
-        default="https://api.coinbase.com",
+        default=DEFAULT_COINBASE_BASE_URL,
         help="Coinbase API base URL for market-data reads",
     )
     snapshot_build.set_defaults(handler=_handle_snapshot_build, subcommand="snapshot build")
@@ -950,12 +954,12 @@ def register(subparsers: Any) -> None:
     )
     cycle.add_argument(
         "--coinbase-base-url",
-        default="https://api.coinbase.com",
+        default=DEFAULT_COINBASE_BASE_URL,
         help="Coinbase API base URL for market-data reads",
     )
     cycle.add_argument(
         "--source-label",
-        default="coinbase:market-candles",
+        default=DEFAULT_SNAPSHOT_SOURCE_LABEL,
         help="Source label stamped into snapshot metadata",
     )
     cycle.add_argument(
@@ -1569,25 +1573,12 @@ async def _build_coinbase_market_snapshot(
     args: Namespace,
     request: MarketSnapshotBuildRequest,
 ) -> MarketSnapshot:
-    from gpt_trader.backtesting.data.fetcher import CoinbaseHistoricalFetcher
-    from gpt_trader.features.brokerages.coinbase.client import CoinbaseClient
-
-    client = CoinbaseClient(
+    # Snapshot production is recorder-owned; the CLI only adapts arguments.
+    return await build_coinbase_market_snapshot(
+        request,
         base_url=args.coinbase_base_url,
-        auth=None,
-        api_mode="advanced",
+        source_label=args.source_label,
     )
-    try:
-        builder = MarketSnapshotBuilder(
-            CoinbaseHistoricalFetcher(client=client),
-            source_label=args.source_label,
-        )
-        return await builder.build(request)
-    finally:
-        try:
-            client.close()
-        except Exception:  # noqa: BLE001
-            pass
 
 
 def _snapshot_symbols(value: str) -> tuple[str, ...]:
