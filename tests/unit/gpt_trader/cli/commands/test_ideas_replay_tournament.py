@@ -134,6 +134,52 @@ def test_replay_tournament_text_output_is_readable(
     assert "2  baseline-ma-2-4" in output
 
 
+def _long_history_fixture() -> dict[str, list[dict[str, str]]]:
+    """26 flat closes then a four-bar rise, long enough for the strategy floor."""
+    closes = ["100"] * 26 + ["102", "104", "106", "108"]
+    return {
+        "candles": [
+            _candle(index - len(closes), open_=close, high=close, low=close, close=close)
+            for index, close in enumerate(closes)
+        ]
+    }
+
+
+def test_replay_tournament_ranks_strategy_backed_beside_baseline_proposers(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fixture = _write_fixture(tmp_path / "long-candles.json", _long_history_fixture())
+    argv = _tournament_args(fixture)
+    argv[argv.index("--proposers") + 1] = "baseline-ma-2-4,strategy-baseline-spot"
+
+    exit_code, response = _run_json(capsys, argv)
+
+    assert exit_code == 0
+    data = response["data"]
+    assert data["proposer_count"] == 2
+    proposer_ids = {report["proposer_id"] for report in data["reports"]}
+    assert proposer_ids == {"baseline-ma-2-4", "snapshot-strategy-baseline-spot"}
+    # The shared window starts at the strategy floor, and both proposers trade.
+    assert all(report["ideas_proposed"] >= 1 for report in data["reports"])
+
+
+def test_replay_tournament_rejects_min_history_below_strategy_floor(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fixture = _write_fixture(tmp_path / "long-candles.json", _long_history_fixture())
+    argv = _tournament_args(fixture)
+    argv[argv.index("--proposers") + 1] = "baseline-ma-2-4,strategy-baseline-spot"
+    argv.extend(["--min-history", "10"])
+
+    exit_code, response = _run_json(capsys, argv)
+
+    assert exit_code == 1
+    assert response["errors"][0]["code"] == CliErrorCode.INVALID_ARGUMENT.value
+    assert "--min-history must be at least 20" in response["errors"][0]["message"]
+
+
 def test_replay_tournament_rejects_unknown_proposer_id(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

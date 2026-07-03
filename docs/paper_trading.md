@@ -125,6 +125,11 @@ uv run gpt-trader ideas snapshot build --from-coinbase \
 # 2. Propose from the recorded snapshot (deterministic proposer, ai actor)
 uv run gpt-trader ideas propose-baseline --snapshot var/data/snapshots/paper-day.json
 
+# 2-alt. Or run a live-trade strategy as the proposer over the same snapshot
+#        (the strategy->proposer parity lane; same audited service, ai actor)
+uv run gpt-trader ideas propose-strategy --snapshot var/data/snapshots/paper-day.json \
+  --strategy baseline-spot
+
 # 3. Review the queue and decide (human actions)
 uv run gpt-trader ideas queue-status
 uv run gpt-trader ideas list --state proposed
@@ -170,12 +175,29 @@ a cadence, never approves ideas, and never contacts a live broker or account.
 Approvals remain a human event: review the queue between turns exactly as in
 the honest-day procedure above.
 
+Prerequisite: attest account equity once before scheduling turns
+(`ideas budget set --account-equity <equity> --actor <you> --reason "..."`,
+step 0 of the honest day above). Proposal sizing and the approval gate both
+denominate against the attested equity; on an unattested root the cycle still
+runs, but every sized proposal fails approval with `account_equity_snapshot
+is required to verify max_open_notional_pct budget exposure` until a human
+attests equity.
+
 The default conservative configuration lives in
 `scripts/ops/stage1_cycle_turn.sh` (BTC-USD/ETH-USD, ONE_HOUR candles,
-lookback 200, all proposers). Symbols, granularity, lookback, and the
-proposer set are env-overridable there (`CYCLE_SYMBOLS`, `CYCLE_GRANULARITY`,
-`CYCLE_LOOKBACK`, and space-separated `CYCLE_PROPOSERS`, for example
-`CYCLE_PROPOSERS=baseline`); cadence belongs only in the scheduler entry.
+lookback 200, default proposers `baseline` and `regime-aware`). Symbols,
+granularity, lookback, and the proposer set are env-overridable there
+(`CYCLE_SYMBOLS`, `CYCLE_GRANULARITY`, `CYCLE_LOOKBACK`, and space-separated
+`CYCLE_PROPOSERS`, for example `CYCLE_PROPOSERS=baseline`); cadence belongs
+only in the scheduler entry.
+
+Strategy-backed proposers — the live strategy library running over the turn's
+snapshot through the `Proposer` contract — are opt-in until replay parity is
+demonstrated: pass `--proposer strategy-baseline-spot` (or
+`strategy-baseline-perps`; both emit long-only spot ideas), or set
+`CYCLE_PROPOSERS="baseline regime-aware strategy-baseline-spot"`. For
+sub-cent symbols the proposal price levels quantize to zero at the default
+precision and fail closed; pass a finer `--price-precision` for the turn.
 
 ### launchd (macOS)
 

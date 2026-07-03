@@ -8,8 +8,10 @@ from gpt_trader.features.strategy_tools.filters import (
 )
 from gpt_trader.features.strategy_tools.guards import RiskGuards, create_standard_risk_guards
 from gpt_trader.features.strategy_tools.snapshot_proposer import (
+    SNAPSHOT_STRATEGY_PROPOSER_PREFIX,
     SnapshotDecider,
     SnapshotStrategyProposer,
+    StrategyFactory,
 )
 from gpt_trader.features.strategy_tools.trade_idea_adapter import (
     StrategyDecisionSignal,
@@ -19,12 +21,14 @@ from gpt_trader.features.strategy_tools.trade_idea_adapter import (
 )
 
 __all__ = [
+    "SNAPSHOT_STRATEGY_PROPOSER_PREFIX",
     "MarketConditionFilters",
     "RiskGuards",
     "SnapshotDecider",
     "SnapshotStrategyProposer",
     "StrategyDecisionSignal",
     "StrategyEnhancements",
+    "StrategyFactory",
     "StrategySignalContext",
     "StrategySignalToTradeIdeaAdapter",
     "StrategySignalToTradeIdeaAdapterConfig",
