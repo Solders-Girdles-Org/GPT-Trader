@@ -1,4 +1,8 @@
-"""Historical data fetcher for Coinbase API."""
+"""Historical candle fetcher for the Coinbase Advanced Trade API.
+
+Chunked, rate-limited REST candle reads shared by the backtesting data
+manager and the recorder's snapshot production.
+"""
 
 import asyncio
 from datetime import UTC, datetime, timedelta

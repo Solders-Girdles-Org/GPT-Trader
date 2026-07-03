@@ -177,6 +177,13 @@ CROSS_SLICE_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset(
         ("trade_ideas", "intelligence"),
         # walk_forward/batch_runner reuse strategy protocol and baseline types.
         ("optimize", "live_trade"),
+        # Recorder owns market-data acquisition over the read-only Coinbase
+        # candle transport (docs/decisions/adopt-five-role-composition.md).
+        ("recorder", "brokerages"),
+        # Recorder produces the MarketSnapshot artifact defined by the
+        # trade-idea contract; the frozen trade_ideas dependency set keeps the
+        # dependency one-way (producer imports contract, never the reverse).
+        ("recorder", "trade_ideas"),
         # trade_idea_adapter builds trade-idea records.
         ("strategy_tools", "trade_ideas"),
     }
@@ -196,6 +203,11 @@ CROSS_SLICE_NARROW_IMPORT_PREFIXES: frozenset[tuple[str, str, str]] = frozenset(
             "idea_execution",
             "brokerages",
             "gpt_trader.features.brokerages.paper",
+        ),
+        (
+            "recorder",
+            "brokerages",
+            "gpt_trader.features.brokerages.coinbase",
         ),
     }
 )

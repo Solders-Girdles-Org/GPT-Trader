@@ -7,12 +7,14 @@ from decimal import Decimal
 import pytest
 
 from gpt_trader.core import Candle
-from gpt_trader.features.trade_ideas import (
+from gpt_trader.features.recorder import (
     MarketSnapshotBuilder,
     MarketSnapshotBuildRequest,
-    SnapshotIntegrityError,
     canonical_granularity,
     granularity_duration,
+)
+from gpt_trader.features.trade_ideas import (
+    SnapshotIntegrityError,
     market_snapshot_to_payload,
 )
 
