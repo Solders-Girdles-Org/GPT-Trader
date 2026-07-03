@@ -194,10 +194,15 @@ only in the scheduler entry.
 Strategy-backed proposers — the live strategy library running over the turn's
 snapshot through the `Proposer` contract — are opt-in until replay parity is
 demonstrated: pass `--proposer strategy-baseline-spot` (or
-`strategy-baseline-perps`; both emit long-only spot ideas), or set
-`CYCLE_PROPOSERS="baseline regime-aware strategy-baseline-spot"`. For
-sub-cent symbols the proposal price levels quantize to zero at the default
-precision and fail closed; pass a finer `--price-precision` for the turn.
+`strategy-baseline-perps`, `strategy-mean-reversion`,
+`strategy-regime-switcher`; all emit long-only spot ideas), or set
+`CYCLE_PROPOSERS="baseline regime-aware strategy-baseline-spot"`. Each
+strategy proposes only past its own live warm-up floor: the baseline family
+and mean reversion need 20 candles, while the regime switcher holds until its
+detector confirms a regime at 54 candles — keep `--lookback` comfortably
+above that (the default 200 is). For sub-cent symbols the proposal price
+levels quantize to zero at the default precision and fail closed; pass a
+finer `--price-precision` for the turn.
 
 ### launchd (macOS)
 

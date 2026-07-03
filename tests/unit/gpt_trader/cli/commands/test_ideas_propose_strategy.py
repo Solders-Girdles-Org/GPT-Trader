@@ -32,6 +32,16 @@ AS_OF = datetime(2035, 6, 12, 0, 0, tzinfo=UTC)
 GOLDEN_CROSS = ["100"] * 28 + ["102", "104"]
 FLAT = ["100"] * 30
 SUB_CENT_GOLDEN_CROSS = ["0.004"] * 28 + ["0.0041", "0.0042"]
+# Flat closes then a sharp final-bar dip: Z-Score over the 20-candle window
+# drops far below the -2.0 entry threshold (mean reversion long).
+MEAN_REVERSION_DIP = ["100"] * 29 + ["96"]
+# Ultra-quiet damped oscillation, then the same dip: strictly shrinking moves
+# keep the regime detector's classification stable so the first regime
+# confirms at candle 54 (long-EMA 50 + min-regime-ticks 5 - 1) as
+# SIDEWAYS_QUIET, routing the final-bar dip to the mean-reversion delegate.
+REGIME_SWITCHER_DIP = [
+    f"{100 + (1 if i % 2 == 0 else -1) * 0.05 * (0.995 ** i):.4f}" for i in range(59)
+] + ["96"]
 
 
 def _run_json(capsys: pytest.CaptureFixture[str], argv: list[str]) -> tuple[int, dict[str, Any]]:
@@ -143,6 +153,67 @@ def test_propose_strategy_baseline_perps_choice_emits_spot_ideas(
         (root / "records" / proposal["decision_id"] / "latest.json").read_text(encoding="utf-8")
     )
     assert latest["product_type"] == "spot"
+
+
+def test_propose_strategy_mean_reversion_choice_buys_the_dip(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = tmp_path / "ideas"
+    snapshot_path = _write_snapshot(tmp_path / "dip.json", _snapshot_payload(MEAN_REVERSION_DIP))
+
+    exit_code, response = _propose_strategy(capsys, root, snapshot_path, strategy="mean-reversion")
+
+    assert exit_code == 0
+    assert response["data"]["proposer_id"] == "snapshot-strategy-mean-reversion"
+    assert response["data"]["proposal_count"] == 1
+    proposal = response["data"]["proposed"][0]
+    assert proposal["decision_id"].startswith("trade-20350612-mean-reversion-btc-usd-")
+    latest = json.loads(
+        (root / "records" / proposal["decision_id"] / "latest.json").read_text(encoding="utf-8")
+    )
+    assert latest["product_type"] == "spot"
+    assert latest["direction"] == "long"
+    assert latest["sizing_recommendation"]["quantity"] is not None
+    assert latest["max_loss"]["amount"] is not None
+
+
+def test_propose_strategy_regime_switcher_choice_buys_the_sideways_dip(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = tmp_path / "ideas"
+    snapshot_path = _write_snapshot(
+        tmp_path / "sideways-dip.json", _snapshot_payload(REGIME_SWITCHER_DIP)
+    )
+
+    exit_code, response = _propose_strategy(capsys, root, snapshot_path, strategy="regime-switcher")
+
+    assert exit_code == 0
+    assert response["data"]["proposer_id"] == "snapshot-strategy-regime-switcher"
+    assert response["data"]["proposal_count"] == 1
+    proposal = response["data"]["proposed"][0]
+    latest = json.loads(
+        (root / "records" / proposal["decision_id"] / "latest.json").read_text(encoding="utf-8")
+    )
+    assert latest["product_type"] == "spot"
+    assert latest["direction"] == "long"
+    assert latest["sizing_recommendation"]["quantity"] is not None
+
+
+def test_propose_strategy_regime_switcher_holds_below_detector_warmup(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = tmp_path / "ideas"
+    # The dip is present, but only 30 candles precede it: the regime detector
+    # cannot confirm a regime, so the switcher holds and nothing is proposed.
+    snapshot_path = _write_snapshot(
+        tmp_path / "short-dip.json", _snapshot_payload(MEAN_REVERSION_DIP)
+    )
+
+    exit_code, response = _propose_strategy(capsys, root, snapshot_path, strategy="regime-switcher")
+
+    assert exit_code == 0
+    assert response["data"]["proposal_count"] == 0
+    assert response["metadata"]["was_noop"] is True
 
 
 def test_propose_strategy_sizes_with_attested_account_equity(

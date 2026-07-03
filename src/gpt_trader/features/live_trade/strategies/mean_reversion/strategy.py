@@ -27,6 +27,20 @@ logger = get_logger(__name__, component="mean_reversion")
 
 
 @dataclass
+class CooldownState:
+    """Re-entry cooldown counter, externalized from the strategy (#1164 stage 3).
+
+    ``decide`` mutates only this object; every other input is passed per call.
+    The live engine keeps today's behavior through the default per-instance
+    state, while replay callers (the snapshot-proposer lane) construct a fresh
+    ``CooldownState`` per replay window so decisions are a pure function of
+    recorded inputs plus caller-owned state.
+    """
+
+    remaining: int = 0
+
+
+@dataclass
 class ZScoreState:
     """Current Z-Score indicator state."""
 
@@ -54,9 +68,9 @@ class MeanReversionStrategy:
     - Volatility targeting: size = (target_vol / current_vol) * equity * max_position_pct
     """
 
-    def __init__(self, config: MeanReversionConfig) -> None:
+    def __init__(self, config: MeanReversionConfig, cooldown: CooldownState | None = None) -> None:
         self.config = config
-        self._cooldown_remaining = 0
+        self._cooldown = cooldown if cooldown is not None else CooldownState()
         logger.info(
             f"MeanReversionStrategy initialized: "
             f"z_entry={config.z_score_entry_threshold}, "
@@ -197,12 +211,12 @@ class MeanReversionStrategy:
         """Decide on entry when no position exists."""
         indicators = self._build_indicators(state)
 
-        if self._cooldown_remaining > 0:
-            self._cooldown_remaining -= 1
-            indicators["cooldown_remaining"] = self._cooldown_remaining
+        if self._cooldown.remaining > 0:
+            self._cooldown.remaining -= 1
+            indicators["cooldown_remaining"] = self._cooldown.remaining
             return Decision(
                 Action.HOLD,
-                f"Cooldown active ({self._cooldown_remaining} bars remaining)",
+                f"Cooldown active ({self._cooldown.remaining} bars remaining)",
                 confidence=0.0,
                 indicators=indicators,
             )
@@ -268,8 +282,8 @@ class MeanReversionStrategy:
         # Check for mean reversion exit (price returned to fair value)
         if state.signal == "exit":
             if self.config.cooldown_bars > 0:
-                self._cooldown_remaining = max(self._cooldown_remaining, self.config.cooldown_bars)
-                indicators["cooldown_remaining"] = self._cooldown_remaining
+                self._cooldown.remaining = max(self._cooldown.remaining, self.config.cooldown_bars)
+                indicators["cooldown_remaining"] = self._cooldown.remaining
             return Decision(
                 Action.CLOSE,
                 f"Z-Score={z:.2f} near zero (mean reversion complete)",
@@ -292,10 +306,10 @@ class MeanReversionStrategy:
                 # Stop loss
                 if pnl_pct < -self.config.stop_loss_pct:
                     if self.config.cooldown_bars > 0:
-                        self._cooldown_remaining = max(
-                            self._cooldown_remaining, self.config.cooldown_bars
+                        self._cooldown.remaining = max(
+                            self._cooldown.remaining, self.config.cooldown_bars
                         )
-                        indicators["cooldown_remaining"] = self._cooldown_remaining
+                        indicators["cooldown_remaining"] = self._cooldown.remaining
                     return Decision(
                         Action.CLOSE,
                         f"Stop loss triggered: {pnl_pct:.2%} loss",
@@ -306,10 +320,10 @@ class MeanReversionStrategy:
                 # Take profit
                 if pnl_pct > self.config.take_profit_pct:
                     if self.config.cooldown_bars > 0:
-                        self._cooldown_remaining = max(
-                            self._cooldown_remaining, self.config.cooldown_bars
+                        self._cooldown.remaining = max(
+                            self._cooldown.remaining, self.config.cooldown_bars
                         )
-                        indicators["cooldown_remaining"] = self._cooldown_remaining
+                        indicators["cooldown_remaining"] = self._cooldown.remaining
                     return Decision(
                         Action.CLOSE,
                         f"Take profit triggered: {pnl_pct:.2%} gain",
@@ -320,8 +334,8 @@ class MeanReversionStrategy:
         # Check for signal reversal (optional: close on opposite signal)
         if position_side == "long" and state.signal == "short":
             if self.config.cooldown_bars > 0:
-                self._cooldown_remaining = max(self._cooldown_remaining, self.config.cooldown_bars)
-                indicators["cooldown_remaining"] = self._cooldown_remaining
+                self._cooldown.remaining = max(self._cooldown.remaining, self.config.cooldown_bars)
+                indicators["cooldown_remaining"] = self._cooldown.remaining
             return Decision(
                 Action.CLOSE,
                 f"Signal reversal: Z-Score={z:.2f} now indicates short",
@@ -330,8 +344,8 @@ class MeanReversionStrategy:
             )
         if position_side == "short" and state.signal == "long":
             if self.config.cooldown_bars > 0:
-                self._cooldown_remaining = max(self._cooldown_remaining, self.config.cooldown_bars)
-                indicators["cooldown_remaining"] = self._cooldown_remaining
+                self._cooldown.remaining = max(self._cooldown.remaining, self.config.cooldown_bars)
+                indicators["cooldown_remaining"] = self._cooldown.remaining
             return Decision(
                 Action.CLOSE,
                 f"Signal reversal: Z-Score={z:.2f} now indicates long",
@@ -433,9 +447,9 @@ class MeanReversionStrategy:
     def rehydrate(self, events: Sequence[dict[str, Any]]) -> int:
         """Restore strategy state from historical events.
 
-        MeanReversionStrategy is stateless - it calculates Z-Score fresh
-        from the recent_marks passed to decide(). No internal state
-        needs restoration.
+        Z-Score state is calculated fresh from the recent_marks passed to
+        decide(), and the re-entry cooldown lives in a caller-owned
+        ``CooldownState``, so no internal state needs restoration from events.
 
         Args:
             events: Historical events from EventStore

@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+from gpt_trader.app.config import MeanReversionConfig
 from gpt_trader.core import Candle
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.live_trade.strategies.baseline import (
@@ -14,6 +15,8 @@ from gpt_trader.features.live_trade.strategies.baseline import (
     Decision,
     SpotStrategy,
 )
+from gpt_trader.features.live_trade.strategies.mean_reversion import MeanReversionStrategy
+from gpt_trader.features.live_trade.strategies.regime_switcher import RegimeSwitchingStrategy
 from gpt_trader.features.strategy_tools import (
     SnapshotDecider,
     SnapshotStrategyProposer,
@@ -35,6 +38,24 @@ AS_OF = datetime(2026, 7, 3, 0, 0, tzinfo=UTC)
 GOLDEN_CROSS = ["100"] * 28 + ["102", "104"]
 # Mirror image: bearish crossover + bearish trend emits SELL on a flat book.
 BEARISH_BREAK = ["100"] * 28 + ["98", "96"]
+# Flat closes then a sharp final-bar dip: the Z-Score over the 20-candle
+# window drops far below the -2.0 entry threshold (mean reversion long).
+MEAN_REVERSION_DIP = ["100"] * 29 + ["96"]
+
+
+def damped_sideways_closes(count: int) -> list[str]:
+    """Ultra-quiet damped oscillation around 100.
+
+    Strictly shrinking moves keep the regime detector's classification stable
+    (SIDEWAYS_QUIET) once its 50-candle long EMA warms, so the first regime
+    confirms at candle 54 (long-EMA 50 + min-regime-ticks 5 - 1). Appending a
+    sharp dip as the final bar hands the switcher's mean-reversion delegate a
+    deep negative Z-Score without flipping the confirmed regime.
+    """
+    return [f"{100 + (1 if i % 2 == 0 else -1) * 0.05 * (0.995 ** i):.4f}" for i in range(count)]
+
+
+REGIME_SWITCHER_DIP = damped_sideways_closes(59) + ["96"]
 
 
 def make_series(
@@ -62,6 +83,26 @@ def snapshot_of(*series: SymbolSeries, as_of: datetime = AS_OF) -> MarketSnapsho
 
 def spot_proposer() -> SnapshotStrategyProposer:
     return SnapshotStrategyProposer(SpotStrategy, strategy_name="baseline-spot")
+
+
+def _mean_reversion_strategy() -> MeanReversionStrategy:
+    return MeanReversionStrategy(MeanReversionConfig())
+
+
+def mean_reversion_proposer() -> SnapshotStrategyProposer:
+    return SnapshotStrategyProposer(_mean_reversion_strategy, strategy_name="mean-reversion")
+
+
+def regime_switcher_proposer() -> SnapshotStrategyProposer:
+    return SnapshotStrategyProposer(
+        lambda: RegimeSwitchingStrategy(
+            trend_strategy_factory=SpotStrategy,
+            mean_reversion_strategy_factory=_mean_reversion_strategy,
+            enable_shorts=False,
+        ),
+        strategy_name="regime-switcher",
+        drive="per-candle",
+    )
 
 
 class SpyStrategy:
@@ -226,3 +267,113 @@ def test_naive_snapshot_as_of_is_treated_as_utc() -> None:
 
     assert len(ideas) == 1
     assert ideas[0].time_horizon.expires_at == AS_OF + timedelta(hours=48)
+
+
+def test_unknown_drive_fails_closed() -> None:
+    with pytest.raises(ValidationError, match="drive"):
+        SnapshotStrategyProposer(
+            SpotStrategy,
+            strategy_name="baseline-spot",
+            drive="warp",  # type: ignore[arg-type]
+        )
+
+
+def test_per_candle_drive_feeds_growing_prefixes_from_the_snapshot() -> None:
+    spy = SpyStrategy()
+    series = make_series(GOLDEN_CROSS)
+
+    SnapshotStrategyProposer(lambda: spy, strategy_name="spy", drive="per-candle").propose(
+        snapshot_of(series)
+    )
+
+    closes = [candle.close for candle in series.candles]
+    assert len(spy.calls) == len(closes)
+    for index, call in enumerate(spy.calls):
+        assert call["recent_marks"] == closes[: index + 1]
+        assert call["current_mark"] == closes[index]
+        assert call["candles"] == series.candles[: index + 1]
+        assert call["position_state"] is None
+        assert call["equity"] == Decimal("0")
+
+
+def test_per_candle_warmup_decisions_never_become_ideas() -> None:
+    class EarlyBuyStrategy:
+        def decide(
+            self,
+            symbol: str,
+            current_mark: Decimal,
+            position_state: dict[str, Any] | None,
+            recent_marks: Any,
+            equity: Decimal,
+            product: Any,
+            market_data: Any = None,
+            candles: Any = None,
+        ) -> Decision:
+            if len(recent_marks) == 5:
+                return Decision(Action.BUY, "warm-up buy", confidence=0.9, indicators={})
+            return Decision(Action.HOLD, "hold", confidence=0.0, indicators={})
+
+    proposer = SnapshotStrategyProposer(
+        EarlyBuyStrategy, strategy_name="early-buy", drive="per-candle"
+    )
+
+    assert proposer.propose(snapshot_of(make_series(GOLDEN_CROSS))) == []
+
+
+def test_drives_agree_for_pure_strategies() -> None:
+    snapshot = snapshot_of(make_series(GOLDEN_CROSS))
+
+    final_bar = spot_proposer().propose(snapshot)
+    per_candle = SnapshotStrategyProposer(
+        SpotStrategy, strategy_name="baseline-spot", drive="per-candle"
+    ).propose(snapshot)
+
+    assert final_bar == per_candle
+
+
+def test_mean_reversion_dip_maps_to_eligible_executable_long_idea() -> None:
+    snapshot = snapshot_of(make_series(MEAN_REVERSION_DIP))
+
+    first = mean_reversion_proposer().propose(snapshot)
+    second = mean_reversion_proposer().propose(snapshot)
+
+    assert len(first) == 1
+    assert first == second
+    idea = first[0]
+    assert idea.direction is TradeDirection.LONG
+    assert idea.product_type is ProductType.SPOT
+    assert evaluate_eligibility(idea) == []
+    assert idea.sizing_recommendation.quantity is not None
+    assert idea.sizing_recommendation.quantity > 0
+    assert idea.max_loss.amount is not None
+
+
+def test_mean_reversion_holds_below_its_lookback_window() -> None:
+    below_floor = make_series(["100"] * 15 + ["96"])
+
+    assert mean_reversion_proposer().propose(snapshot_of(below_floor)) == []
+
+
+def test_regime_switcher_emits_deterministic_eligible_idea() -> None:
+    snapshot = snapshot_of(make_series(REGIME_SWITCHER_DIP))
+
+    first = regime_switcher_proposer().propose(snapshot)
+    second = regime_switcher_proposer().propose(snapshot)
+
+    assert len(first) == 1
+    assert first == second
+    assert [idea.record_hash() for idea in first] == [idea.record_hash() for idea in second]
+    idea = first[0]
+    assert idea.direction is TradeDirection.LONG
+    assert evaluate_eligibility(idea) == []
+    assert idea.sizing_recommendation.quantity is not None
+    assert idea.sizing_recommendation.quantity > 0
+
+
+def test_regime_switcher_holds_until_detector_confirms_a_regime() -> None:
+    # 53 candles: the detector's 50-candle long EMA has warmed, but the first
+    # regime cannot confirm before candle 54 (min-regime-ticks 5), so the
+    # switcher still holds on the dip the mean-reversion delegate would buy.
+    below_floor = make_series(damped_sideways_closes(52) + ["96"])
+
+    assert regime_switcher_proposer().propose(snapshot_of(below_floor)) == []

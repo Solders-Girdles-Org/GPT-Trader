@@ -17,6 +17,16 @@ ideas. Strategies are injected structurally (:class:`SnapshotDecider`), which
 keeps this slice free of ``features.live_trade`` imports; composition roots
 own strategy construction.
 
+Two drive modes cover the strategy library (#1164 stage 3). ``"final-bar"``
+calls ``decide`` once over the full mark window — correct for strategies whose
+decision is a pure function of that window (the baseline family; mean
+reversion once its cooldown is caller-owned and inert on a flat book).
+``"per-candle"`` replays ``decide`` over every candle prefix and keeps only
+the final decision, so strategies that accumulate per-call state (the regime
+switcher's ``MarketRegimeDetector``) warm that state from recorded closes
+alone; the fresh instance per series makes the replay deterministic, and
+discarded warm-up decisions can never become ideas.
+
 The lane is long-only and spot-only today: non-buy decisions (including a
 perps strategy's short entries) are dropped by the adapter, and a non-spot
 ``product_type`` fails closed through the adapter's spot-only validation
@@ -29,7 +39,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, get_args, runtime_checkable
 
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.strategy_tools.trade_idea_adapter import (
@@ -48,15 +58,23 @@ from gpt_trader.features.trade_ideas import (
 
 SNAPSHOT_STRATEGY_PROPOSER_PREFIX = "snapshot-strategy"
 
+# How the wrapper feeds a strategy's decide() from a symbol series: one call
+# over the full mark window, or one call per candle prefix (only the final
+# decision can become an idea). Per-candle exists for strategies whose decide
+# accumulates state per call, so that state is fed from recorded closes alone.
+SnapshotDecideDrive = Literal["final-bar", "per-candle"]
+
 
 @runtime_checkable
 class SnapshotDecider(Protocol):
     """Structural slice of the live ``TradingStrategy`` surface the wrapper drives.
 
     Mirrors ``features.live_trade.interfaces.TradingStrategy.decide`` without
-    importing the live-trade slice. Only strategies whose ``decide`` is a pure
-    function of these arguments are replay-safe here; strategies that mutate
-    internal state per call need fresh-state-per-snapshot handling first.
+    importing the live-trade slice. Strategies whose ``decide`` is a pure
+    function of these arguments are replay-safe under the ``"final-bar"``
+    drive; strategies that accumulate internal state per call need the
+    ``"per-candle"`` drive, which rebuilds that state from the snapshot's own
+    closes on a fresh instance.
     """
 
     def decide(
@@ -85,12 +103,18 @@ class SnapshotStrategyProposer:
         strategy_name: str,
         product_type: ProductType = ProductType.SPOT,
         adapter: StrategySignalToTradeIdeaAdapter | None = None,
+        drive: SnapshotDecideDrive = "final-bar",
     ) -> None:
         if not strategy_name.strip():
             raise ValidationError("strategy_name must be non-empty", field="strategy_name")
+        if drive not in get_args(SnapshotDecideDrive):
+            raise ValidationError(
+                f"drive must be one of {get_args(SnapshotDecideDrive)}", field="drive"
+            )
         self._strategy_factory = strategy_factory
         self._strategy_name = strategy_name.strip()
         self._product_type = product_type
+        self._drive: SnapshotDecideDrive = drive
         if adapter is None:
             adapter = StrategySignalToTradeIdeaAdapter(
                 StrategySignalToTradeIdeaAdapterConfig(
@@ -120,15 +144,29 @@ class SnapshotStrategyProposer:
             return None
         closes = [candle.close for candle in series.candles]
         strategy = self._strategy_factory()
-        decision = strategy.decide(
-            symbol=series.symbol,
-            current_mark=closes[-1],
-            position_state=None,
-            recent_marks=closes,
-            equity=Decimal("0"),
-            product=None,
-            candles=series.candles,
-        )
+        if self._drive == "per-candle":
+            # Warm per-call strategy state from the recorded closes; every
+            # decision before the final bar is warm-up only and is discarded.
+            for end in range(1, len(series.candles) + 1):
+                decision = strategy.decide(
+                    symbol=series.symbol,
+                    current_mark=closes[end - 1],
+                    position_state=None,
+                    recent_marks=closes[:end],
+                    equity=Decimal("0"),
+                    product=None,
+                    candles=series.candles[:end],
+                )
+        else:
+            decision = strategy.decide(
+                symbol=series.symbol,
+                current_mark=closes[-1],
+                position_state=None,
+                recent_marks=closes,
+                equity=Decimal("0"),
+                product=None,
+                candles=series.candles,
+            )
         context = StrategySignalContext(
             symbol=series.symbol,
             current_mark=closes[-1],
@@ -148,6 +186,7 @@ def _utc_aware(value: datetime) -> datetime:
 
 __all__ = [
     "SNAPSHOT_STRATEGY_PROPOSER_PREFIX",
+    "SnapshotDecideDrive",
     "SnapshotDecider",
     "SnapshotStrategyProposer",
     "StrategyFactory",

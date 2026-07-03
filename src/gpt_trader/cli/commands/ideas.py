@@ -21,7 +21,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, cast
 
-from gpt_trader.app.config import BotConfig
+from gpt_trader.app.config import BotConfig, MeanReversionConfig
 from gpt_trader.app.runtime import resolve_runtime_paths
 from gpt_trader.cli import options
 from gpt_trader.cli.commands.ideas_input import (
@@ -49,6 +49,8 @@ from gpt_trader.features.live_trade.strategies.baseline import (
     BaseStrategyConfig,
     SpotStrategy,
 )
+from gpt_trader.features.live_trade.strategies.mean_reversion import MeanReversionStrategy
+from gpt_trader.features.live_trade.strategies.regime_switcher import RegimeSwitchingStrategy
 from gpt_trader.features.recorder import (
     DEFAULT_COINBASE_BASE_URL,
     DEFAULT_SNAPSHOT_SOURCE_LABEL,
@@ -58,6 +60,7 @@ from gpt_trader.features.recorder import (
 )
 from gpt_trader.features.strategy_tools import (
     SNAPSHOT_STRATEGY_PROPOSER_PREFIX,
+    SnapshotDecideDrive,
     SnapshotStrategyProposer,
     StrategyFactory,
     StrategySignalToTradeIdeaAdapter,
@@ -131,7 +134,11 @@ VENUE_CHOICES = ("coinbase", "manual")
 # --strategy flag values: live-trade strategies runnable as snapshot proposers.
 # The CLI is the composition root — it constructs the strategy so the
 # strategy_tools slice never imports live_trade (SnapshotDecider is structural).
-STRATEGY_PROPOSER_CHOICES = ("baseline-spot", "baseline-perps")
+# "ensemble" is deliberately absent (#1164 stage 3 deferral): its combiner
+# mutates hysteresis state inside combine() and decide() swallows signal
+# failures with a bare print, so its decisions are not yet explainable from
+# recorded data alone; it joins this list once that surface is audited.
+STRATEGY_PROPOSER_CHOICES = ("baseline-spot", "baseline-perps", "mean-reversion", "regime-switcher")
 # cycle --proposer / replay tournament ids for the same strategies.
 STRATEGY_BACKED_PROPOSER_IDS = tuple(f"strategy-{name}" for name in STRATEGY_PROPOSER_CHOICES)
 DEFAULT_CYCLE_PROPOSERS = ("baseline", "regime-aware")
@@ -704,7 +711,7 @@ def register(subparsers: Any) -> None:
         type=_positive_int_value,
         help=(
             "Minimum historical candles before evaluating snapshots "
-            "(default: the strategy's warm-up floor, max(long-MA period, RSI period + 1))"
+            "(default: the selected strategy's own warm-up floor)"
         ),
     )
     strategy_replay.add_argument(
@@ -1436,31 +1443,50 @@ def _resolve_replay_min_history(
     return requested_min_history
 
 
-def _default_strategy_replay_min_history() -> int:
-    """The strategy's own warm-up floor: ``decide`` holds below this history.
+def _strategy_replay_floor(strategy_name: str) -> tuple[int, str]:
+    """One strategy's warm-up floor and why: ``decide`` holds below it.
 
-    Matches the live insufficient-data gate exactly (windows are not
+    Matches the live insufficient-data gate exactly (configurations are not
     CLI-tunable because the parity lane replays the live configuration
     as-is); anything stricter would silently skip early snapshots the live
     strategy would have evaluated.
     """
-    config = BaseStrategyConfig()
-    return max(config.long_ma_period, config.rsi_period + 1)
+    if strategy_name in ("baseline-spot", "baseline-perps"):
+        config = BaseStrategyConfig()
+        floor = max(config.long_ma_period, config.rsi_period + 1)
+        reason = (
+            f"decide() holds below max(long-MA {config.long_ma_period}, "
+            f"RSI {config.rsi_period} + 1) candles"
+        )
+        return floor, reason
+    if strategy_name == "mean-reversion":
+        mean_reversion_config = MeanReversionConfig()
+        floor = mean_reversion_config.lookback_window
+        reason = f"decide() holds below the {floor}-candle Z-Score lookback window"
+        return floor, reason
+    # regime-switcher: the regime stays UNKNOWN (decide() holds) until the
+    # detector's long EMA initializes and min_regime_ticks consecutive
+    # classifications confirm the first regime; that always exceeds the
+    # delegate strategies' own 20-candle floors at live defaults.
+    regime_config = RegimeConfig()
+    floor = regime_config.long_ema_period + regime_config.min_regime_ticks - 1
+    reason = (
+        f"the regime stays UNKNOWN below long-EMA {regime_config.long_ema_period} "
+        f"+ min-regime-ticks {regime_config.min_regime_ticks} - 1 candles"
+    )
+    return floor, reason
 
 
 def _resolve_strategy_replay_min_history(args: Namespace) -> int:
-    required_min_history = _default_strategy_replay_min_history()
+    required_min_history, floor_reason = _strategy_replay_floor(args.strategy)
     requested_min_history = cast(int | None, args.min_history)
     if requested_min_history is None:
         return required_min_history
     if requested_min_history < required_min_history:
-        config = BaseStrategyConfig()
         raise CandleInputError(
             (
-                f"--min-history must be at least {required_min_history} for the "
-                f"baseline strategy family: decide() holds below "
-                f"max(long-MA {config.long_ma_period}, "
-                f"RSI {config.rsi_period} + 1) candles"
+                f"--min-history must be at least {required_min_history} for "
+                f"{args.strategy}: {floor_reason}"
             ),
             field="min_history",
         )
@@ -1534,13 +1560,14 @@ def _tournament_entries(args: Namespace) -> list[tuple[Proposer, int]]:
             )
         seen.add(proposer_id)
         if proposer_id in STRATEGY_BACKED_PROPOSER_IDS:
+            strategy_name = proposer_id.removeprefix("strategy-")
             entries.append(
                 (
                     _snapshot_strategy_proposer(
-                        proposer_id.removeprefix("strategy-"),
+                        strategy_name,
                         price_precision=args.price_precision,
                     ),
-                    _default_strategy_replay_min_history(),
+                    _strategy_replay_floor(strategy_name)[0],
                 )
             )
         else:
@@ -1663,9 +1690,32 @@ def _handle_propose_regime_aware(args: Namespace) -> CliResponse:
     )
 
 
-_STRATEGY_FACTORIES: dict[str, StrategyFactory] = {
-    "baseline-spot": SpotStrategy,
-    "baseline-perps": BaselinePerpsStrategy,
+def _mean_reversion_snapshot_strategy() -> MeanReversionStrategy:
+    """Fresh live-default strategy; the caller-owned CooldownState starts clear."""
+    return MeanReversionStrategy(MeanReversionConfig())
+
+
+def _regime_switcher_snapshot_strategy() -> RegimeSwitchingStrategy:
+    """Fresh switcher with a fresh MarketRegimeDetector, spot-lane delegates."""
+    return RegimeSwitchingStrategy(
+        trend_strategy_factory=SpotStrategy,
+        mean_reversion_strategy_factory=_mean_reversion_snapshot_strategy,
+        enable_shorts=False,
+    )
+
+
+# Composition-root recipe per --strategy choice. The baseline family and mean
+# reversion decide from the mark window alone (mean reversion's cooldown is a
+# caller-owned CooldownState that stays inert on the lane's flat book), so one
+# final-bar decide reproduces the live decision. The regime switcher's
+# MarketRegimeDetector accumulates state per decide call, so it is driven per
+# candle: a fresh detector warmed from the snapshot's own closes (#1164
+# stage 3).
+_STRATEGY_PROPOSER_SPECS: dict[str, tuple[StrategyFactory, SnapshotDecideDrive]] = {
+    "baseline-spot": (SpotStrategy, "final-bar"),
+    "baseline-perps": (BaselinePerpsStrategy, "final-bar"),
+    "mean-reversion": (_mean_reversion_snapshot_strategy, "final-bar"),
+    "regime-switcher": (_regime_switcher_snapshot_strategy, "per-candle"),
 }
 
 
@@ -1684,10 +1734,12 @@ def _snapshot_strategy_proposer(
         ),
         sizing_bridge=sizing_bridge or TradeIdeaPositionSizingBridge(),
     )
+    strategy_factory, drive = _STRATEGY_PROPOSER_SPECS[strategy_name]
     return SnapshotStrategyProposer(
-        _STRATEGY_FACTORIES[strategy_name],
+        strategy_factory,
         strategy_name=strategy_name,
         adapter=adapter,
+        drive=drive,
     )
 
 
