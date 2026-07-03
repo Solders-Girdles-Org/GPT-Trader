@@ -1,7 +1,7 @@
 # Persistent audited autonomy-level state
 
 ---
-status: proposed
+status: accepted
 date: 2026-07-03
 deciders: RJ
 supersedes:
@@ -48,12 +48,15 @@ a truthful read surface for "what may the system do right now, and why".
   A new versioned, append-only `autonomy_state.jsonl` in the trade-ideas root,
   mirroring the `RiskBudgetLog` pattern: each entry records the mode, the
   actor type and id, the rationale, and (for automatic ratchets) the breach
-  evidence that triggered it. `TradeIdeaService` resolves the current mode at
-  construction and hands it to `ApprovalPolicy`; changes flow through the same
-  audited service path as everything else. Raising the level requires a human
-  actor; lowering is open to system actors so the breach ratchet can act
-  without a human in the loop. Trade-off: one more versioned log to operate,
-  and mode resolution must fail closed when the log is unreadable.
+  evidence that triggered it. `TradeIdeaService` resolves the current mode
+  through the audited log at each approval or budget-decision boundary before
+  applying `ApprovalPolicy`, so CLI changes and automatic ratchets affect the
+  next decision without rebuilding a long-lived service instance. Changes flow
+  through the same audited service path as everything else. Raising the level
+  requires a human actor; lowering is open to system actors so the breach
+  ratchet can act without a human in the loop. Trade-off: one more versioned
+  log to operate, and mode resolution must fail closed when the log is
+  unreadable.
 - **Option B — Autonomy mode as configuration (profile / BotConfig / env).**
   Cheapest to wire, but a config change is silent and unversioned — it
   violates the recorded-and-reversible property, and it collides with the
@@ -69,23 +72,26 @@ a truthful read surface for "what may the system do right now, and why".
 
 ## Decision
 
-Open — awaiting owner decision. Option A is recommended: it is the only shape
-that makes the autonomy level as auditable as the budget it gates, and it
-keeps authority and appetite as separately-audited concerns.
+Accepted: Option A. The autonomy level gets its own append-only, versioned
+audit log beside the risk budget log. This is the only option that makes the
+authority level as auditable as the budget it gates while keeping authority and
+appetite as separately-audited concerns.
 
 ## Consequences
 
-If Option A is accepted:
+With Option A accepted:
 
 - New `AutonomyStateLog` in `features/trade_ideas`: append-only JSONL beside
   `risk_budget.jsonl`, versioned entries with mode, actor, rationale, and
   optional trigger evidence. Integrity rules match the budget log (strict
   version sequencing; append is the only write).
-- `TradeIdeaService` resolves the active mode from the log and constructs
-  `ApprovalPolicy` with it. Fail-closed resolution: an **absent** log means
-  the seeded default `human_approved_execution` (today's behavior, no AI
-  submission); an **unreadable or integrity-broken** log resolves to
-  `research_only` and surfaces the error.
+- `TradeIdeaService` resolves the active mode from the log at each approval or
+  budget-decision boundary before applying `ApprovalPolicy`. The reload
+  boundary is the next decision through the audited service flow, not service
+  construction. Fail-closed resolution: an **absent** log means the seeded
+  default `human_approved_execution` (today's behavior, no AI submission); an
+  **unreadable or integrity-broken** log resolves to `research_only` and
+  surfaces the error.
 - Transition rules: raising the level requires `ActorType.HUMAN` with a
   rationale; lowering is permitted to any actor. The automatic ratchet-down
   appends the breach evidence it acted on. Every transition is also an
@@ -103,7 +109,8 @@ If Option A is accepted:
   this record changes where the level is *recorded*, not what the level *is*.
   Together with the budget gates, this unblocks
   [#1039](https://github.com/Solders-Girdles/GPT-Trader/issues/1039).
-- Implementation is filed as a follow-up issue once this record is accepted.
+- Implementation follows in a bounded issue after this record; ratchet triggers
+  are defined there against the unified risk vocabulary from #1120.
 
 ## Safety boundary
 
