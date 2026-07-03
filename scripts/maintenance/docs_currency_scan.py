@@ -554,7 +554,8 @@ def verify_env_var(state: ScanState, item: str, source_doc: str = "") -> Verific
     if item in state.make_vars:
         return VerificationResult("ok", "Makefile var", f"Makefile variable {item}")
     in_template = bool(re.search(rf"^{re.escape(item)}=", state.env_template_text, re.M))
-    refs = _grep_repo(state, item)
+    # Shell wrappers (scheduler entry points) legitimately define env vars.
+    refs = _grep_repo(state, item, suffixes=(".py", ".sh"))
     if in_template and refs:
         return VerificationResult("ok", "grep template+source", f"template + {len(refs)} refs")
     if in_template:

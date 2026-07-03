@@ -160,6 +160,102 @@ events from the `paper-idea-executor` system actor under the `paper` venue.
 None of these commands touch a live broker or account. Ideas that expire
 unreviewed are swept with `uv run gpt-trader ideas expire`.
 
+## Scheduled Stage 1 Turns (Unattended Operation)
+
+`ideas cycle` runs exactly one turn of the Stage 1 loop — lock, snapshot,
+expire sweep, proposers, paper-execute already-APPROVED ideas priced from the
+turn's own snapshot, report/queue artifacts, one manifest row. Recurrence
+comes from an external scheduler (launchd or cron); the command never decides
+a cadence, never approves ideas, and never contacts a live broker or account.
+Approvals remain a human event: review the queue between turns exactly as in
+the honest-day procedure above.
+
+The default conservative configuration lives in
+`scripts/ops/stage1_cycle_turn.sh` (BTC-USD/ETH-USD, ONE_HOUR candles,
+lookback 200, all proposers). Symbols, granularity, lookback, and the
+proposer set are env-overridable there (`CYCLE_SYMBOLS`, `CYCLE_GRANULARITY`,
+`CYCLE_LOOKBACK`, and space-separated `CYCLE_PROPOSERS`, for example
+`CYCLE_PROPOSERS=baseline`); cadence belongs only in the scheduler entry.
+
+### launchd (macOS)
+
+Save as `~/Library/LaunchAgents/com.gpt-trader.stage1-cycle.plist`, replacing
+the repository path, then `launchctl load` it:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.gpt-trader.stage1-cycle</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/ABSOLUTE/PATH/TO/GPT-Trader/scripts/ops/stage1_cycle_turn.sh</string>
+  </array>
+  <!-- Cadence lives here, not in code: hourly at :05 -->
+  <key>StartCalendarInterval</key>
+  <array><dict><key>Minute</key><integer>5</integer></dict></array>
+  <key>StandardOutPath</key>
+  <string>/tmp/gpt-trader-stage1-cycle.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/gpt-trader-stage1-cycle.log</string>
+</dict>
+</plist>
+```
+
+```bash
+launchctl load ~/Library/LaunchAgents/com.gpt-trader.stage1-cycle.plist
+launchctl kickstart gui/$(id -u)/com.gpt-trader.stage1-cycle   # run one turn now
+```
+
+### cron
+
+```cron
+5 * * * * /ABSOLUTE/PATH/TO/GPT-Trader/scripts/ops/stage1_cycle_turn.sh >> /tmp/gpt-trader-stage1-cycle.log 2>&1
+```
+
+Both schedulers start jobs with a minimal `PATH`; the wrapper prepends
+`~/.local/bin` (Astral `uv` installer), `/opt/homebrew/bin`, and
+`/usr/local/bin` itself, so neither entry needs environment configuration.
+
+### Overlap and failure semantics
+
+- The turn takes a lock on `<ideas-root>/cycle`. An overlapping invocation
+  fails fast with a validation error ("Another paper-cycle turn is already
+  running") and appends **no** manifest row — the running turn's row is the
+  evidence for that slot, so a schedule that occasionally overlaps is safe.
+- A failed turn (network down, bad snapshot) appends an honest
+  `"outcome": "failed"` row with the error and exits nonzero. Failed turns are
+  evidence too; do not delete them.
+
+### Evidence: consecutive unattended days
+
+Every turn appends exactly one JSON line to
+`<ideas-root>/cycle/manifest.jsonl` (default ideas root
+`var/data/trade_ideas`). A day counts toward the streak when it has at least
+one manifest row and every row that day completed:
+
+```bash
+python3 - <<'EOF'
+import datetime, json, pathlib
+
+manifest = pathlib.Path("var/data/trade_ideas/cycle/manifest.jsonl")
+days: dict[datetime.date, bool] = {}
+for line in manifest.read_text().splitlines():
+    row = json.loads(line)
+    day = datetime.date.fromisoformat(row["started_at"][:10])
+    days[day] = days.get(day, True) and row["outcome"] == "completed"
+
+streak, day = 0, max(days, default=None)
+while day in days and days[day]:
+    streak += 1
+    day -= datetime.timedelta(days=1)
+print(f"consecutive clean days: {streak} (through {max(days, default='n/a')})")
+EOF
+```
+
 ## Readiness Evidence Inputs
 
 Paper trading produces evidence that feeds the readiness checklist; it does not
