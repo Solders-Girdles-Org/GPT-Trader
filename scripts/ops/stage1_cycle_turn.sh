@@ -11,6 +11,10 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${REPO_ROOT}"
 
+# Schedulers start jobs with a minimal PATH; make uv reachable whether it was
+# installed by the Astral installer (~/.local/bin) or Homebrew.
+export PATH="${HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin:${PATH}"
+
 : "${CYCLE_SYMBOLS:=BTC-USD,ETH-USD}"
 : "${CYCLE_GRANULARITY:=ONE_HOUR}"
 : "${CYCLE_LOOKBACK:=200}"

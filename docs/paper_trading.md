@@ -197,11 +197,6 @@ the repository path, then `launchctl load` it:
   <!-- Cadence lives here, not in code: hourly at :05 -->
   <key>StartCalendarInterval</key>
   <array><dict><key>Minute</key><integer>5</integer></dict></array>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <!-- launchd jobs get a minimal PATH; uv must be reachable -->
-    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-  </dict>
   <key>StandardOutPath</key>
   <string>/tmp/gpt-trader-stage1-cycle.log</string>
   <key>StandardErrorPath</key>
@@ -218,10 +213,12 @@ launchctl kickstart gui/$(id -u)/com.gpt-trader.stage1-cycle   # run one turn no
 ### cron
 
 ```cron
-# cron starts jobs with a minimal PATH; uv must be reachable
-PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
 5 * * * * /ABSOLUTE/PATH/TO/GPT-Trader/scripts/ops/stage1_cycle_turn.sh >> /tmp/gpt-trader-stage1-cycle.log 2>&1
 ```
+
+Both schedulers start jobs with a minimal `PATH`; the wrapper prepends
+`~/.local/bin` (Astral `uv` installer), `/opt/homebrew/bin`, and
+`/usr/local/bin` itself, so neither entry needs environment configuration.
 
 ### Overlap and failure semantics
 
