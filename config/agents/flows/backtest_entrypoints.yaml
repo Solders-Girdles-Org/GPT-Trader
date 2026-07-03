@@ -9,8 +9,6 @@ clusters:
   label: Library Entrypoints
 - id: engine
   label: Backtesting Engine
-- id: intelligence
-  label: Intelligence Backtesting
 - id: validation
   label: Validation + Chaos
 - id: output
@@ -66,26 +64,6 @@ nodes:
   type: output
   path: src/gpt_trader/backtesting/types.py
   cluster: output
-- id: ensemble_backtest_process
-  label: EnsembleBacktestAdapter.process_bar
-  type: entrypoint
-  path: src/gpt_trader/features/intelligence/backtesting/backtest_adapter.py
-  cluster: intelligence
-- id: ensemble_backtest_results
-  label: EnsembleBacktestAdapter.get_results
-  type: entrypoint
-  path: src/gpt_trader/features/intelligence/backtesting/backtest_adapter.py
-  cluster: intelligence
-- id: batch_regime_process
-  label: BatchRegimeDetector.process
-  type: entrypoint
-  path: src/gpt_trader/features/intelligence/backtesting/batch_regime.py
-  cluster: intelligence
-- id: batch_regime_process_candles
-  label: BatchRegimeDetector.process_candles
-  type: entrypoint
-  path: src/gpt_trader/features/intelligence/backtesting/batch_regime.py
-  cluster: intelligence
 - id: decision_logger_log
   label: DecisionLogger.log_decision
   type: entrypoint
@@ -136,26 +114,6 @@ nodes:
   type: entrypoint
   path: src/gpt_trader/backtesting/chaos/scenarios.py
   cluster: validation
-- id: ensemble_backtest_result
-  label: EnsembleBacktestResult
-  type: output
-  path: src/gpt_trader/features/intelligence/backtesting/backtest_adapter.py
-  cluster: output
-- id: ensemble_backtest_summary
-  label: EnsembleBacktestResult.summary
-  type: output
-  path: src/gpt_trader/features/intelligence/backtesting/backtest_adapter.py
-  cluster: output
-- id: regime_history
-  label: RegimeHistory
-  type: output
-  path: src/gpt_trader/features/intelligence/backtesting/batch_regime.py
-  cluster: output
-- id: regime_history_summary
-  label: RegimeHistory.summary
-  type: output
-  path: src/gpt_trader/features/intelligence/backtesting/batch_regime.py
-  cluster: output
 - id: validation_report
   label: ValidationReport
   type: output
@@ -229,27 +187,6 @@ edges:
 - from: golden_path_demo
   to: golden_path_report
   label: generate report
-- from: ensemble_backtest_process
-  to: ensemble_backtest_results
-  label: record decisions
-- from: ensemble_backtest_results
-  to: regime_history
-  label: build histories
-- from: ensemble_backtest_results
-  to: ensemble_backtest_result
-  label: summary
-- from: batch_regime_process
-  to: regime_history
-  label: batch history
-- from: batch_regime_process_candles
-  to: regime_history
-  label: candle history
-- from: ensemble_backtest_result
-  to: ensemble_backtest_summary
-  label: summary output
-- from: regime_history
-  to: regime_history_summary
-  label: summary output
 - from: decision_logger_log
   to: decision_logger_export
   label: export decisions
@@ -290,9 +227,6 @@ notes:
 - CLI optimize run drives BatchBacktestRunner for optimization trials.
 - WalkForwardOptimizer and paper_trade_stress_test use ClockedBarRunner + SimulatedBroker.
 - "Research backtests rely on EventStore \u2192 HistoricalDataLoader \u2192 BacktestSimulator."
-- Intelligence backtests use EnsembleBacktestAdapter and BatchRegimeDetector utilities.
 - Golden-path validation and chaos scenarios provide robustness checks and reports.
-- EnsembleBacktestResult.summary and RegimeHistory.summary are reporting-friendly
-  outputs.
 - ChaosEngine hooks are optional; integrate via ClockedBarRunner/SimulatedBroker if
   enabled.

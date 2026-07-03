@@ -17,7 +17,7 @@ need to review historical practices.
   `docs/DI_POLICY.md` for detailed guidance on when to use container vs
   singletons.
 - **Public surfaces**: Prefer importing across slices/tests via surface modules
-  (e.g., `gpt_trader.security.validate`, `gpt_trader.features.intelligence.contracts`)
+  (e.g., `gpt_trader.security.validate`, `gpt_trader.features.intelligence.regime`)
   instead of deep/internal modules. Add new exports to the surface when needed.
 - **Configuration-first**: Extend `BotConfig` when new runtime options are
   required; expose overrides through the CLI when appropriate.
