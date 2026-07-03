@@ -9,7 +9,6 @@ import pytest
 from gpt_trader.features.trade_ideas import (
     DEFAULT_RISK_BUDGET,
     ActorType,
-    ApprovalPolicy,
     AutonomyMode,
     PolicyViolationError,
     RiskBudget,
@@ -55,8 +54,13 @@ def test_agent_budget_change_refused_in_bounded_autonomy_until_meta_envelope(
 ) -> None:
     service = TradeIdeaService(
         tmp_path / "trade_ideas",
-        policy=ApprovalPolicy(AutonomyMode.BOUNDED_AUTONOMY),
         now_factory=lambda: datetime(2026, 6, 12, 10, 0, tzinfo=UTC),
+    )
+    service.set_autonomy_mode(
+        AutonomyMode.BOUNDED_AUTONOMY,
+        actor_type=ActorType.HUMAN,
+        actor_id="rj",
+        reason="Test: enter bounded autonomy through the audited path",
     )
     widened = RiskBudget.from_dict(
         {**DEFAULT_RISK_BUDGET.to_dict(), "version": 2, "max_loss_per_idea_pct": "8"}
