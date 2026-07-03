@@ -13,7 +13,7 @@ CI enforces this registry for new deprecation shims.
 
 | Deprecated | Replacement | Location | Owner | Removal Date | Notes |
 |------------|-------------|----------|-------|--------------|-------|
-| `COINBASE_ENABLE_INTX_PERPS` env var | `CFM_ENABLED` / `TRADING_MODES` | `src/gpt_trader/app/config/bot_config.py` | Core Config | v4.0 | INTX perpetuals removed. A truthy value emits a `DeprecationWarning` and substitutes for `CFM_ENABLED=1` only — `TRADING_MODES` must still include `cfm`; falsey/unset values are ignored. See `docs/decisions/intx-default-derivatives-venue.md`. |
+| `COINBASE_ENABLE_INTX_PERPS` env var | `CFM_ENABLED` / `TRADING_MODES` | `src/gpt_trader/app/config/bot_config.py`, `src/gpt_trader/preflight/context.py` | Core Config | v4.0 | INTX perpetuals removed. In `BotConfig.from_env()`, a truthy value emits a `DeprecationWarning` and substitutes for `CFM_ENABLED=1` only — `TRADING_MODES` must still include `cfm`; falsey/unset values are ignored. Preflight's `PreflightContext.requires_trade_permission()` also treats a truthy value as requiring trade permission (no warning emitted). Removal must cover both readers. See `docs/decisions/intx-default-derivatives-venue.md`. |
 
 ## Legacy Inventory (Status)
 
