@@ -10,7 +10,12 @@ import pytest
 
 from gpt_trader.core import Candle
 from gpt_trader.features.brokerages.coinbase.historical_candles import (
+    GRANULARITY_SECONDS,
     CoinbaseHistoricalFetcher,
+)
+from gpt_trader.features.recorder.snapshot_builder import (
+    _CANONICAL_GRANULARITY_BY_ALIAS,
+    granularity_duration,
 )
 
 
@@ -106,6 +111,23 @@ def test_granularity_to_seconds_unknown_defaults() -> None:
     fetcher = CoinbaseHistoricalFetcher(client=Mock())
 
     assert fetcher._granularity_to_seconds("UNKNOWN") == 60
+
+
+def test_every_builder_granularity_is_fetchable() -> None:
+    """Every granularity the snapshot builder accepts must be fetchable.
+
+    The builder normalizes aliases to Coinbase enum names before calling the
+    candle source, so its canonical set must exactly match the fetcher's
+    granularity map — a builder-only entry would pass input validation and
+    then fail at the REST fetch, while a fetcher-only entry is unreachable.
+    """
+    builder_granularities = set(_CANONICAL_GRANULARITY_BY_ALIAS.values())
+
+    assert builder_granularities == set(GRANULARITY_SECONDS)
+    for alias, canonical in _CANONICAL_GRANULARITY_BY_ALIAS.items():
+        duration = granularity_duration(alias)
+        assert duration is not None, alias
+        assert duration.total_seconds() == GRANULARITY_SECONDS[canonical]
 
 
 def test_granularity_to_seconds_supports_four_hour() -> None:
