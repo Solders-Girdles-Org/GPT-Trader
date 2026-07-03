@@ -4,7 +4,10 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
+import pytest
+
 from gpt_trader.core import Candle
+from gpt_trader.errors import ValidationError
 from gpt_trader.features.live_trade.strategies.baseline import (
     Action,
     BaselinePerpsStrategy,
@@ -142,6 +145,17 @@ def test_identical_snapshots_yield_identical_ideas() -> None:
 
     assert first == second
     assert [idea.record_hash() for idea in first] == [idea.record_hash() for idea in second]
+
+
+def test_non_spot_product_type_fails_closed() -> None:
+    perps = SnapshotStrategyProposer(
+        BaselinePerpsStrategy,
+        strategy_name="baseline-perps",
+        product_type=ProductType.FUTURES,
+    )
+
+    with pytest.raises(ValidationError, match="supports spot ideas only"):
+        perps.propose(snapshot_of(make_series(GOLDEN_CROSS)))
 
 
 def test_non_buy_decisions_produce_no_ideas() -> None:

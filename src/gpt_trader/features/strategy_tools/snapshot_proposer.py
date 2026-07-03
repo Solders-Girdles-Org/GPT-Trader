@@ -16,6 +16,12 @@ bleed across symbols or snapshots and identical snapshots yield identical
 ideas. Strategies are injected structurally (:class:`SnapshotDecider`), which
 keeps this slice free of ``features.live_trade`` imports; composition roots
 own strategy construction.
+
+The lane is long-only and spot-only today: non-buy decisions (including a
+perps strategy's short entries) are dropped by the adapter, and a non-spot
+``product_type`` fails closed through the adapter's spot-only validation
+rather than recording a futures signal as a spot idea — the same fail-closed
+stance the live proposal gate takes.
 """
 
 from __future__ import annotations
@@ -34,6 +40,7 @@ from gpt_trader.features.strategy_tools.trade_idea_adapter import (
 )
 from gpt_trader.features.trade_ideas import (
     MarketSnapshot,
+    ProductType,
     SymbolSeries,
     TradeIdea,
     TradeIdeaPositionSizingBridge,
@@ -76,12 +83,14 @@ class SnapshotStrategyProposer:
         strategy_factory: StrategyFactory,
         *,
         strategy_name: str,
+        product_type: ProductType = ProductType.SPOT,
         adapter: StrategySignalToTradeIdeaAdapter | None = None,
     ) -> None:
         if not strategy_name.strip():
             raise ValidationError("strategy_name must be non-empty", field="strategy_name")
         self._strategy_factory = strategy_factory
         self._strategy_name = strategy_name.strip()
+        self._product_type = product_type
         if adapter is None:
             adapter = StrategySignalToTradeIdeaAdapter(
                 StrategySignalToTradeIdeaAdapterConfig(
@@ -126,6 +135,7 @@ class SnapshotStrategyProposer:
             as_of=_utc_aware(snapshot.as_of),
             strategy_name=self._strategy_name,
             data_source=f"{snapshot.source}:{series.granularity}",
+            product_type=self._product_type,
         )
         return self._adapter.map_decision(decision, context)
 
