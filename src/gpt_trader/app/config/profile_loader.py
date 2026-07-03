@@ -15,10 +15,8 @@ Schema Structure:
         short_ma_period: int
         long_ma_period: int
     risk_management:
-        max_leverage: int
         max_position_size: Decimal
         enable_shorts: bool
-        daily_loss_limit_pct: float
     execution:
         time_in_force: str
         dry_run: bool
@@ -202,7 +200,6 @@ _PROFILE_DEFAULTS: dict[Profile, ProfileSchema] = {
         trading=TradingConfig(symbols=["BTC-USD"], mode="normal"),
         risk=RiskConfig(
             max_position_size=Decimal("100"),
-            max_leverage=1,
             enable_shorts=False,
         ),
         execution=ExecutionConfig(
@@ -219,7 +216,6 @@ _PROFILE_DEFAULTS: dict[Profile, ProfileSchema] = {
         trading=TradingConfig(symbols=["BTC-USD", "ETH-USD"], mode="normal"),
         risk=RiskConfig(
             max_position_size=Decimal("50000"),
-            max_leverage=1,
             enable_shorts=False,
         ),
         execution=ExecutionConfig(
@@ -236,9 +232,7 @@ _PROFILE_DEFAULTS: dict[Profile, ProfileSchema] = {
         trading=TradingConfig(symbols=["BTC-USD"], mode="reduce_only"),
         risk=RiskConfig(
             max_position_size=Decimal("500"),
-            max_leverage=1,
             enable_shorts=True,  # But reduce_only mode
-            daily_loss_limit_pct=0.01,
         ),
         execution=ExecutionConfig(
             time_in_force="IOC",
@@ -265,9 +259,7 @@ _PROFILE_DEFAULTS: dict[Profile, ProfileSchema] = {
         risk=RiskConfig(
             max_position_size=Decimal("0"),
             position_fraction=Decimal("0"),
-            max_leverage=1,
             enable_shorts=False,
-            daily_loss_limit_pct=0.0,
         ),
         execution=ExecutionConfig(
             dry_run=True,
@@ -285,7 +277,6 @@ _PROFILE_DEFAULTS: dict[Profile, ProfileSchema] = {
         trading=TradingConfig(symbols=["BTC-USD", "ETH-USD"], mode="normal"),
         risk=RiskConfig(
             max_position_size=Decimal("50000"),
-            max_leverage=3,
             enable_shorts=True,
         ),
         execution=ExecutionConfig(
@@ -302,9 +293,7 @@ _PROFILE_DEFAULTS: dict[Profile, ProfileSchema] = {
         trading=TradingConfig(symbols=["BTC-USD", "ETH-USD"], mode="normal"),
         risk=RiskConfig(
             max_position_size=Decimal("10000"),
-            max_leverage=3,
             enable_shorts=True,
-            daily_loss_limit_pct=0.05,
         ),
         execution=ExecutionConfig(
             dry_run=True,
@@ -483,12 +472,10 @@ class ProfileLoader:
 
         # Build BotRiskConfig from schema.risk
         risk_config = BotRiskConfig(
-            max_leverage=schema.risk.max_leverage,
             max_position_size=schema.risk.max_position_size,
             position_fraction=schema.risk.position_fraction,
             stop_loss_pct=schema.risk.stop_loss_pct,
             take_profit_pct=schema.risk.take_profit_pct,
-            daily_loss_limit_pct=schema.risk.daily_loss_limit_pct,
         )
 
         # Build PerpsStrategyConfig from schema.strategy
@@ -509,7 +496,9 @@ class ProfileLoader:
             "risk": risk_config,
             # Nested strategy config (PerpsStrategyConfig instance)
             "strategy": strategy_config,
-            # Top-level config fields
+            # Shorts preference; routed to the canonical per-strategy configs
+            # by the consumer (BotConfig.set_enable_shorts), not a BotConfig
+            # constructor field.
             "enable_shorts": schema.risk.enable_shorts,
             # Execution settings
             "time_in_force": schema.execution.time_in_force,
@@ -609,7 +598,6 @@ def _schema_to_bot_config(
 
     # Build risk config
     risk = BotRiskConfig(
-        max_leverage=schema.risk.max_leverage,
         max_position_size=schema.risk.max_position_size,
         position_fraction=schema.risk.position_fraction,
         stop_loss_pct=schema.risk.stop_loss_pct,
@@ -622,7 +610,6 @@ def _schema_to_bot_config(
         "symbols": schema.trading.symbols,
         "interval": schema.trading.interval,
         "risk": risk,
-        "enable_shorts": schema.risk.enable_shorts,
         "time_in_force": schema.execution.time_in_force,
         "dry_run": schema.execution.dry_run,
         "mock_broker": schema.execution.mock_broker,
@@ -646,7 +633,9 @@ def _schema_to_bot_config(
     if schema.session.trading_days:
         kwargs["trading_days"] = schema.session.trading_days
 
-    return create_config(**kwargs)
+    config = create_config(**kwargs)
+    config.set_enable_shorts(schema.risk.enable_shorts)
+    return config
 
 
 __all__ = [

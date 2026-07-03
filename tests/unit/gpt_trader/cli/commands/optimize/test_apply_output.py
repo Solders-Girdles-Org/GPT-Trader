@@ -33,10 +33,11 @@ def test_build_output_config_distributes_risk_parameters():
     assert output["strategy"]["custom_signal_weight"] == 0.35
     assert "target_leverage" not in output["strategy"]
 
-    # Risk params should include fields from BotRiskConfig
+    # Risk params should include fields from the risk parameter space
     assert output["risk"]["target_leverage"] == 4
     assert output["risk"]["max_leverage"] == 7
-    assert output["risk"]["daily_loss_limit_pct"] == 0.04
+    # Removed parameter (#1120 stage 3): dropped instead of re-applied.
+    assert "daily_loss_limit_pct" not in output["risk"]
 
     # Simulation params should still be captured
     assert output["simulation"]["fee_tier"] == "premium"

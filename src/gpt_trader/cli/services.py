@@ -62,8 +62,14 @@ def load_profile_config(profile: Profile | str) -> BotConfig:
     loader = ProfileLoader()
     schema = loader.load(profile_enum)
     profile_kwargs = loader.to_bot_config_kwargs(schema, profile_enum)
+    # Not a BotConfig constructor field: routed to the canonical per-strategy
+    # configs after construction (#1120 stage 3).
+    enable_shorts = profile_kwargs.pop("enable_shorts", None)
     logger.info("Loaded runtime profile %s from profile loader", profile_enum.value)
-    return BotConfig(**profile_kwargs)
+    config = BotConfig(**profile_kwargs)
+    if enable_shorts is not None:
+        config.set_enable_shorts(enable_shorts)
+    return config
 
 
 def build_config_from_args(args: Namespace, **kwargs: Any) -> BotConfig:
@@ -193,7 +199,7 @@ def _apply_profile_kwargs(config: BotConfig, profile_kwargs: dict[str, Any]) -> 
         config.risk_budget_runtime_seed_enabled = profile_kwargs["risk_budget_runtime_seed_enabled"]
 
     if "enable_shorts" in profile_kwargs:
-        config.enable_shorts = profile_kwargs["enable_shorts"]
+        config.set_enable_shorts(profile_kwargs["enable_shorts"])
     if "reduce_only_mode" in profile_kwargs:
         config.reduce_only_mode = profile_kwargs["reduce_only_mode"]
     if "strategy_type" in profile_kwargs:

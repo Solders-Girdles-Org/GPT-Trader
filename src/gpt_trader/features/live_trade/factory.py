@@ -122,7 +122,7 @@ def create_strategy(config: "BotConfig") -> TradingStrategy:
         required_lookback = max(trend_lookback, mean_reversion_lookback)
 
         def trend_factory() -> TradingStrategy:
-            if not config.enable_shorts:
+            if not config.active_enable_shorts:
                 return SpotStrategy(config=config.strategy)
             return BaselinePerpsStrategy(config=config.strategy)
 
@@ -135,7 +135,7 @@ def create_strategy(config: "BotConfig") -> TradingStrategy:
             regime_detector=detector,
             required_lookback_bars=required_lookback,
             trend_mode=config.regime_switcher_trend_mode,
-            enable_shorts=config.enable_shorts,
+            enable_shorts=config.active_enable_shorts,
         )
 
     else:

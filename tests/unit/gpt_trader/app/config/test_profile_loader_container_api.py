@@ -58,16 +58,17 @@ class TestBuildProfileConfig:
 
         result = build_profile_config(Profile.DEMO, factory)
 
-        # Demo should be conservative
-        assert result.enable_shorts is False
+        # Demo should be conservative: shorts routed off onto the strategy
+        # configs (the canonical source since the top-level alias retired).
+        result.set_enable_shorts.assert_called_once_with(False)
 
     def test_production_profile_settings(self) -> None:
         factory = _create_mock_config_factory()
 
         result = build_profile_config(Profile.PROD, factory)
 
-        # Production should have higher limits and shorts enabled
-        assert result.enable_shorts is True
+        # Production should have shorts enabled
+        result.set_enable_shorts.assert_called_once_with(True)
 
     def test_canary_profile_reduce_only(self) -> None:
         factory = _create_mock_config_factory()
@@ -83,7 +84,7 @@ class TestBuildProfileConfig:
         result = build_profile_config(Profile.SPOT, factory)
 
         # Spot should have no shorts
-        assert result.enable_shorts is False
+        result.set_enable_shorts.assert_called_once_with(False)
         assert result.mock_broker is False
 
 

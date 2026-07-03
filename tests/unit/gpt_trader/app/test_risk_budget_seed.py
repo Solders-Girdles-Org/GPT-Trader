@@ -119,26 +119,24 @@ def _seed(allow_naked_shorts: bool) -> RiskBudgetRuntimeSeed:
 
 class TestApplyShortsPermission:
     def test_forbidden_shorts_forces_all_flags_off(self) -> None:
-        config = BotConfig(enable_shorts=True)
+        config = BotConfig()
         config.strategy.enable_shorts = True
         config.mean_reversion.enable_shorts = True
 
         apply_shorts_permission(config, _seed(allow_naked_shorts=False))
 
-        assert config.enable_shorts is False
         assert config.strategy.enable_shorts is False
         assert config.mean_reversion.enable_shorts is False
-        # active_enable_shorts derives from strategy config; the gate must
-        # leave no mismatch for it to warn about.
+        # active_enable_shorts derives from the strategy configs (the sole
+        # source since the top-level alias was retired).
         assert config.active_enable_shorts is False
 
     def test_permission_is_not_a_mandate(self) -> None:
-        config = BotConfig(enable_shorts=False)
+        config = BotConfig()
         config.strategy.enable_shorts = False
         config.mean_reversion.enable_shorts = True
 
         apply_shorts_permission(config, _seed(allow_naked_shorts=True))
 
-        assert config.enable_shorts is False
         assert config.strategy.enable_shorts is False
         assert config.mean_reversion.enable_shorts is True

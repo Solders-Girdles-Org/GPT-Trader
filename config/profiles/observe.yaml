@@ -22,11 +22,9 @@ strategy:
   rsi_oversold: 35
 
 risk_management:
-  max_leverage: 1
   max_position_size: 0
   position_fraction: 0.0
   enable_shorts: false
-  daily_loss_limit_pct: 0.0
   stop_loss_pct: 0.02
   take_profit_pct: 0.04
 

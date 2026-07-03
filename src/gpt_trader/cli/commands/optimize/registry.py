@@ -82,7 +82,6 @@ class ObjectiveSpec:
 DEFAULT_PARAMETER_GROUPS = ("strategy", "risk")
 LEGACY_RISK_FALLBACK_PARAMETER_NAMES = frozenset(
     {
-        "daily_loss_limit_pct",
         "dry_run_equity_usd",
         "max_drawdown_pct",
         "max_position_size",
@@ -90,7 +89,10 @@ LEGACY_RISK_FALLBACK_PARAMETER_NAMES = frozenset(
         "trailing_stop_pct",
     }
 )
-REMOVED_PARAMETER_NAMES = frozenset({"daily_loss_limit"})
+# daily_loss_limit_pct: the BotRiskConfig alias was retired (#1120 stage 3);
+# the runtime breaker now derives from the RiskBudget, so stored results
+# carrying it are dropped instead of re-applied.
+REMOVED_PARAMETER_NAMES = frozenset({"daily_loss_limit", "daily_loss_limit_pct"})
 
 
 STRATEGY_GROUP = ParameterGroupSpec(

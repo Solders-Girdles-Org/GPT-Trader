@@ -21,7 +21,6 @@ Scan root: `src/gpt_trader`
 | derivatives_enabled | 0 | — |
 | dry_run | 0 | — |
 | enable_order_preview | 0 | — |
-| enable_shorts | 0 | — |
 | environment | 0 | — |
 | event_store_root_override | 0 | — |
 | interval | 0 | — |
@@ -58,10 +57,8 @@ Scan root: `src/gpt_trader`
 ## BotRiskConfig
 | Field | Usage count | Example files |
 |-------|-------------|---------------|
-| daily_loss_limit_pct | 0 | — |
 | dry_run_equity_usd | 0 | — |
 | max_drawdown_pct | 0 | — |
-| max_leverage | 0 | — |
 | max_position_size | 0 | — |
 | position_fraction | 0 | — |
 | reduce_only_threshold | 0 | — |
@@ -136,7 +133,6 @@ Scan root: `src/gpt_trader`
 | is_hybrid_mode | trading_modes contains spot+cfm | 0 | — |
 | is_spot_only | trading_modes contains only spot | 0 | — |
 | long_ma | strategy.long_ma_period | 0 | — |
-| max_leverage | risk.max_leverage | 0 | — |
 | short_ma | strategy.short_ma_period | 0 | — |
 | target_leverage | risk.target_leverage | 0 | — |
 | trailing_stop_pct | strategy.trailing_stop_pct or risk.trailing_stop_pct | 0 | — |

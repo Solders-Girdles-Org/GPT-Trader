@@ -68,7 +68,7 @@ Before removing any deprecated item:
 | `get_failure_tracker()` fallback without container | Unreleased | Set application container; use `container.validation_failure_tracker`. |
 | `Alert.id` / `Alert.timestamp` aliases | Unreleased | Use `alert_id` / `created_at`. |
 | `CoinbaseRestServiceBase` alias | Unreleased | Use `CoinbaseRestServiceCore`. |
-| `daily_loss_limit` in profile schema | Unreleased | Use `daily_loss_limit_pct`. |
+| `daily_loss_limit` in profile schema | Unreleased | Removed with the profile appetite fields; the runtime breaker derives from the RiskBudget (#1120). |
 | `RiskConfig.daily_loss_limit` (absolute dollars) | Unreleased | Use `RiskConfig.daily_loss_limit_pct` / `RISK_DAILY_LOSS_LIMIT_PCT`. |
 | Perps strategy compat aliases (`short_ma`/`long_ma` props, `StrategyConfig`) | Unreleased | Use `PerpsStrategyConfig` and `short_ma_period`/`long_ma_period`. |
 | CLI fallback for unknown profile YAML | Unreleased | Use a `Profile` enum value or `--config`. |

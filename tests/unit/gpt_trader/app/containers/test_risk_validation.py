@@ -144,8 +144,6 @@ class TestRiskValidationContainer:
         config = BotConfig(
             symbols=["BTC-USD"],
             risk=BotRiskConfig(
-                max_leverage=5,
-                daily_loss_limit_pct=0.10,
                 position_fraction=Decimal("0.25"),
             ),
         )
@@ -157,10 +155,11 @@ class TestRiskValidationContainer:
 
         risk_manager = container.risk_manager
 
-        # Verify config was applied
-        assert risk_manager.config.max_leverage == 5
-        assert risk_manager.config.daily_loss_limit_pct == 0.10
+        # Verify config was applied; appetite fields stay at RiskConfig's own
+        # defaults (the retired BotRiskConfig aliases no longer feed them).
         assert risk_manager.config.max_position_pct_per_symbol == 0.25
+        assert risk_manager.config.max_leverage == 5
+        assert risk_manager.config.daily_loss_limit_pct == 0.05
         assert risk_manager.state_file is None
 
     def test_risk_manager_scopes_state_file_by_profile(self, mock_event_store: MagicMock) -> None:

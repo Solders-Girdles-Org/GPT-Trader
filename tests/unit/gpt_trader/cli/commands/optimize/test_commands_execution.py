@@ -306,7 +306,9 @@ class TestApplyCommand:
         assert output["risk"]["max_position_size"] == 10000
         assert output["risk"]["max_drawdown_pct"] == 8.5
         assert output["risk"]["reduce_only_threshold"] == 0.15
-        assert output["risk"]["daily_loss_limit_pct"] == 0.03
+        # daily_loss_limit_pct joined daily_loss_limit as a removed parameter
+        # (#1120 stage 3): the runtime breaker derives from the RiskBudget.
+        assert "daily_loss_limit_pct" not in output["risk"]
         assert "daily_loss_limit" not in output["risk"]
         assert output["risk"]["dry_run_equity_usd"] == 2500
         assert output["risk"]["trailing_stop_pct"] == 0.02

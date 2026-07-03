@@ -2393,7 +2393,6 @@ def build_config_code_map() -> dict[str, Any]:
         "short_ma": "strategy.short_ma_period",
         "long_ma": "strategy.long_ma_period",
         "target_leverage": "risk.target_leverage",
-        "max_leverage": "risk.max_leverage",
         "trailing_stop_pct": "strategy.trailing_stop_pct or risk.trailing_stop_pct",
         "active_enable_shorts": "strategy.enable_shorts / mean_reversion.enable_shorts",
         "is_hybrid_mode": "trading_modes contains spot+cfm",

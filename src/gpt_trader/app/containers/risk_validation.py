@@ -32,8 +32,8 @@ class RiskValidationContainer:
             and avoid initialization order issues.
         risk_budget_seed: Runtime risk-appetite values derived from the active
             RiskBudget version at startup (docs/decisions/
-            canonical-risk-limit-vocabulary.md). None (the default) keeps the
-            pre-seam behavior: appetite fields come from BotConfig.risk.
+            canonical-risk-limit-vocabulary.md). None (seam disabled) leaves
+            the appetite fields at RiskConfig's own defaults.
     """
 
     def __init__(
@@ -71,9 +71,11 @@ class RiskValidationContainer:
                 # baseline, ensemble, or any other type uses strategy config
                 kill_switch = getattr(self._config.strategy, "kill_switch_enabled", False)
 
+            # Appetite fields (daily_loss_limit_pct, max_exposure_pct,
+            # leverage caps) are not adapted from BotRiskConfig: the seam
+            # seeds them from the RiskBudget below, and without a seed they
+            # stay at RiskConfig's own defaults (#1120 stage 3).
             risk_config_kwargs: dict[str, Any] = {
-                "max_leverage": bot_risk.max_leverage,
-                "daily_loss_limit_pct": bot_risk.daily_loss_limit_pct,
                 "max_position_pct_per_symbol": float(bot_risk.position_fraction),
                 # Map other relevant fields
                 "kill_switch_enabled": kill_switch,

@@ -47,13 +47,17 @@ class StrategyConfig:
 
 @dataclass
 class RiskConfig:
-    """Risk management section of profile configuration."""
+    """Risk management section of profile configuration.
 
-    max_leverage: int = 1
+    Risk-appetite fields (daily loss limit, exposure cap, leverage caps)
+    are not profile settings: they derive from the canonical RiskBudget at
+    engine startup (#1120). Profiles keep sizing and the shorts preference,
+    which routes to the per-strategy configs.
+    """
+
     max_position_size: Decimal = field(default_factory=lambda: Decimal("10000"))
     position_fraction: Decimal = field(default_factory=lambda: Decimal("0.1"))
     enable_shorts: bool = False
-    daily_loss_limit_pct: float = 0.05  # Percentage of equity (0.05 = 5%)
     stop_loss_pct: Decimal = field(default_factory=lambda: Decimal("0.02"))
     take_profit_pct: Decimal = field(default_factory=lambda: Decimal("0.04"))
 
@@ -172,13 +176,12 @@ class ProfileSchema:
             rsi_oversold=int(strategy_data.get("rsi_oversold", 30)),
         )
 
-        # Parse risk config
+        # Parse risk config (retired appetite keys in YAML are ignored; the
+        # RiskBudget seam owns them — #1120)
         risk = RiskConfig(
-            max_leverage=int(risk_data.get("max_leverage", 1)),
             max_position_size=Decimal(str(risk_data.get("max_position_size", 10000))),
             position_fraction=Decimal(str(risk_data.get("position_fraction", "0.1"))),
             enable_shorts=risk_data.get("enable_shorts", False),
-            daily_loss_limit_pct=float(risk_data.get("daily_loss_limit_pct", 0.05)),
             stop_loss_pct=Decimal(str(risk_data.get("stop_loss_pct", "0.02"))),
             take_profit_pct=Decimal(str(risk_data.get("take_profit_pct", "0.04"))),
         )

@@ -89,9 +89,6 @@ def validate_config(config: BotConfig) -> list[str]:
     if risk.take_profit_pct <= 0:
         errors.append(f"risk.take_profit_pct must be positive, got {risk.take_profit_pct}")
 
-    if risk.max_leverage < 1:
-        errors.append(f"risk.max_leverage must be >= 1, got {risk.max_leverage}")
-
     # Validate Strategy Config
     strategy = config.strategy
     # Check if it's the expected strategy type before accessing fields

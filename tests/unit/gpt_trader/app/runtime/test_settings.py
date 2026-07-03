@@ -23,7 +23,7 @@ def test_runtime_settings_snapshot_is_immutable(monkeypatch: pytest.MonkeyPatch)
 
     assert snapshot.env_vars["GPT_TRADER_TEST_OVERRIDE"] == "snapshot-value"
     assert isinstance(snapshot.config_data["symbols"], tuple)
-    assert snapshot.config_data.risk.max_leverage == config.risk.max_leverage
+    assert snapshot.config_data.risk.target_leverage == config.risk.target_leverage
     serialized = snapshot.serialize()
     assert serialized == snapshot.serialize()
 
