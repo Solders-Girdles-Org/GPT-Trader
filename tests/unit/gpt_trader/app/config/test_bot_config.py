@@ -189,6 +189,17 @@ class TestFromDictLegacyProfileMapping:
 
         assert config.strategy_signal_proposals_enabled is True
 
+    def test_profile_style_maps_risk_budget_runtime_seed_gate(self) -> None:
+        with pytest.warns(DeprecationWarning, match=r"Legacy profile-style YAML mapping"):
+            config = BotConfig.from_dict(
+                {
+                    "profile_name": "seed-profile",
+                    "execution": {"risk_budget_runtime_seed": True},
+                }
+            )
+
+        assert config.risk_budget_runtime_seed_enabled is True
+
 
 class TestHealthThresholdsConfig:
     """Tests for health threshold model conversion."""

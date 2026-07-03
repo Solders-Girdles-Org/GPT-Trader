@@ -216,3 +216,36 @@ class TestApplicationContainerSecondaryServices:
 
         secrets_manager2 = container.secrets_manager
         assert secrets_manager is secrets_manager2
+
+
+class TestRiskBudgetRuntimeSeedGate:
+    """Stage 2 derivation seam (#1120): default-off startup seeding."""
+
+    def test_gate_off_resolves_no_seed(self, mock_config: BotConfig) -> None:
+        container = ApplicationContainer(mock_config)
+
+        assert container._risk_budget_seed is None
+        assert container._risk_validation._risk_budget_seed is None
+
+    def test_gate_on_seeds_and_gates_shorts(
+        self, tmp_path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("GPT_TRADER_IDEAS_ROOT", str(tmp_path))
+        config = BotConfig(
+            symbols=["BTC-USD"],
+            enable_shorts=True,
+            risk_budget_runtime_seed_enabled=True,
+        )
+        config.strategy.enable_shorts = True
+
+        container = ApplicationContainer(config)
+
+        seed = container._risk_budget_seed
+        assert seed is not None
+        # Missing budget log falls back to the default budget (version 1),
+        # whose permissions forbid naked shorts.
+        assert seed.budget_version == 1
+        assert seed.budget_source == "default"
+        assert config.enable_shorts is False
+        assert config.strategy.enable_shorts is False
+        assert container._risk_validation._risk_budget_seed is seed

@@ -40,6 +40,7 @@ Scan root: `src/gpt_trader`
 | profile | 0 | — |
 | reduce_only_mode | 0 | — |
 | regime_switcher_trend_mode | 0 | — |
+| risk_budget_runtime_seed_enabled | 0 | — |
 | risk_config_path | 0 | — |
 | runtime_root | 0 | — |
 | spot_force_live | 0 | — |

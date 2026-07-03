@@ -71,6 +71,9 @@ class ExecutionConfig:
     # Stage 1 human-approved loop (default OFF): route live strategy decisions
     # into the approval-gated trade-idea workflow instead of submitting orders.
     strategy_signal_proposals: bool = False
+    # Stage 2 derivation seam (default OFF): seed runtime risk limits from the
+    # active RiskBudget version at engine startup (#1120).
+    risk_budget_runtime_seed: bool = False
 
 
 @dataclass
@@ -189,6 +192,7 @@ class ProfileSchema:
             use_limit_orders=execution_data.get("use_limit_orders", False),
             market_order_fallback=execution_data.get("market_order_fallback", True),
             strategy_signal_proposals=execution_data.get("strategy_signal_proposals", False),
+            risk_budget_runtime_seed=execution_data.get("risk_budget_runtime_seed", False),
         )
 
         # Parse session config

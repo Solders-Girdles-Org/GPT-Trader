@@ -199,6 +199,15 @@ class BotConfig:
     # engine enters proposal-only mode and never places orders while the gate is
     # on. See docs/DIRECTION.md, docs/STATUS.md, docs/architecture/SEAMS.md.
     strategy_signal_proposals_enabled: bool = False
+    # Stage 2 derivation seam (default OFF). When enabled, the runtime risk
+    # manager's appetite fields (daily_loss_limit_pct, max_exposure_pct) are
+    # seeded from the active RiskBudget version at engine startup, and the
+    # budget's permissions gate shorts and CFM leverage. Default-off because
+    # the budget defaults are LOOSER than the runtime defaults (10% daily loss
+    # / 100% exposure vs 5% / 80%); flipping the default is held until a
+    # MOCK_BROKER regression covers the loosened breaker. See
+    # docs/decisions/canonical-risk-limit-vocabulary.md (#1120).
+    risk_budget_runtime_seed_enabled: bool = False
     market_order_fallback: bool = True
     # Enabled by default for resiliency; disable only for controlled troubleshooting.
     order_submission_retries_enabled: bool = True
@@ -565,6 +574,7 @@ class BotConfig:
                 "dry_run": schema.execution.dry_run,
                 "mock_broker": schema.execution.mock_broker,
                 "strategy_signal_proposals_enabled": schema.execution.strategy_signal_proposals,
+                "risk_budget_runtime_seed_enabled": schema.execution.risk_budget_runtime_seed,
                 "log_level": schema.monitoring.log_level,
                 "status_interval": schema.monitoring.update_interval,
                 "status_enabled": schema.monitoring.status_enabled,
