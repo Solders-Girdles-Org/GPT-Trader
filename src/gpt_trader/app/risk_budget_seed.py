@@ -8,11 +8,11 @@ engine startup. A budget change mid-run takes effect at approval time
 immediately but at runtime only after restart; the seeded version is recorded
 in startup telemetry so that drift window stays visible.
 
-The seam is default-off behind ``BotConfig.risk_budget_runtime_seed_enabled``
-because the seeded budget defaults are LOOSER than the runtime defaults (10%
-daily loss / 100% open notional vs 5% / 80%): enabling it is a live-path
-behavior change, held until a MOCK_BROKER regression covers the loosened
-breaker (#1120).
+The seam is default-on behind ``BotConfig.risk_budget_runtime_seed_enabled``.
+The seeded budget defaults are LOOSER than the legacy runtime defaults (10%
+daily loss / 100% open notional vs 5% / 80%); the loosened breaker band is
+pinned by the MOCK_BROKER regression in
+``tests/integration/test_risk_budget_seeded_breaker.py`` (#1120).
 """
 
 from __future__ import annotations

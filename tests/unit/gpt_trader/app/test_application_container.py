@@ -219,22 +219,24 @@ class TestApplicationContainerSecondaryServices:
 
 
 class TestRiskBudgetRuntimeSeedGate:
-    """Stage 2 derivation seam (#1120): default-off startup seeding."""
+    """Stage 2 derivation seam (#1120): default-on startup seeding."""
 
-    def test_gate_off_resolves_no_seed(self, mock_config: BotConfig) -> None:
+    def test_gate_disabled_resolves_no_seed(self, mock_config: BotConfig) -> None:
+        mock_config.risk_budget_runtime_seed_enabled = False
+
         container = ApplicationContainer(mock_config)
 
         assert container._risk_budget_seed is None
         assert container._risk_validation._risk_budget_seed is None
 
-    def test_gate_on_seeds_and_gates_shorts(
+    def test_default_gate_seeds_and_gates_shorts(
         self, tmp_path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("GPT_TRADER_IDEAS_ROOT", str(tmp_path))
+        # No explicit gate value: seeding must engage by default.
         config = BotConfig(
             symbols=["BTC-USD"],
             enable_shorts=True,
-            risk_budget_runtime_seed_enabled=True,
         )
         config.strategy.enable_shorts = True
 

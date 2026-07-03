@@ -59,7 +59,7 @@ class ApplicationContainer:
 
     def __init__(self, config: BotConfig):
         self.config = config
-        # Stage 2 derivation seam (default OFF): resolve the active RiskBudget
+        # Stage 2 derivation seam (default ON): resolve the active RiskBudget
         # version once at startup so the shorts gate and the runtime risk
         # limits are seeded from the same version, before the settings
         # snapshot/fingerprint capture the effective config. See

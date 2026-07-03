@@ -102,17 +102,18 @@ Config is the shared input surface that defines:
 - The risk-appetite derivation seam (stage 2 of
   [canonical risk-limit vocabulary](../decisions/canonical-risk-limit-vocabulary.md),
   #1120) lives in `src/gpt_trader/app/risk_budget_seed.py` and is wired behind
-  the default-off `risk_budget_runtime_seed_enabled` gate. When set, the
-  composition root (`src/gpt_trader/app/container.py`) resolves the active
-  `RiskBudget` version once at startup: the runtime risk manager's
+  the default-on `risk_budget_runtime_seed_enabled` gate. When set (the
+  default), the composition root (`src/gpt_trader/app/container.py`) resolves
+  the active `RiskBudget` version once at startup: the runtime risk manager's
   `daily_loss_limit_pct` / `max_exposure_pct` are seeded from the budget
   (`src/gpt_trader/app/containers/risk_validation.py`, which records the
   seeded budget version in startup telemetry), `allow_futures_leverage=false`
   clamps the effective CFM leverage cap to 1x, and `allow_naked_shorts=false`
-  forces shorts off. When unset (the default), runtime limits come from
-  `BotConfig.risk` exactly as before. The default stays off until a
-  MOCK_BROKER regression covers the loosened breaker (the budget defaults —
-  10% daily loss / 100% exposure — are looser than the runtime 5% / 80%).
+  forces shorts off. When unset, runtime limits come from `BotConfig.risk`
+  exactly as before. The budget defaults — 10% daily loss / 100% exposure —
+  are looser than the legacy runtime 5% / 80%; the loosened breaker band is
+  pinned by the MOCK_BROKER regression in
+  `tests/integration/test_risk_budget_seeded_breaker.py`.
 
 ---
 
