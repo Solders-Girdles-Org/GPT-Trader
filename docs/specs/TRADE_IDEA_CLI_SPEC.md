@@ -562,9 +562,9 @@ Stage 2 auto-approval inside the budget envelope
   the full approval policy with `actor_type=SYSTEM` and the mode is re-resolved
   per decision so the daily-loss ratchet can halt a sweep mid-pass.
 - Zero violations → audited `approved` event with system actor
-  (`auto-approval-sweep`), an `auto-approval: ` reason prefix, and budget-
-  envelope evidence (autonomy version, budget version, exposure numbers). Any
-  violation → the idea stays `proposed` and is reported under
+  (`auto-approval-sweep`), an `auto-approval:` prefix plus a following space,
+  and budget-envelope evidence (autonomy version, budget version, exposure
+  numbers). Any violation → the idea stays `proposed` and is reported under
   `data["skipped"]` with its violations.
 - `data` = `evaluated_at`, `autonomy_mode`, `autonomy_version`, `counts`,
   `approved` (view summaries), `skipped` (decision_id + violations).
