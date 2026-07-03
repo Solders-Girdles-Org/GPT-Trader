@@ -397,8 +397,7 @@ def _run_config_validation(profile: Profile) -> HealthCheckResult:
     start = time.time()
     loader = ProfileLoader()
     schema = loader.load(profile)
-    kwargs = loader.to_bot_config_kwargs(schema, profile)
-    config = BotConfig(**kwargs)
+    config = loader.build_bot_config(schema, profile)
     errors = validate_config(config)
     duration = time.time() - start
 

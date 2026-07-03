@@ -215,8 +215,7 @@ def _load_profile_config(profile_name: str) -> BotConfig:
     profile_enum = Profile(profile_name)
     loader = ProfileLoader()
     schema = loader.load(profile_enum)
-    kwargs = loader.to_bot_config_kwargs(schema, profile_enum)
-    return BotConfig(**kwargs)
+    return loader.build_bot_config(schema, profile_enum)
 
 
 def _build_position_state(position: Any) -> dict[str, Any] | None:

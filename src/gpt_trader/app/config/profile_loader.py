@@ -455,15 +455,38 @@ class ProfileLoader:
         )
         return defaults
 
+    def build_bot_config(self, schema: ProfileSchema, profile: Profile) -> BotConfig:
+        """Construct a BotConfig from a profile schema.
+
+        Owns the split between constructor kwargs and post-construction
+        routing: ``enable_shorts`` is not a BotConfig field (#1120 stage 3),
+        so it is routed onto the canonical per-strategy configs after
+        construction. Prefer this over unpacking ``to_bot_config_kwargs``
+        into ``BotConfig(**kwargs)`` directly.
+        """
+        from gpt_trader.app.config.bot_config import BotConfig
+
+        kwargs = self.to_bot_config_kwargs(schema, profile)
+        enable_shorts = kwargs.pop("enable_shorts", None)
+        config = BotConfig(**kwargs)
+        if enable_shorts is not None:
+            config.set_enable_shorts(enable_shorts)
+        return config
+
     def to_bot_config_kwargs(self, schema: ProfileSchema, profile: Profile) -> dict[str, Any]:
         """Convert ProfileSchema to BotConfig constructor kwargs.
+
+        The returned dict contains one non-constructor entry:
+        ``enable_shorts``, which consumers must pop and route via
+        ``BotConfig.set_enable_shorts`` (or use :meth:`build_bot_config`,
+        which does both).
 
         Args:
             schema: The loaded profile schema
             profile: The profile enum
 
         Returns:
-            Dictionary of kwargs for BotConfig constructor
+            Dictionary of kwargs for BotConfig construction
         """
         from gpt_trader.app.config.bot_config import BotRiskConfig
         from gpt_trader.features.live_trade.strategies.baseline import (
