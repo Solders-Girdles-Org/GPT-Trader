@@ -190,6 +190,7 @@ def test_sizing_bridge_makes_mapped_ideas_executable() -> None:
     assert idea.sizing_recommendation.quantity is not None
     assert idea.sizing_recommendation.quantity > 0
     assert idea.sizing_recommendation.notional is not None
+    assert idea.sizing_recommendation.notional > 0
     assert idea.max_loss.amount is not None
     assert idea.max_loss.amount > 0
     assert idea.max_loss.percent_of_account is not None

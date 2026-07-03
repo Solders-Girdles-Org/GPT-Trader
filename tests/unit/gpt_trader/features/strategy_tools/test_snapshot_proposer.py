@@ -104,6 +104,15 @@ def test_proposer_id_is_a_stable_property() -> None:
     assert spot_proposer().proposer_id == "snapshot-strategy-baseline-spot"
 
 
+def test_strategy_name_is_normalized() -> None:
+    padded = SnapshotStrategyProposer(SpotStrategy, strategy_name=" baseline-spot ")
+
+    assert padded.proposer_id == "snapshot-strategy-baseline-spot"
+
+    ideas = padded.propose(snapshot_of(make_series(GOLDEN_CROSS)))
+    assert ideas == spot_proposer().propose(snapshot_of(make_series(GOLDEN_CROSS)))
+
+
 def test_buy_signal_maps_to_eligible_executable_long_idea() -> None:
     ideas = spot_proposer().propose(snapshot_of(make_series(GOLDEN_CROSS)))
 

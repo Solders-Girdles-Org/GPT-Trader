@@ -81,14 +81,16 @@ class SnapshotStrategyProposer:
         if not strategy_name.strip():
             raise ValidationError("strategy_name must be non-empty", field="strategy_name")
         self._strategy_factory = strategy_factory
-        self._strategy_name = strategy_name
-        self._adapter = adapter or StrategySignalToTradeIdeaAdapter(
-            StrategySignalToTradeIdeaAdapterConfig(
-                enabled=True,
-                proposer_id_prefix=SNAPSHOT_STRATEGY_PROPOSER_PREFIX,
-            ),
-            sizing_bridge=TradeIdeaPositionSizingBridge(),
-        )
+        self._strategy_name = strategy_name.strip()
+        if adapter is None:
+            adapter = StrategySignalToTradeIdeaAdapter(
+                StrategySignalToTradeIdeaAdapterConfig(
+                    enabled=True,
+                    proposer_id_prefix=SNAPSHOT_STRATEGY_PROPOSER_PREFIX,
+                ),
+                sizing_bridge=TradeIdeaPositionSizingBridge(),
+            )
+        self._adapter = adapter
 
     @property
     def proposer_id(self) -> str:
