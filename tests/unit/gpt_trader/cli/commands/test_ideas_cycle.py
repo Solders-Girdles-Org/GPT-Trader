@@ -144,6 +144,57 @@ def test_cycle_proposer_selection_is_configuration(
     assert only_turn["proposer_id"].startswith("baseline")
 
 
+def _strategy_crossover_snapshot_payload() -> dict[str, Any]:
+    """Golden cross sized for the strategy's 5/20 MAs and 3-bar crossover lookback."""
+    closes = [Decimal("100")] * 28 + [Decimal("102"), Decimal("104")]
+    start = _AS_OF - timedelta(hours=len(closes))
+    series = SymbolSeries(
+        symbol="BTC-USD",
+        granularity="ONE_HOUR",
+        candles=tuple(
+            Candle(
+                ts=start + timedelta(hours=index),
+                open=close,
+                high=close,
+                low=close,
+                close=close,
+                volume=Decimal("1000"),
+            )
+            for index, close in enumerate(closes)
+        ),
+    )
+    return market_snapshot_to_payload(
+        MarketSnapshot(as_of=_AS_OF, source="test:fixture", series=(series,))
+    )
+
+
+def test_cycle_strategy_backed_proposer_is_opt_in_configuration(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    root = tmp_path / "ideas"
+    attest_ideas_root(root)
+    strategy_snapshot_path = tmp_path / "strategy-snapshot.json"
+    strategy_snapshot_path.write_text(
+        json.dumps(_strategy_crossover_snapshot_payload()), encoding="utf-8"
+    )
+    exit_code, response = _run_json(
+        capsys,
+        [
+            "ideas",
+            "cycle",
+            "--snapshot",
+            str(strategy_snapshot_path),
+            "--proposer",
+            "strategy-baseline-spot",
+            *_root_args(root),
+        ],
+    )
+    assert exit_code == 0
+    (only_turn,) = response["data"]["proposers"]
+    assert only_turn["proposer_id"] == "snapshot-strategy-baseline-spot"
+    assert only_turn["proposal_count"] == 1
+
+
 def test_cycle_from_coinbase_requires_market_parameters(
     capsys: pytest.CaptureFixture[str], tmp_path: Path
 ) -> None:
