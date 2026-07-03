@@ -88,7 +88,7 @@
     },
     "risk_budget_runtime_seed_enabled": {
       "type": "boolean",
-      "default": false
+      "default": true
     },
     "market_order_fallback": {
       "type": "boolean",
