@@ -4,11 +4,18 @@ Extraction of the recorder role from the accepted five-role composition
 (docs/decisions/adopt-five-role-composition.md): observation must outlive
 execution, so recording state is constructed by the composition root and
 injected into the trading engine rather than owned by it. This slice holds
-price-tick persistence/recovery and MarketSnapshot production over the
-read-only Coinbase candle transport; WS tick ingestion and a standalone
-``record`` entrypoint migrate here in later stages (issue #1158).
+price-tick persistence/recovery, MarketSnapshot production over the
+read-only Coinbase candle transport, and the standalone recording loop
+behind ``gpt-trader record`` (issue #1158). The engine's WS telemetry
+stream converges here only after strategy→proposer parity, per the
+decision record.
 """
 
+from gpt_trader.features.recorder.market_data_recorder import (
+    MarketDataRecorder,
+    MarketDataRecorderConfig,
+    derive_recorder_bot_id,
+)
 from gpt_trader.features.recorder.price_tick_store import (
     EVENT_PRICE_TICK,
     MAX_PRICE_HISTORY,
@@ -33,10 +40,13 @@ __all__ = [
     "EVENT_PRICE_TICK",
     "HistoricalCandleSource",
     "MAX_PRICE_HISTORY",
+    "MarketDataRecorder",
+    "MarketDataRecorderConfig",
     "MarketSnapshotBuildRequest",
     "MarketSnapshotBuilder",
     "PriceTickStore",
     "build_coinbase_market_snapshot",
     "canonical_granularity",
+    "derive_recorder_bot_id",
     "granularity_duration",
 ]

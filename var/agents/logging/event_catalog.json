@@ -59,6 +59,7 @@
       "log_submission_attempt",
       "process_rejection",
       "readiness_update",
+      "record",
       "record_decision_trace",
       "record_preview",
       "record_rejection",
@@ -1462,6 +1463,29 @@
       ],
       "statuses": null
     },
+    "record": {
+      "common_fields": [
+        "bot_id",
+        "error",
+        "interval_seconds",
+        "recorded_ticks",
+        "stage",
+        "symbol",
+        "symbols"
+      ],
+      "components": null,
+      "levels": [
+        "ERROR",
+        "INFO",
+        "WARNING"
+      ],
+      "occurrence_count": 8,
+      "source_files": [
+        "cli/commands/record.py",
+        "features/recorder/market_data_recorder.py"
+      ],
+      "statuses": null
+    },
     "record_decision_trace": {
       "common_fields": [
         "error_message",
@@ -2311,7 +2335,7 @@
     "consecutive_failures": 6,
     "details": 5,
     "environment": 12,
-    "error": 54,
+    "error": 56,
     "error_message": 86,
     "error_type": 86,
     "event_type": 7,
@@ -2331,17 +2355,17 @@
     "secret_ref": 6,
     "service": 9,
     "side": 25,
-    "stage": 130,
-    "symbol": 79,
+    "stage": 132,
+    "symbol": 81,
     "timestamp": 4
   },
   "level_distribution": {
     "CRITICAL": 1,
     "DEBUG": 37,
-    "ERROR": 110,
-    "INFO": 81,
-    "WARNING": 98
+    "ERROR": 111,
+    "INFO": 85,
+    "WARNING": 101
   },
-  "total_event_types": 125,
+  "total_event_types": 126,
   "version": "1.0"
 }
