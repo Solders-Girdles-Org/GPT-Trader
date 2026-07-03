@@ -28,6 +28,7 @@ from gpt_trader.features.idea_execution import (
     PaperOnlyLaneError,
 )
 from gpt_trader.features.trade_ideas import (
+    AUTO_APPROVAL_ENV_VAR,
     DEFAULT_RISK_BUDGET,
     ActorType,
     AuditAction,
@@ -150,6 +151,30 @@ class TestApprovedIdeaAdmission:
         _approved_idea(service, "trade-20260702-exec-001")
         view = self._executor(service).resolve_approved_idea("trade-20260702-exec-001")
         assert view.idea.decision_id == "trade-20260702-exec-001"
+
+    def test_refuses_system_auto_approved_idea(
+        self, service: TradeIdeaService, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(AUTO_APPROVAL_ENV_VAR, "1")
+        service.set_autonomy_mode(
+            AutonomyMode.BOUNDED_AUTONOMY,
+            actor_type=ActorType.HUMAN,
+            actor_id="test-operator",
+            reason="Test: enter bounded autonomy for executor admission",
+        )
+        decision_id = "trade-20260702-exec-auto-approved"
+        service.propose(
+            _build_idea(decision_id, expires_at=_NOW + timedelta(days=7)),
+            actor_id="test-proposer",
+        )
+        service.auto_approve_sweep()
+
+        with pytest.raises(IdeaNotExecutableError, match="requires human approval"):
+            self._executor(service).execute(decision_id)
+
+        view = service.get(decision_id)
+        assert view.state is TradeIdeaState.APPROVED
+        assert not any(event.action is AuditAction.SUBMITTED for event in view.events)
 
     def test_refuses_proposed_idea(self, service: TradeIdeaService) -> None:
         idea = _build_idea("trade-20260702-exec-002", expires_at=_NOW + timedelta(days=7))

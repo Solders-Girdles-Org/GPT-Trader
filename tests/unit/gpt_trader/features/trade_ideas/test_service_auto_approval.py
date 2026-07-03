@@ -17,6 +17,7 @@ from gpt_trader.features.trade_ideas import (
     AUTO_APPROVAL_ENV_VAR,
     AUTO_APPROVAL_REASON_PREFIX,
     ActorType,
+    AuditAction,
     AutonomyMode,
     CloseoutResolution,
     MaxLoss,
@@ -167,7 +168,15 @@ def test_violating_idea_stays_proposed_and_is_reported(
     skip = result.skipped[0]
     assert skip.decision_id == over_cap.decision_id
     assert any("exceeds budget cap" in violation for violation in skip.violations)
-    assert service.get(over_cap.decision_id).state is TradeIdeaState.PROPOSED
+    view = service.get(over_cap.decision_id)
+    assert view.state is TradeIdeaState.PROPOSED
+    event = view.events[-1]
+    assert event.action is AuditAction.AUTO_APPROVAL_SKIPPED
+    assert event.actor_type is ActorType.SYSTEM
+    assert event.actor_id == AUTO_APPROVAL_ACTOR_ID
+    assert event.reason.startswith(AUTO_APPROVAL_REASON_PREFIX)
+    assert any("approval_violations=1" in item for item in event.evidence)
+    assert any("violation: max_loss 9%" in item for item in event.evidence)
 
 
 def test_sweep_respects_the_envelope_across_the_queue(
@@ -191,7 +200,9 @@ def test_sweep_respects_the_envelope_across_the_queue(
     skip = result.skipped[0]
     assert skip.decision_id == "trade-20260612-queue-c"
     assert any("max_daily_loss_pct budget breached" in violation for violation in skip.violations)
-    assert service.get("trade-20260612-queue-c").state is TradeIdeaState.PROPOSED
+    skipped = service.get("trade-20260612-queue-c")
+    assert skipped.state is TradeIdeaState.PROPOSED
+    assert skipped.events[-1].action is AuditAction.AUTO_APPROVAL_SKIPPED
 
 
 def test_daily_loss_breach_ratchets_down_and_refuses_the_sweep(

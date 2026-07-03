@@ -74,7 +74,9 @@ id, reason prefix, and envelope evidence.
   not a silent no-op) when the flag is off or the resolved mode is not
   `bounded_autonomy`; re-resolves the mode per decision so the daily-loss
   ratchet can halt a sweep mid-pass; approves violation-free `proposed` ideas
-  oldest-review-first; returns every skipped idea with its violations.
+  oldest-review-first; records an `auto_approval_skipped` audit event for each
+  evaluated idea that remains `proposed`; returns every skipped idea with its
+  violations.
 - CLI: `gpt-trader ideas approve --auto-sweep` is the only trigger. No
   scheduler ships with this decision.
 - The scheduled Stage 1 paper cycle remains human-approval-only. System

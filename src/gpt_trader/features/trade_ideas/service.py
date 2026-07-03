@@ -857,6 +857,25 @@ class TradeIdeaService:
                 ),
             ]
             if violations:
+                self._append(
+                    idea,
+                    action=AuditAction.AUTO_APPROVAL_SKIPPED,
+                    after_state=TradeIdeaState.PROPOSED,
+                    actor_type=ActorType.SYSTEM,
+                    actor_id=actor_id,
+                    reason=(
+                        f"{AUTO_APPROVAL_REASON_PREFIX}skipped because "
+                        "approval-policy violations remain"
+                    ),
+                    evidence=(
+                        f"autonomy_state version {decision_resolution.version} "
+                        f"mode={decision_resolution.mode.value} "
+                        f"(source={decision_resolution.source})",
+                        f"risk budget version {budget.version}: "
+                        f"approval_violations={len(violations)}",
+                        *(f"violation: {violation}" for violation in violations),
+                    ),
+                )
                 skipped.append(
                     AutoApprovalSkip(
                         decision_id=idea.decision_id,

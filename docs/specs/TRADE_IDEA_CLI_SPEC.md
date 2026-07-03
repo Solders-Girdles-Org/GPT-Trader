@@ -565,7 +565,8 @@ Stage 2 auto-approval inside the budget envelope
   (`auto-approval-sweep`), an `auto-approval:` prefix plus a following space,
   and budget-envelope evidence (autonomy version, budget version, exposure
   numbers). Any violation → the idea stays `proposed` and is reported under
-  `data["skipped"]` with its violations.
+  `data["skipped"]` with its violations, with an audited
+  `auto_approval_skipped` event preserving the proposed state.
 - `data` = `evaluated_at`, `autonomy_mode`, `autonomy_version`, `counts`,
   `approved` (view summaries), `skipped` (decision_id + violations).
   `was_noop=True` when the proposed queue is empty.
