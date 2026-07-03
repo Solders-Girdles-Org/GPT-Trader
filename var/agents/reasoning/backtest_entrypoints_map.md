@@ -27,14 +27,6 @@ Generated: 1970-01-01T00:00:00+00:00
 | simulated_broker_engine | SimulatedBroker | `src/gpt_trader/backtesting/simulation/broker.py` |
 | backtest_guarded_executor | BacktestGuardedExecutor.submit_order | `src/gpt_trader/backtesting/engine/guarded_execution.py` |
 
-## Intelligence Backtesting
-| ID | Label | Path |
-|----|-------|------|
-| ensemble_backtest_process | EnsembleBacktestAdapter.process_bar | `src/gpt_trader/features/intelligence/backtesting/backtest_adapter.py` |
-| ensemble_backtest_results | EnsembleBacktestAdapter.get_results | `src/gpt_trader/features/intelligence/backtesting/backtest_adapter.py` |
-| batch_regime_process | BatchRegimeDetector.process | `src/gpt_trader/features/intelligence/backtesting/batch_regime.py` |
-| batch_regime_process_candles | BatchRegimeDetector.process_candles | `src/gpt_trader/features/intelligence/backtesting/batch_regime.py` |
-
 ## Validation + Chaos
 | ID | Label | Path |
 |----|-------|------|
@@ -53,10 +45,6 @@ Generated: 1970-01-01T00:00:00+00:00
 | ID | Label | Path |
 |----|-------|------|
 | engine_backtest_result | BacktestResult | `src/gpt_trader/backtesting/types.py` |
-| ensemble_backtest_result | EnsembleBacktestResult | `src/gpt_trader/features/intelligence/backtesting/backtest_adapter.py` |
-| ensemble_backtest_summary | EnsembleBacktestResult.summary | `src/gpt_trader/features/intelligence/backtesting/backtest_adapter.py` |
-| regime_history | RegimeHistory | `src/gpt_trader/features/intelligence/backtesting/batch_regime.py` |
-| regime_history_summary | RegimeHistory.summary | `src/gpt_trader/features/intelligence/backtesting/batch_regime.py` |
 | validation_report | ValidationReport | `src/gpt_trader/backtesting/types.py` |
 | decision_log_json | Decision log JSON | `src/gpt_trader/backtesting/validation/decision_logger.py` |
 | chaos_event | ChaosEvent | `src/gpt_trader/backtesting/chaos/engine.py` |
@@ -83,13 +71,6 @@ Generated: 1970-01-01T00:00:00+00:00
 | golden_path_demo | decision_logger_log | log decisions |
 | golden_path_demo | golden_path_validate | validate decisions |
 | golden_path_demo | golden_path_report | generate report |
-| ensemble_backtest_process | ensemble_backtest_results | record decisions |
-| ensemble_backtest_results | regime_history | build histories |
-| ensemble_backtest_results | ensemble_backtest_result | summary |
-| batch_regime_process | regime_history | batch history |
-| batch_regime_process_candles | regime_history | candle history |
-| ensemble_backtest_result | ensemble_backtest_summary | summary output |
-| regime_history | regime_history_summary | summary output |
 | decision_logger_log | decision_logger_export | export decisions |
 | decision_logger_export | decision_log_json | write JSON |
 | decision_logger_log | replay_decisions | recorded decisions |
@@ -107,7 +88,5 @@ Generated: 1970-01-01T00:00:00+00:00
 - CLI optimize run drives BatchBacktestRunner for optimization trials.
 - WalkForwardOptimizer and paper_trade_stress_test use ClockedBarRunner + SimulatedBroker.
 - Research backtests rely on EventStore → HistoricalDataLoader → BacktestSimulator.
-- Intelligence backtests use EnsembleBacktestAdapter and BatchRegimeDetector utilities.
 - Golden-path validation and chaos scenarios provide robustness checks and reports.
-- EnsembleBacktestResult.summary and RegimeHistory.summary are reporting-friendly outputs.
 - ChaosEngine hooks are optional; integrate via ClockedBarRunner/SimulatedBroker if enabled.
