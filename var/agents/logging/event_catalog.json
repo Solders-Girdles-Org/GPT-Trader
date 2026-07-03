@@ -1467,6 +1467,7 @@
       "common_fields": [
         "bot_id",
         "error",
+        "interval",
         "interval_seconds",
         "recorded_ticks",
         "stage",
@@ -1479,7 +1480,7 @@
         "INFO",
         "WARNING"
       ],
-      "occurrence_count": 8,
+      "occurrence_count": 10,
       "source_files": [
         "cli/commands/record.py",
         "features/recorder/market_data_recorder.py"
@@ -2335,7 +2336,7 @@
     "consecutive_failures": 6,
     "details": 5,
     "environment": 12,
-    "error": 56,
+    "error": 57,
     "error_message": 86,
     "error_type": 86,
     "event_type": 7,
@@ -2362,7 +2363,7 @@
   "level_distribution": {
     "CRITICAL": 1,
     "DEBUG": 37,
-    "ERROR": 111,
+    "ERROR": 113,
     "INFO": 85,
     "WARNING": 101
   },
