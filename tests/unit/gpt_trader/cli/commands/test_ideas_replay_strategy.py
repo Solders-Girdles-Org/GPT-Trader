@@ -23,6 +23,15 @@ AS_OF = datetime(2026, 6, 12, 12, 0, tzinfo=UTC)
 # snapshots evaluated after the default 20-candle warm-up floor.
 RISING_CLOSES = ["100"] * 26 + ["102", "104", "106", "108"]
 FLAT_CLOSES = ["100"] * 30
+# The dip sits one bar before the end so the replay window ending at the dip
+# is evaluated (windows never include the fixture's final candle).
+MEAN_REVERSION_DIP_CLOSES = ["100"] * 28 + ["96", "100"]
+# Ultra-quiet damped oscillation, then the same dip: the regime detector
+# confirms SIDEWAYS_QUIET at candle 54 (long-EMA 50 + min-regime-ticks 5 - 1)
+# and the window ending at the dip routes to the mean-reversion delegate.
+REGIME_SWITCHER_DIP_CLOSES = [
+    f"{100 + (1 if i % 2 == 0 else -1) * 0.05 * (0.995 ** i):.4f}" for i in range(58)
+] + ["96", "100"]
 
 
 def _fixture_payload(closes: list[str]) -> dict[str, Any]:
@@ -46,7 +55,12 @@ def _write_fixture(path: Path, payload: dict[str, Any]) -> Path:
     return path
 
 
-def _strategy_args(path: Path, *, extra: list[str] | None = None) -> list[str]:
+def _strategy_args(
+    path: Path,
+    *,
+    strategy: str = "baseline-spot",
+    extra: list[str] | None = None,
+) -> list[str]:
     return [
         "ideas",
         "replay",
@@ -58,7 +72,7 @@ def _strategy_args(path: Path, *, extra: list[str] | None = None) -> list[str]:
         "--granularity",
         "ONE_HOUR",
         "--strategy",
-        "baseline-spot",
+        strategy,
         "--format",
         "json",
         *(extra or []),
@@ -112,6 +126,59 @@ def test_replay_strategy_rejects_min_history_below_strategy_requirements(
     assert response["errors"][0]["code"] == CliErrorCode.INVALID_ARGUMENT.value
     assert response["errors"][0]["details"]["field"] == "min_history"
     assert "--min-history must be at least 20" in response["errors"][0]["message"]
+
+
+def test_replay_strategy_mean_reversion_uses_its_own_warmup_floor(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fixture = _write_fixture(tmp_path / "dip.json", _fixture_payload(MEAN_REVERSION_DIP_CLOSES))
+
+    exit_code, response = _run_json(capsys, _strategy_args(fixture, strategy="mean-reversion"))
+
+    assert exit_code == 0
+    data = response["data"]
+    assert data["proposer_id"] == "snapshot-strategy-mean-reversion"
+    # Default min-history is the Z-Score lookback window (20).
+    assert data["snapshots_evaluated"] == len(MEAN_REVERSION_DIP_CLOSES) - 20
+    assert data["ideas_proposed"] >= 1
+
+
+def test_replay_strategy_regime_switcher_uses_the_detector_floor(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fixture = _write_fixture(
+        tmp_path / "sideways-dip.json", _fixture_payload(REGIME_SWITCHER_DIP_CLOSES)
+    )
+
+    exit_code, response = _run_json(capsys, _strategy_args(fixture, strategy="regime-switcher"))
+
+    assert exit_code == 0
+    data = response["data"]
+    assert data["proposer_id"] == "snapshot-strategy-regime-switcher"
+    # Default min-history is the detector's regime-confirmation floor
+    # (long-EMA 50 + min-regime-ticks 5 - 1 = 54).
+    assert data["snapshots_evaluated"] == len(REGIME_SWITCHER_DIP_CLOSES) - 54
+    assert data["ideas_proposed"] >= 1
+
+
+def test_replay_strategy_rejects_min_history_below_regime_switcher_floor(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fixture = _write_fixture(
+        tmp_path / "sideways-dip.json", _fixture_payload(REGIME_SWITCHER_DIP_CLOSES)
+    )
+
+    exit_code, response = _run_json(
+        capsys,
+        _strategy_args(fixture, strategy="regime-switcher", extra=["--min-history", "30"]),
+    )
+
+    assert exit_code == 1
+    assert response["errors"][0]["code"] == CliErrorCode.INVALID_ARGUMENT.value
+    assert response["errors"][0]["details"]["field"] == "min_history"
+    assert "--min-history must be at least 54 for regime-switcher" in (
+        response["errors"][0]["message"]
+    )
 
 
 def test_replay_strategy_help_documents_read_only_contract(

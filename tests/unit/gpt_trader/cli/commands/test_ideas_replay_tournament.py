@@ -180,6 +180,57 @@ def test_replay_tournament_rejects_min_history_below_strategy_floor(
     assert "--min-history must be at least 20" in response["errors"][0]["message"]
 
 
+def test_replay_tournament_ranks_mean_reversion_strategy_beside_baseline(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The dip sits one bar before the end so the shared replay window ending
+    # at the dip is evaluated for the mean-reversion strategy proposer.
+    closes = ["100"] * 28 + ["96", "100"]
+    fixture = _write_fixture(
+        tmp_path / "dip-candles.json",
+        {
+            "candles": [
+                _candle(index - len(closes), open_=close, high=close, low=close, close=close)
+                for index, close in enumerate(closes)
+            ]
+        },
+    )
+    argv = _tournament_args(fixture)
+    argv[argv.index("--proposers") + 1] = "baseline-ma-2-4,strategy-mean-reversion"
+
+    exit_code, response = _run_json(capsys, argv)
+
+    assert exit_code == 0
+    data = response["data"]
+    proposer_ids = {report["proposer_id"] for report in data["reports"]}
+    assert proposer_ids == {"baseline-ma-2-4", "snapshot-strategy-mean-reversion"}
+    mean_reversion_report = next(
+        report
+        for report in data["reports"]
+        if report["proposer_id"] == "snapshot-strategy-mean-reversion"
+    )
+    assert mean_reversion_report["ideas_proposed"] >= 1
+
+
+def test_replay_tournament_regime_switcher_floor_dominates_min_history(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fixture = _write_fixture(tmp_path / "long-candles.json", _long_history_fixture())
+    argv = _tournament_args(fixture)
+    argv[argv.index("--proposers") + 1] = "baseline-ma-2-4,strategy-regime-switcher"
+    argv.extend(["--min-history", "30"])
+
+    exit_code, response = _run_json(capsys, argv)
+
+    assert exit_code == 1
+    assert response["errors"][0]["code"] == CliErrorCode.INVALID_ARGUMENT.value
+    # The shared window floor is the regime switcher's regime-confirmation
+    # floor (long-EMA 50 + min-regime-ticks 5 - 1 = 54), not the baseline's.
+    assert "--min-history must be at least 54" in response["errors"][0]["message"]
+
+
 def test_replay_tournament_rejects_unknown_proposer_id(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
