@@ -17,6 +17,11 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, cast
 
+from gpt_trader.core.risk_units import (
+    fraction_to_pct_points,
+    pct_points_to_fraction,
+    same_trading_day,
+)
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.trade_ideas.audit import (
     ActorType,
@@ -148,7 +153,7 @@ def _decimal_to_str(value: Decimal | None) -> str | None:
 def _percent_of_amount(amount: Decimal, equity: Decimal) -> Decimal | None:
     if equity <= 0:
         return None
-    return amount / equity * Decimal("100")
+    return fraction_to_pct_points(amount / equity)
 
 
 def _equity_from_max_loss_amount_percent(
@@ -190,12 +195,6 @@ def _absolute_notional(idea: TradeIdea) -> Decimal | None:
     if notional is None:
         return None
     return abs(notional)
-
-
-def _same_day(timestamp: datetime, now: datetime) -> bool:
-    if now.tzinfo is None or now.utcoffset() is None:
-        return timestamp.date() == now.date()
-    return timestamp.astimezone(now.tzinfo).date() == now.date()
 
 
 def _page_items(
@@ -329,7 +328,7 @@ class TradeIdeaService:
             ):
                 open_ideas.append(idea)
                 continue
-            if closeout is not None and _same_day(closeout.timestamp, evaluation_time):
+            if closeout is not None and same_trading_day(closeout.timestamp, evaluation_time):
                 if (
                     event.after_state is TradeIdeaState.FILLED
                     or _closeout_has_realized_profit_loss(closeout)
@@ -389,7 +388,9 @@ class TradeIdeaService:
         open_notional_headroom_pct = None
         if account_equity is not None and account_equity > 0:
             open_notional_pct = _percent_of_amount(context.open_notional, account_equity)
-            max_open_notional = account_equity * budget.max_open_notional_pct / Decimal("100")
+            max_open_notional = account_equity * pct_points_to_fraction(
+                budget.max_open_notional_pct
+            )
             open_notional_headroom = max(max_open_notional - context.open_notional, Decimal("0"))
             open_notional_headroom_pct = max(
                 budget.max_open_notional_pct - (open_notional_pct or Decimal("0")),
