@@ -1,6 +1,9 @@
 # Contributing to GPT-Trader
 
-We use a set of automated tools to ensure code quality and consistency. Please follow these steps for your development environment to ensure your contributions pass our automated checks.
+Code quality and consistency are enforced by automated checks. Set up your
+environment as described below so your contributions pass them on the first try.
+(AI agents: start at [AGENTS.md](AGENTS.md), which routes to this doc for the
+contribution workflow.)
 
 ## One-Time Setup
 
@@ -56,8 +59,8 @@ uv run pytest --cov=gpt_trader --cov-report=term-missing
 ```
 
 ### Test Metrics
-- **Coverage**: 82.6% overall as of 2026-07-01 (`make cov`); the current number is the `coverage-json` artifact uploaded by the CI **Unit Tests (Core)** job. Target >90% on new code paths.
-- **Integration Paths**: Coordinate with maintainers before toggling derivatives gates
+- **Coverage**: the current number is the `coverage-json` artifact uploaded by the CI **Unit Tests (Core)** job; run `make cov` for a local snapshot. Target >90% on new code paths.
+- **Integration paths**: coordinate with maintainers before toggling derivatives gates.
 
 ## Running the Bot Locally
 
