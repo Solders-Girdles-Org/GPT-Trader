@@ -103,6 +103,39 @@ class TradeIdeaListResult:
 
 
 @dataclass(frozen=True, slots=True)
+class AutoApprovalSkip:
+    """One proposed idea an auto-approval sweep left for human review, and why."""
+
+    decision_id: str
+    violations: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "decision_id": self.decision_id,
+            "violations": list(self.violations),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class AutoApprovalSweepResult:
+    """Outcome of one auto-approval sweep over the proposed queue."""
+
+    evaluated_at: datetime
+    autonomy_mode: str
+    autonomy_version: int | None
+    approved: tuple[TradeIdeaView, ...]
+    skipped: tuple[AutoApprovalSkip, ...]
+
+    @property
+    def approved_count(self) -> int:
+        return len(self.approved)
+
+    @property
+    def skipped_count(self) -> int:
+        return len(self.skipped)
+
+
+@dataclass(frozen=True, slots=True)
 class TradeIdeaQueueExpiration:
     """One pending idea expiring inside the queue warning window."""
 
