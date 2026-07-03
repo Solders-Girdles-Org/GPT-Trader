@@ -11,6 +11,20 @@ from decimal import Decimal
 from gpt_trader.core import Candle
 from gpt_trader.features.brokerages.coinbase.client.client import CoinbaseClient
 
+# Granularities accepted by the Coinbase Advanced Trade candles endpoint,
+# mapped to their candle duration in seconds.
+GRANULARITY_SECONDS = {
+    "ONE_MINUTE": 60,
+    "FIVE_MINUTE": 300,
+    "FIFTEEN_MINUTE": 900,
+    "THIRTY_MINUTE": 1800,
+    "ONE_HOUR": 3600,
+    "TWO_HOUR": 7200,
+    "FOUR_HOUR": 14400,
+    "SIX_HOUR": 21600,
+    "ONE_DAY": 86400,
+}
+
 
 class CoinbaseHistoricalFetcher:
     """
@@ -151,18 +165,7 @@ class CoinbaseHistoricalFetcher:
 
     def _granularity_to_seconds(self, granularity: str) -> int:
         """Convert granularity string to seconds."""
-        mapping = {
-            "ONE_MINUTE": 60,
-            "FIVE_MINUTE": 300,
-            "FIFTEEN_MINUTE": 900,
-            "THIRTY_MINUTE": 1800,
-            "ONE_HOUR": 3600,
-            "TWO_HOUR": 7200,
-            "FOUR_HOUR": 14400,
-            "SIX_HOUR": 21600,
-            "ONE_DAY": 86400,
-        }
-        return mapping.get(granularity, 60)
+        return GRANULARITY_SECONDS.get(granularity, 60)
 
     def _create_chunks(
         self,

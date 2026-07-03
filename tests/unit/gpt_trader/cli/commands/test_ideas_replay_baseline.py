@@ -147,6 +147,22 @@ def test_replay_baseline_rejects_unsupported_granularity(
     assert "Unsupported replay granularity: BAD" in response["errors"][0]["message"]
 
 
+def test_replay_baseline_accepts_four_hour_granularity(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fixture = _write_fixture(tmp_path / "candles.json", _baseline_hit_fixture())
+    argv = _baseline_args(fixture)
+    granularity_index = argv.index("--granularity") + 1
+    argv[granularity_index] = "FOUR_HOUR"
+
+    exit_code, response = _run_json(capsys, argv)
+
+    assert exit_code == 0
+    assert response["success"] is True
+    assert response["data"]["granularity"] == "FOUR_HOUR"
+
+
 def test_replay_baseline_preserves_json_number_precision(tmp_path: Path) -> None:
     fixture = tmp_path / "precise-candles.json"
     fixture.write_text(
