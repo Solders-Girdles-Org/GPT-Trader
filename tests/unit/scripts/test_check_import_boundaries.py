@@ -309,6 +309,9 @@ def test_cross_slice_allowlist_is_frozen_topology() -> None:
             ("intelligence", "live_trade"),
             ("live_trade", "brokerages"),
             ("live_trade", "intelligence"),
+            # Composition root constructs recorder-owned tick state; the engine
+            # consumes it injected (docs/decisions/adopt-five-role-composition.md).
+            ("live_trade", "recorder"),
             ("live_trade", "strategy_tools"),
             ("live_trade", "trade_ideas"),
             # RegimeAwareProposer overlays regime state; PositionSizer bridge

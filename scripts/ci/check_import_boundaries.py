@@ -155,12 +155,15 @@ _TRADE_IDEAS_RULE = ImportRule(
 # rationale (see docs/ARCHITECTURE.md, "Import boundaries").
 CROSS_SLICE_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset(
     {
-        # contracts.py + regime/* reuse live_trade strategy types and indicators.
+        # regime/* reuse live_trade stateful indicators.
         ("intelligence", "live_trade"),
         # execution guards/validation depend on broker protocols and coinbase specs.
         ("live_trade", "brokerages"),
         # factory + regime_switcher strategy use regime detection.
         ("live_trade", "intelligence"),
+        # bot.py composition root constructs recorder-owned tick state; the
+        # engine consumes it injected (docs/decisions/adopt-five-role-composition.md).
+        ("live_trade", "recorder"),
         # engines/strategy.py signal -> trade-idea adapter.
         ("live_trade", "strategy_tools"),
         # engines/strategy.py trade-idea proposal workflow service.

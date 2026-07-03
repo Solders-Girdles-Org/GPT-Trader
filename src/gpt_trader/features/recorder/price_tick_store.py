@@ -1,7 +1,8 @@
 """
-Price tick persistence and state recovery for TradingEngine.
+Price tick persistence and state recovery.
 
-Extracted from TradingEngine to separate concerns:
+Owned by the recorder slice so recording state can be constructed by the
+composition root and shared beyond the trading engine:
 - Persist price ticks to EventStore for crash recovery
 - Rehydrate price history from persisted events on startup
 """
