@@ -347,16 +347,16 @@ class TestProfileOverridePrecedence:
 class TestRiskBudgetRuntimeSeedMapping:
     """Stage 2 derivation seam gate (#1120): schema parse and kwargs mapping."""
 
-    def test_from_yaml_defaults_off(self) -> None:
+    def test_from_yaml_defaults_on(self) -> None:
         schema = ProfileSchema.from_yaml({}, "empty")
 
-        assert schema.execution.risk_budget_runtime_seed is False
+        assert schema.execution.risk_budget_runtime_seed is True
 
     def test_to_bot_config_kwargs_maps_gate(self) -> None:
         schema = ProfileSchema.from_yaml(
-            {"execution": {"risk_budget_runtime_seed": True}}, "seed-profile"
+            {"execution": {"risk_budget_runtime_seed": False}}, "seed-profile"
         )
 
         kwargs = ProfileLoader().to_bot_config_kwargs(schema, Profile.DEV)
 
-        assert kwargs["risk_budget_runtime_seed_enabled"] is True
+        assert kwargs["risk_budget_runtime_seed_enabled"] is False
