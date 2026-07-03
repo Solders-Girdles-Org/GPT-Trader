@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Protocol
 
+from gpt_trader.core.risk_units import fraction_to_pct_points, pct_points_to_fraction
 from gpt_trader.features.intelligence.sizing import (
     PositionSizer,
     PositionSizingConfig,
@@ -210,9 +211,11 @@ def _budget_cap_fraction(
     stop_fraction = context.stop_loss_distance / context.current_price
     if stop_fraction <= 0:
         return None
-    max_loss_fraction = _effective_max_loss_pct(context.max_loss_pct, budget) / Decimal("100")
+    max_loss_fraction = pct_points_to_fraction(
+        _effective_max_loss_pct(context.max_loss_pct, budget)
+    )
     loss_cap_fraction = max_loss_fraction / stop_fraction
-    notional_cap_fraction = budget.max_open_notional_pct / Decimal("100")
+    notional_cap_fraction = pct_points_to_fraction(budget.max_open_notional_pct)
     return float(min(loss_cap_fraction, notional_cap_fraction))
 
 
@@ -228,7 +231,11 @@ def _estimated_risk_fraction(
 ) -> float:
     if equity <= 0 or current_price <= 0:
         return 0.0
-    return float(_estimated_loss_pct(notional * stop_loss_distance / current_price, equity) / 100)
+    return float(
+        pct_points_to_fraction(
+            _estimated_loss_pct(notional * stop_loss_distance / current_price, equity)
+        )
+    )
 
 
 def _estimated_loss_amount(
@@ -244,7 +251,7 @@ def _estimated_loss_amount(
 def _estimated_loss_pct(loss_amount: Decimal, equity: Decimal) -> Decimal:
     if equity <= 0:
         return Decimal("0")
-    return loss_amount / equity * Decimal("100")
+    return fraction_to_pct_points(loss_amount / equity)
 
 
 def _confidence_score(label: ConfidenceLabel) -> float:

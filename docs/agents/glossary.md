@@ -36,6 +36,19 @@ Any abbreviation not listed here should be spelled out in full.
 | `E2E` | End-to-End | Testing | Industry standard |
 | `qty` | Quantity | Trading domain | Standard trading term for order/position size |
 
+## Domain Term Distinctions
+
+Risk-limit fields that read alike but measure different things (from the
+accepted decision `docs/decisions/canonical-risk-limit-vocabulary.md`):
+
+| Term | Measures | Not to be confused with |
+|------|----------|-------------------------|
+| `max_loss_per_idea_pct` | **Loss at invalidation** — the equity percentage lost if the idea's stop is hit | Notional exposure: a small stop distance lets a large position stay inside this cap |
+| `max_position_pct_per_symbol` | **Notional exposure** — the equity percentage a symbol's position may occupy | Loss at invalidation: exposure says nothing about how much is lost at the stop |
+
+Percentage unit suffixes (`_pct` = percent points, `_fraction` = unit
+fraction) are defined in `docs/naming.md` §2.4.
+
 ## Banned Abbreviations
 
 These abbreviations are banned and must be spelled out:
