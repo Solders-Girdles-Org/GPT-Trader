@@ -174,4 +174,6 @@ def _extract_price(ticker: dict[str, Any] | None) -> Decimal | None:
         price = Decimal(str(raw_price))
     except (DecimalException, ValueError):
         return None
+    if not price.is_finite():
+        return None
     return price if price > 0 else None

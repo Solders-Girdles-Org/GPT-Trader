@@ -70,6 +70,14 @@ def execute(args: Namespace) -> int:
             logger.error("No broker available for market-data reads")
             return 1
 
+        if config.interval is None or config.interval <= 0:
+            logger.error(
+                "Recording interval must be a positive number of seconds",
+                interval=config.interval,
+                operation="record",
+            )
+            return 1
+
         bot_id = derive_recorder_bot_id(config.profile)
         tick_store = PriceTickStore(
             event_store=container.event_store,
@@ -86,7 +94,15 @@ def execute(args: Namespace) -> int:
         )
 
         if args.once:
-            recorded = asyncio.run(recorder.record_once())
+            try:
+                recorded = asyncio.run(recorder.record_once())
+            except Exception as exc:
+                logger.error(
+                    "Recording poll failed",
+                    error=str(exc),
+                    operation="record",
+                )
+                return 1
             logger.info(
                 "Recorded one poll",
                 recorded_ticks=recorded,

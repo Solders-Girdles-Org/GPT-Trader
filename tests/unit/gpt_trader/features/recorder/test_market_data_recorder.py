@@ -122,6 +122,26 @@ async def test_record_once_skips_missing_and_invalid_prices() -> None:
 
 
 @pytest.mark.asyncio
+async def test_record_once_skips_non_finite_prices() -> None:
+    # NaN comparisons raise InvalidOperation and Infinity is not a usable
+    # price; both must be skipped like any other invalid quote instead of
+    # aborting the poll or persisting garbage.
+    broker = BatchBroker(
+        {
+            "BTC-USD": {"price": "NaN"},
+            "ETH-USD": {"price": "Infinity"},
+        }
+    )
+    recorder, tick_store, event_store = _recorder(broker)
+
+    recorded = await recorder.record_once()
+
+    assert recorded == 0
+    assert event_store.stored == []
+    assert tick_store.price_history == {}
+
+
+@pytest.mark.asyncio
 async def test_record_once_survives_broker_errors_per_symbol() -> None:
     class FlakyBroker:
         def get_ticker(self, symbol: str) -> dict[str, Any]:
