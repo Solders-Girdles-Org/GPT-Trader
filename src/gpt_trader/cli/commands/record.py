@@ -9,6 +9,7 @@ from types import FrameType
 from typing import Any
 
 from gpt_trader.app.config.validation import ConfigValidationError
+from gpt_trader.app.container import clear_application_container
 from gpt_trader.cli import options, services
 from gpt_trader.features.recorder import (
     MarketDataRecorder,
@@ -63,43 +64,47 @@ def execute(args: Namespace) -> int:
         logger.error(str(exc))
         return 1
 
-    broker = container.broker
-    if broker is None:
-        logger.error("No broker available for market-data reads")
-        return 1
+    try:
+        broker = container.broker
+        if broker is None:
+            logger.error("No broker available for market-data reads")
+            return 1
 
-    bot_id = derive_recorder_bot_id(config.profile)
-    tick_store = PriceTickStore(
-        event_store=container.event_store,
-        symbols=list(config.symbols),
-        bot_id=bot_id,
-    )
-    recorder = MarketDataRecorder(
-        broker=broker,
-        tick_store=tick_store,
-        config=MarketDataRecorderConfig(
-            symbols=tuple(config.symbols),
-            interval_seconds=float(config.interval),
-        ),
-    )
-
-    if args.once:
-        recorded = asyncio.run(recorder.record_once())
-        logger.info(
-            "Recorded one poll",
-            recorded_ticks=recorded,
+        bot_id = derive_recorder_bot_id(config.profile)
+        tick_store = PriceTickStore(
+            event_store=container.event_store,
             symbols=list(config.symbols),
             bot_id=bot_id,
-            operation="record",
         )
-        return 0 if recorded > 0 else 1
+        recorder = MarketDataRecorder(
+            broker=broker,
+            tick_store=tick_store,
+            config=MarketDataRecorderConfig(
+                symbols=tuple(config.symbols),
+                interval_seconds=float(config.interval),
+            ),
+        )
 
-    def signal_handler(sig: int, frame: FrameType | None) -> None:  # pragma: no cover - signal
-        logger.info(f"Signal {sig} received, stopping recorder...", operation="record")
-        recorder.stop()
+        if args.once:
+            recorded = asyncio.run(recorder.record_once())
+            logger.info(
+                "Recorded one poll",
+                recorded_ticks=recorded,
+                symbols=list(config.symbols),
+                bot_id=bot_id,
+                operation="record",
+            )
+            return 0 if recorded > 0 else 1
 
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+        def signal_handler(sig: int, frame: FrameType | None) -> None:  # pragma: no cover - signal
+            logger.info(f"Signal {sig} received, stopping recorder...", operation="record")
+            recorder.stop()
 
-    asyncio.run(recorder.run())
-    return 0
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+
+        asyncio.run(recorder.run())
+        return 0
+    finally:
+        # Clear container registry to prevent leaks between runs
+        clear_application_container()
