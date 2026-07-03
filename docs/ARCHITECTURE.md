@@ -48,7 +48,7 @@ src/gpt_trader/features/
 ├── brokerages/          # Exchange integrations
 ├── data/                # Data acquisition helpers
 ├── idea_execution/      # Paper-only execution lane for APPROVED trade ideas
-├── intelligence/        # Strategy intelligence (sizing, regime, ensemble)
+├── intelligence/        # Strategy intelligence (sizing, regime)
 │   └── sizing/          # Kelly criterion position sizing
 ├── live_trade/          # Production trading engine
 ├── optimize/            # Parameter optimisation experiments
