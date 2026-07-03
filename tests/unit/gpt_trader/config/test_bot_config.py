@@ -10,12 +10,14 @@ import pytest
 class TestBotConfigEnvAliasing:
     """Tests for RISK_* prefixed environment variable support."""
 
-    def test_risk_max_leverage_with_prefix(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_risk_max_leverage_env_retired(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # RISK_MAX_LEVERAGE fed the retired BotRiskConfig.max_leverage alias
+        # (#1120 stage 3); leverage caps are runtime RiskConfig enforcement.
         monkeypatch.setenv("RISK_MAX_LEVERAGE", "7")
         from gpt_trader.app.config.bot_config import BotConfig
 
         config = BotConfig.from_env()
-        assert config.risk.max_leverage == 7
+        assert not hasattr(config.risk, "max_leverage")
 
     def test_risk_position_fraction_from_pct_per_symbol(
         self, monkeypatch: pytest.MonkeyPatch
@@ -26,12 +28,14 @@ class TestBotConfigEnvAliasing:
         config = BotConfig.from_env()
         assert config.risk.position_fraction == Decimal("0.15")
 
-    def test_risk_daily_loss_limit_pct(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_risk_daily_loss_limit_pct_env_retired(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # RISK_DAILY_LOSS_LIMIT_PCT fed the retired BotRiskConfig alias
+        # (#1120 stage 3); the breaker derives from the RiskBudget.
         monkeypatch.setenv("RISK_DAILY_LOSS_LIMIT_PCT", "0.08")
         from gpt_trader.app.config.bot_config import BotConfig
 
         config = BotConfig.from_env()
-        assert config.risk.daily_loss_limit_pct == 0.08
+        assert not hasattr(config.risk, "daily_loss_limit_pct")
 
     def test_trading_symbols_alias(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("TRADING_SYMBOLS", "BTC-USD,SOL-USD")
@@ -141,7 +145,7 @@ class TestProfileStrategyHydration:
 
         assert "risk" in kwargs
         assert isinstance(kwargs["risk"], BotRiskConfig)
-        assert kwargs["risk"].daily_loss_limit_pct > 0
+        assert kwargs["risk"].position_fraction > 0
 
     def test_paper_profile_exists(self) -> None:
         from gpt_trader.config.types import Profile
@@ -157,13 +161,15 @@ class TestProfileStrategyHydration:
         schema = loader.load(Profile.PAPER)
         assert schema.profile_name == "paper"
 
-    def test_profile_daily_loss_limit_pct_from_yaml(self) -> None:
+    def test_profile_schema_has_no_daily_loss_limit(self) -> None:
+        # Appetite fields left the profile schema (#1120 stage 3); the
+        # runtime breaker derives from the RiskBudget instead.
         from gpt_trader.app.config.profile_loader import ProfileLoader
         from gpt_trader.config.types import Profile
 
         loader = ProfileLoader()
         schema = loader.load(Profile.PAPER)
-        assert schema.risk.daily_loss_limit_pct == 0.05
+        assert not hasattr(schema.risk, "daily_loss_limit_pct")
 
 
 class TestReduceOnlyEnforcement:

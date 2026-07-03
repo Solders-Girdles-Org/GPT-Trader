@@ -234,10 +234,7 @@ class TestRiskBudgetRuntimeSeedGate:
     ) -> None:
         monkeypatch.setenv("GPT_TRADER_IDEAS_ROOT", str(tmp_path))
         # No explicit gate value: seeding must engage by default.
-        config = BotConfig(
-            symbols=["BTC-USD"],
-            enable_shorts=True,
-        )
+        config = BotConfig(symbols=["BTC-USD"])
         config.strategy.enable_shorts = True
 
         container = ApplicationContainer(config)
@@ -248,6 +245,6 @@ class TestRiskBudgetRuntimeSeedGate:
         # whose permissions forbid naked shorts.
         assert seed.budget_version == 1
         assert seed.budget_source == "default"
-        assert config.enable_shorts is False
         assert config.strategy.enable_shorts is False
+        assert config.active_enable_shorts is False
         assert container._risk_validation._risk_budget_seed is seed

@@ -83,17 +83,14 @@ def apply_shorts_permission(config: BotConfig, seed: RiskBudgetRuntimeSeed) -> N
     """Gate shorts by the budget's ``allow_naked_shorts`` permission.
 
     The permission only restricts: when the budget forbids naked shorts, the
-    top-level flag and the per-strategy flags (the canonical source behind
-    ``BotConfig.active_enable_shorts``) are all forced off so the factory and
-    the runtime agree. When the budget allows shorts, strategy preferences are
+    per-strategy flags (the canonical source behind
+    ``BotConfig.active_enable_shorts``) are forced off so the factory and the
+    runtime agree. When the budget allows shorts, strategy preferences are
     left untouched — a permission is not a mandate.
     """
     if seed.allow_naked_shorts:
         return
-    config.enable_shorts = False
-    if hasattr(config.strategy, "enable_shorts"):
-        config.strategy.enable_shorts = False
-    config.mean_reversion.enable_shorts = False
+    config.set_enable_shorts(False)
 
 
 __all__ = [

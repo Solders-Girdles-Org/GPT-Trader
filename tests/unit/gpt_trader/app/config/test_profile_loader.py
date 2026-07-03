@@ -39,7 +39,6 @@ trading:
   mode: "normal"
   interval: 30
 risk_management:
-  max_leverage: 2
   max_position_size: 5000
   position_fraction: 0.05
   enable_shorts: true
@@ -59,7 +58,6 @@ monitoring:
             assert schema.profile_name == "test"
             assert schema.trading.symbols == ["BTC-USD"]
             assert schema.trading.interval == 30
-            assert schema.risk.max_leverage == 2
             assert schema.risk.max_position_size == Decimal("5000")
             assert schema.risk.enable_shorts is True
             assert schema.execution.time_in_force == "IOC"
@@ -164,7 +162,7 @@ class TestProfileSchema:
         assert schema.profile_name == "minimal"
         # Should have defaults for everything else
         assert schema.trading.symbols == ["BTC-USD"]
-        assert schema.risk.max_leverage == 1
+        assert schema.risk.max_position_size == Decimal("10000")
 
     def test_from_yaml_full(self) -> None:
         """Test creating ProfileSchema from complete YAML data."""
@@ -183,10 +181,11 @@ class TestProfileSchema:
                 "long_ma_period": 50,
             },
             "risk_management": {
-                "max_leverage": 5,
                 "max_position_size": 100000,
                 "position_fraction": 0.2,
                 "enable_shorts": True,
+                # Retired appetite keys are ignored by the parser (#1120):
+                "max_leverage": 5,
                 "daily_loss_limit_pct": 0.1,
             },
             "execution": {
@@ -213,8 +212,8 @@ class TestProfileSchema:
         assert schema.trading.mode == "reduce_only"
         assert schema.strategy.type == "mean_reversion"
         assert schema.strategy.short_ma_period == 10
-        assert schema.risk.max_leverage == 5
-        assert schema.risk.daily_loss_limit_pct == 0.1
+        assert schema.risk.max_position_size == Decimal("100000")
+        assert schema.risk.enable_shorts is True
         assert schema.execution.time_in_force == "FOK"
         assert schema.session.start_time == time(9, 0)
         assert schema.session.end_time == time(17, 0)

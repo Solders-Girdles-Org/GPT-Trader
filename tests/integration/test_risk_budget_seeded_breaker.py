@@ -89,7 +89,6 @@ class TestSeededBreakerLoosenedBand:
         # allow_futures_leverage=False clamps the effective CFM cap to 1x.
         assert risk.config.cfm_max_leverage == 1
         # allow_naked_shorts=False forces shorts off end to end.
-        assert seeded_container.config.enable_shorts is False
         assert seeded_container.config.active_enable_shorts is False
         # The seeded budget version is attributable in startup telemetry.
         events = seeded_container.event_store.get_recent_by_type(RISK_BUDGET_SEED_EVENT_TYPE)

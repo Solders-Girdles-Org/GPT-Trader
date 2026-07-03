@@ -9,7 +9,7 @@
     "risk": {
       "type": "string",
       "description": "Type: <class 'gpt_trader.app.config.bot_config.BotRiskConfig'>",
-      "default": "BotRiskConfig(target_leverage=1, max_leverage=5, position_fraction=Decimal('0.1'), max_position_size=Decimal('1000'), stop_loss_pct=Decimal('0.02'), take_profit_pct=Decimal('0.04'), trailing_stop_pct=Decimal('0.01'), max_drawdown_pct=None, reduce_only_threshold=None, dry_run_equity_usd=None, daily_loss_limit_pct=0.05)"
+      "default": "BotRiskConfig(target_leverage=1, position_fraction=Decimal('0.1'), max_position_size=Decimal('1000'), stop_loss_pct=Decimal('0.02'), take_profit_pct=Decimal('0.04'), trailing_stop_pct=Decimal('0.01'), max_drawdown_pct=None, reduce_only_threshold=None, dry_run_equity_usd=None)"
     },
     "mean_reversion": {
       "type": "string",
@@ -57,11 +57,6 @@
       "type": "boolean",
       "default": false,
       "description": "Enable perpetual futures trading"
-    },
-    "enable_shorts": {
-      "type": "boolean",
-      "default": false,
-      "description": "Allow short positions"
     },
     "reduce_only_mode": {
       "type": "boolean",
@@ -240,5 +235,5 @@
       "description": "Additional metadata key-value pairs"
     }
   },
-  "description": "Bot configuration with nested strategy and risk configs.\n\n    Supports nested access:\n    - Strategy: config.strategy.short_ma_period, config.strategy.long_ma_period, etc.\n    - Risk: config.risk.max_leverage, config.risk.position_fraction, etc."
+  "description": "Bot configuration with nested strategy and risk configs.\n\n    Supports nested access:\n    - Strategy: config.strategy.short_ma_period, config.strategy.long_ma_period, etc.\n    - Risk: config.risk.position_fraction, config.risk.stop_loss_pct, etc."
 }

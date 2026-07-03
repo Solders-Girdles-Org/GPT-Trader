@@ -488,10 +488,13 @@ universe: [BTC, ETH, SOL, XRP, LTC, ADA, DOGE, BCH, AVAX, LINK]
 profile: canary
 broker: coinbase
 positions: 0.01 BTC max
-daily_loss_limit_pct: 1%
 trading_window: 14:00-15:00 UTC
 circuit_breakers: multiple
 ```
+
+> Risk appetite (daily loss limit, exposure cap) is not a profile setting: it
+> derives from the active RiskBudget at engine startup
+> (`docs/decisions/canonical-risk-limit-vocabulary.md`).
 
 ### Production Profile
 ```yaml

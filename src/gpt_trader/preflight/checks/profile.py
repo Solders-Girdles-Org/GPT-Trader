@@ -30,11 +30,11 @@ def check_profile_configuration(checker: PreflightCheck) -> bool:
                 profile_config = yaml.safe_load(handle)
 
             if checker.profile == "canary":
+                # Appetite keys (daily loss, leverage) are no longer profile
+                # settings: they derive from the RiskBudget (#1120 stage 3).
                 expected = {
                     "trading.mode": "reduce_only",
                     "trading.position_sizing.max_position_size": 0.01,
-                    "risk_management.daily_loss_limit_pct": 0.01,
-                    "risk_management.max_leverage": 1.0,
                 }
 
                 for key, expected_value in expected.items():
@@ -68,7 +68,7 @@ def check_profile_configuration(checker: PreflightCheck) -> bool:
         details=payload,
     )
     if checker.profile == "canary":
-        checker.log_info("Canary defaults: 0.01 BTC max, 1% daily loss, reduce-only")
+        checker.log_info("Canary defaults: 0.01 BTC max, reduce-only")
     elif checker.profile == "prod":
         checker.log_warning("Production profile - ensure you've tested with canary first!")
 

@@ -12,7 +12,7 @@
       ],
       "code_references": [
         {
-          "line": 123,
+          "line": 121,
           "path": "src/gpt_trader/app/config/profile_loader.py",
           "reader": "os.getenv"
         }
@@ -28,7 +28,7 @@
       ],
       "code_references": [
         {
-          "line": 469,
+          "line": 452,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "os.getenv"
         }
@@ -51,7 +51,7 @@
       ],
       "code_references": [
         {
-          "line": 457,
+          "line": 440,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_bool_env"
         }
@@ -67,7 +67,7 @@
       ],
       "code_references": [
         {
-          "line": 393,
+          "line": 376,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_bool_env"
         }
@@ -90,7 +90,7 @@
       ],
       "code_references": [
         {
-          "line": 475,
+          "line": 458,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "os.getenv"
         }
@@ -123,7 +123,7 @@
       ],
       "code_references": [
         {
-          "line": 473,
+          "line": 456,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_int_env"
         },
@@ -176,7 +176,7 @@
       ],
       "code_references": [
         {
-          "line": 474,
+          "line": 457,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_list_env"
         }
@@ -208,7 +208,7 @@
       ],
       "code_references": [
         {
-          "line": 468,
+          "line": 451,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "os.getenv"
         }
@@ -318,7 +318,7 @@
       ],
       "code_references": [
         {
-          "line": 462,
+          "line": 445,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "os.getenv"
         }
@@ -341,7 +341,7 @@
       ],
       "code_references": [
         {
-          "line": 466,
+          "line": 449,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "os.getenv"
         }
@@ -357,12 +357,12 @@
       ],
       "code_references": [
         {
-          "line": 394,
+          "line": 377,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "os.getenv"
         },
         {
-          "line": 394,
+          "line": 377,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_bool_env"
         }
@@ -457,7 +457,7 @@
       ],
       "code_references": [
         {
-          "line": 467,
+          "line": 450,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_bool_env"
         },
@@ -616,7 +616,7 @@
       ],
       "code_references": [
         {
-          "line": 463,
+          "line": 446,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_bool_env"
         }
@@ -680,7 +680,7 @@
       ],
       "code_references": [
         {
-          "line": 452,
+          "line": 435,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_bool_env"
         }
@@ -726,7 +726,7 @@
       ],
       "code_references": [
         {
-          "line": 486,
+          "line": 469,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "os.getenv"
         }
@@ -744,7 +744,7 @@
       ],
       "code_references": [
         {
-          "line": 484,
+          "line": 467,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "os.getenv"
         },
@@ -1439,7 +1439,7 @@
       ],
       "code_references": [
         {
-          "line": 120,
+          "line": 118,
           "path": "src/gpt_trader/app/config/profile_loader.py",
           "reader": "os.getenv"
         }
@@ -1553,7 +1553,7 @@
       ],
       "code_references": [
         {
-          "line": 483,
+          "line": 466,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "os.getenv"
         },
@@ -1778,7 +1778,7 @@
       ],
       "code_references": [
         {
-          "line": 424,
+          "line": 407,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "_health_float"
         }
@@ -1794,7 +1794,7 @@
       ],
       "code_references": [
         {
-          "line": 423,
+          "line": 406,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "_health_float"
         }
@@ -1810,7 +1810,7 @@
       ],
       "code_references": [
         {
-          "line": 434,
+          "line": 417,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "_health_int"
         }
@@ -1826,7 +1826,7 @@
       ],
       "code_references": [
         {
-          "line": 433,
+          "line": 416,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "_health_int"
         }
@@ -1842,7 +1842,7 @@
       ],
       "code_references": [
         {
-          "line": 430,
+          "line": 413,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "_health_float"
         }
@@ -1858,7 +1858,7 @@
       ],
       "code_references": [
         {
-          "line": 427,
+          "line": 410,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "_health_float"
         }
@@ -1874,7 +1874,7 @@
       ],
       "code_references": [
         {
-          "line": 436,
+          "line": 419,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "_health_int"
         }
@@ -1890,7 +1890,7 @@
       ],
       "code_references": [
         {
-          "line": 435,
+          "line": 418,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "_health_int"
         }
@@ -1906,7 +1906,7 @@
       ],
       "code_references": [
         {
-          "line": 420,
+          "line": 403,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "_health_float"
         }
@@ -1922,7 +1922,7 @@
       ],
       "code_references": [
         {
-          "line": 419,
+          "line": 402,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "_health_float"
         }
@@ -1938,7 +1938,7 @@
       ],
       "code_references": [
         {
-          "line": 422,
+          "line": 405,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "_health_float"
         }
@@ -1954,7 +1954,7 @@
       ],
       "code_references": [
         {
-          "line": 421,
+          "line": 404,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "_health_float"
         }
@@ -1970,7 +1970,7 @@
       ],
       "code_references": [
         {
-          "line": 426,
+          "line": 409,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "_health_float"
         }
@@ -1986,7 +1986,7 @@
       ],
       "code_references": [
         {
-          "line": 425,
+          "line": 408,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "_health_float"
         }
@@ -2018,7 +2018,7 @@
       ],
       "code_references": [
         {
-          "line": 449,
+          "line": 432,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_int_env"
         }
@@ -2057,7 +2057,7 @@
       ],
       "code_references": [
         {
-          "line": 451,
+          "line": 434,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "os.getenv"
         }
@@ -2080,7 +2080,7 @@
       ],
       "code_references": [
         {
-          "line": 356,
+          "line": 346,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_int_env"
         }
@@ -2096,7 +2096,7 @@
       ],
       "code_references": [
         {
-          "line": 494,
+          "line": 477,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_bool_env"
         }
@@ -2119,7 +2119,7 @@
       ],
       "code_references": [
         {
-          "line": 488,
+          "line": 471,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_bool_env"
         }
@@ -2142,7 +2142,7 @@
       ],
       "code_references": [
         {
-          "line": 489,
+          "line": 472,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_bool_env"
         }
@@ -2190,7 +2190,7 @@
       ],
       "code_references": [
         {
-          "line": 495,
+          "line": 478,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_bool_env"
         }
@@ -2206,7 +2206,7 @@
       ],
       "code_references": [
         {
-          "line": 496,
+          "line": 479,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_bool_env"
         }
@@ -2292,7 +2292,7 @@
       ],
       "code_references": [
         {
-          "line": 476,
+          "line": 459,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_bool_env"
         }
@@ -2356,7 +2356,7 @@
       ],
       "code_references": [
         {
-          "line": 478,
+          "line": 461,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_bool_env"
         }
@@ -2379,7 +2379,7 @@
       ],
       "code_references": [
         {
-          "line": 481,
+          "line": 464,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_decimal_env"
         }
@@ -2395,7 +2395,7 @@
       ],
       "code_references": [
         {
-          "line": 479,
+          "line": 462,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_bool_env"
         }
@@ -2427,7 +2427,7 @@
       ],
       "code_references": [
         {
-          "line": 477,
+          "line": 460,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_int_env"
         }
@@ -2558,7 +2558,7 @@
       ],
       "code_references": [
         {
-          "line": 485,
+          "line": 468,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "os.getenv"
         }
@@ -2570,15 +2570,9 @@
     },
     {
       "code_paths": [
-        "src/gpt_trader/app/config/bot_config.py",
         "src/gpt_trader/features/live_trade/risk/config.py"
       ],
       "code_references": [
-        {
-          "line": 387,
-          "path": "src/gpt_trader/app/config/bot_config.py",
-          "reader": "_risk_float"
-        },
         {
           "line": 151,
           "path": "src/gpt_trader/features/live_trade/risk/config.py",
@@ -2714,15 +2708,9 @@
     },
     {
       "code_paths": [
-        "src/gpt_trader/app/config/bot_config.py",
         "src/gpt_trader/features/live_trade/risk/config.py"
       ],
       "code_references": [
-        {
-          "line": 381,
-          "path": "src/gpt_trader/app/config/bot_config.py",
-          "reader": "_risk_int"
-        },
         {
           "line": 150,
           "path": "src/gpt_trader/features/live_trade/risk/config.py",
@@ -2748,7 +2736,7 @@
       ],
       "code_references": [
         {
-          "line": 377,
+          "line": 363,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "os.getenv"
         },
@@ -2776,7 +2764,7 @@
       ],
       "code_references": [
         {
-          "line": 380,
+          "line": 366,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "_risk_decimal"
         }
@@ -2832,7 +2820,7 @@
       ],
       "code_references": [
         {
-          "line": 493,
+          "line": 476,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_bool_env"
         },
@@ -2922,7 +2910,7 @@
       ],
       "code_references": [
         {
-          "line": 383,
+          "line": 368,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "_risk_decimal"
         }
@@ -2938,7 +2926,7 @@
       ],
       "code_references": [
         {
-          "line": 384,
+          "line": 369,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "_risk_decimal"
         }
@@ -2954,7 +2942,7 @@
       ],
       "code_references": [
         {
-          "line": 382,
+          "line": 367,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "_risk_int"
         }
@@ -3079,7 +3067,7 @@
       ],
       "code_references": [
         {
-          "line": 355,
+          "line": 345,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_int_env"
         }
@@ -3095,7 +3083,7 @@
       ],
       "code_references": [
         {
-          "line": 487,
+          "line": 470,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_bool_env"
         }
@@ -3111,7 +3099,7 @@
       ],
       "code_references": [
         {
-          "line": 456,
+          "line": 439,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_bool_env"
         }
@@ -3134,7 +3122,7 @@
       ],
       "code_references": [
         {
-          "line": 454,
+          "line": 437,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "os.getenv"
         }
@@ -3157,7 +3145,7 @@
       ],
       "code_references": [
         {
-          "line": 455,
+          "line": 438,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_int_env"
         }
@@ -3182,7 +3170,7 @@
       ],
       "code_references": [
         {
-          "line": 471,
+          "line": 454,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "parse_list_env"
         },
@@ -3216,7 +3204,7 @@
       ],
       "code_references": [
         {
-          "line": 439,
+          "line": 422,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "os.getenv"
         },
@@ -3290,7 +3278,7 @@
       ],
       "code_references": [
         {
-          "line": 453,
+          "line": 436,
           "path": "src/gpt_trader/app/config/bot_config.py",
           "reader": "os.getenv"
         }
