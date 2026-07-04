@@ -315,9 +315,9 @@ uv run local-ci
 
 (`make ci-required` is a thin alias for the same command.) For quick iteration
 the commands below cover the most common failures, but they are **not** a full
-substitute for `uv run local-ci` (which also runs docs audits,
-`agent-regenerate --verify`, test guardrails, and the
-property/contract/integration suites):
+substitute for `uv run local-ci` (which also runs docs audits, test
+guardrails, the property/contract/integration suites, and — as a non-blocking
+advisory warning — `agent-regenerate --verify`):
 
 ```bash
 uv run ruff check .
