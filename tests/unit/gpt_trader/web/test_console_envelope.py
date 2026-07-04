@@ -148,6 +148,22 @@ def test_stale_form_version_is_refused_and_re_renders_current_levers(
     assert service.budget_log.history()[-1].budget.version == 2
 
 
+def test_stale_form_with_another_validation_error_still_conflicts_first(
+    service: TradeIdeaService, client: TestClient
+) -> None:
+    # A stale submission must hit the conflict path before any other check:
+    # a reason (or parse) error would echo the stale levers back under the
+    # fresh hidden base_version, arming the very revert the guard prevents.
+    stale = _lever_form(service, max_daily_loss_pct="8", reason="  ")
+    attest_account_equity(service, equity=Decimal("20000"))  # budget moves to v2
+
+    response = client.post("/envelope/budget", data=stale, follow_redirects=False)
+
+    assert response.status_code == 409
+    assert 'name="max_daily_loss_pct" value="10"' in response.text
+    assert service.budget_log.history()[-1].budget.version == 2
+
+
 def test_non_numeric_lever_re_renders_with_a_field_named_error(
     service: TradeIdeaService, client: TestClient
 ) -> None:

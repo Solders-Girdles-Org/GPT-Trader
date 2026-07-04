@@ -437,11 +437,14 @@ def create_app(
                 status_code=409,
             )
 
+        # The staleness guard runs before any other validation: every other
+        # error path echoes the submitted levers back under a fresh hidden
+        # base_version, which must never happen for a stale submission.
+        if base_version != resolved_service.peek_budget().version:
+            return _version_conflict()
         cleaned_reason = reason.strip()
         if not cleaned_reason:
             return _form_error("A reason is required for every budget version.")
-        if base_version != resolved_service.peek_budget().version:
-            return _version_conflict()
         try:
             candidate = _budget_from_form(
                 base_version=base_version,
