@@ -269,3 +269,43 @@ def test_diff_directories_ignores_git_ignored_generated_output_absent_from_commi
     monkeypatch.setattr(regenerate_all, "PROJECT_ROOT", repo_root)
 
     assert regenerate_all._diff_directories(committed_dir, generated_dir) is None
+
+
+def test_diff_directories_tolerates_absent_committed_dir_when_all_generated_ignored(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A resource whose committed surface is entirely gitignored optional_files
+    # (testing, after #1130) has NO directory on a fresh checkout. Regenerated
+    # files that are all git-ignored must not read as staleness; an unignored
+    # generated file still must.
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    _init_git_repo(repo_root)
+    (repo_root / ".gitignore").write_text(
+        "var/agents/testing/index.json\nvar/agents/testing/markers.json\n",
+        encoding="utf-8",
+    )
+    subprocess.run(
+        ["git", "add", ".gitignore"],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    committed_dir = repo_root / "var" / "agents" / "testing"
+    generated_dir = tmp_path / "generated" / "testing"
+    generated_dir.mkdir(parents=True)
+    (generated_dir / "index.json").write_text('{"summary": 1}\n', encoding="utf-8")
+    (generated_dir / "markers.json").write_text('{"markers": {}}\n', encoding="utf-8")
+
+    monkeypatch.setattr(regenerate_all, "PROJECT_ROOT", repo_root)
+
+    assert regenerate_all._diff_directories(committed_dir, generated_dir) is None
+
+    # An unignored generated file keeps the missing-committed-dir failure.
+    (generated_dir / "new_report.json").write_text("{}\n", encoding="utf-8")
+    diff_text = regenerate_all._diff_directories(committed_dir, generated_dir)
+    assert diff_text is not None
+    assert "Committed output missing" in diff_text

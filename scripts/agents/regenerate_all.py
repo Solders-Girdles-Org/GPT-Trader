@@ -244,6 +244,13 @@ def _diff_directories(committed_dir: Path, generated_dir: Path) -> str | None:
             f"{committed_dir.as_posix()})."
         )
     if not committed_dir.exists():
+        # A resource whose committed surface is entirely gitignored
+        # optional_files (e.g. testing, #1130) has no directory on a fresh
+        # checkout; regenerated files that are all ignored are not staleness.
+        generated_relatives = _relative_files(generated_dir)
+        ignored_relatives = _git_ignored_relatives(committed_dir, generated_relatives)
+        if generated_relatives and generated_relatives == ignored_relatives:
+            return None
         return (
             f"Committed output missing at {committed_dir.as_posix()} (generator wrote to "
             f"{generated_dir.as_posix()})."
