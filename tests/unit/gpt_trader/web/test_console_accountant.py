@@ -90,6 +90,15 @@ def test_accountant_renders_without_any_attestation(client: TestClient) -> None:
     assert "incomplete:" not in response.text
 
 
+def test_console_reads_do_not_seed_the_budget_log(tmp_path: Path, client: TestClient) -> None:
+    # Rendering any console page on a fresh root must not create durable
+    # artifacts; the budget log is seeded by decision paths, never by a GET.
+    client.get("/accountant")
+    client.get("/")
+
+    assert not (tmp_path / "risk_budget.jsonl").exists()
+
+
 def test_filled_trade_spanning_a_reattestation_keeps_its_realized_pnl(tmp_path: Path) -> None:
     # Fill at T1, re-attest while the position is still open at T2, close and
     # attribute at T3: the FILLED audit event is the entry fill, not the

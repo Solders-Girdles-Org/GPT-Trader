@@ -561,7 +561,9 @@ class TradeIdeaService:
     def budget_headroom(self, *, now: datetime | None = None) -> dict[str, object]:
         """Return read-only aggregate budget headroom for operators and agents."""
         evaluation_time = now or self._now()
-        budget = self.current_budget()
+        # Non-mutating read: rendering headroom (console pages, budget show)
+        # must not seed risk_budget.jsonl; decision paths seed on first use.
+        budget = self.peek_budget()
         context = self.approval_budget_context(now=evaluation_time)
         account_equity = context.account_equity_snapshot
         daily_loss_used_pct = context.same_day_realized_loss_pct + context.open_approved_at_risk_pct
