@@ -34,6 +34,7 @@ from gpt_trader.features.idea_execution.cycle import (
     SnapshotProvider,
 )
 from gpt_trader.features.idea_execution.executor import (
+    AUTO_EXECUTION_ENV_VAR,
     DEFAULT_PAPER_EXECUTION_ACTOR_ID,
     PAPER_BROKER_TYPES,
     PAPER_EXECUTION_VENUE,
@@ -42,9 +43,12 @@ from gpt_trader.features.idea_execution.executor import (
     PaperExecutionResult,
     PaperIdeaExecutor,
     PaperOnlyLaneError,
+    paper_auto_execution_gate_evidence,
+    resolve_auto_execution_enabled,
 )
 
 __all__ = [
+    "AUTO_EXECUTION_ENV_VAR",
     "DEFAULT_CYCLE_ACTOR_ID",
     "DEFAULT_PAPER_EXECUTION_ACTOR_ID",
     "PAPER_BROKER_TYPES",
@@ -60,4 +64,6 @@ __all__ = [
     "PaperOnlyLaneError",
     "ProposerTurn",
     "SnapshotProvider",
+    "paper_auto_execution_gate_evidence",
+    "resolve_auto_execution_enabled",
 ]

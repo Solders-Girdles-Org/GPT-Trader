@@ -438,6 +438,10 @@ class TradeIdeaService:
             source=AUTONOMY_SOURCE_LOG,
         )
 
+    def resolve_execution_autonomy(self, *, now: datetime | None = None) -> AutonomyResolution:
+        """Resolve autonomy at an execution decision boundary, applying the ratchet."""
+        return self._decision_autonomy(now=now or self._now())
+
     @staticmethod
     def _autonomy_resolution_violations(resolution: AutonomyResolution) -> list[str]:
         if resolution.source != AUTONOMY_SOURCE_FAIL_CLOSED:
@@ -1011,6 +1015,7 @@ class TradeIdeaService:
         external_order_id: str = "",
         reason: str = "Approved ticket submitted",
         actor_type: ActorType = ActorType.SYSTEM,
+        evidence: tuple[str, ...] = (),
     ) -> TradeIdeaView:
         venue = _validate_audit_venue(venue)
         idea = self._require_idea(decision_id)
@@ -1021,6 +1026,7 @@ class TradeIdeaService:
             actor_type=actor_type,
             actor_id=actor_id,
             reason=reason,
+            evidence=evidence,
             venue=venue,
             external_order_id=external_order_id,
         )
