@@ -62,3 +62,9 @@ suppressions:
   - doc: README.md
     item: "--all-files"
     reason: pre-commit flag quoted in prose
+  - doc: docs/decisions/stop-committing-high-churn-agent-inventories.md
+    item: var/agents/testing/index.json
+    reason: decommitted generated inventory cited as the subject of the decision record
+  - doc: docs/decisions/stop-committing-high-churn-agent-inventories.md
+    item: var/agents/testing/markers.json
+    reason: decommitted generated inventory cited as the subject of the decision record

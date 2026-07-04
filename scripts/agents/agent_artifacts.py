@@ -175,16 +175,12 @@ def _resource_file_names(
     report: ValidationReport,
     *,
     key: str,
-    required: bool,
 ) -> list[str]:
     raw_files = resource_payload.get(key)
-    if raw_files is None and not required:
+    if raw_files is None:
         return []
-    if not isinstance(raw_files, list) or (required and not raw_files):
-        if required:
-            report.error(f"Resource {resource_name!r} must list generated files")
-        else:
-            report.error(f"Resource {resource_name!r} optional_files must be a list")
+    if not isinstance(raw_files, list):
+        report.error(f"Resource {resource_name!r} {key} must be a list")
         return []
 
     files: list[str] = []
@@ -206,20 +202,15 @@ def _resource_files(resources: dict[str, Any], report: ValidationReport) -> set[
         if not isinstance(resource_path, str) or not resource_path.strip():
             report.error(f"Resource {resource_name!r} is missing a non-empty path")
             continue
-        files = _resource_file_names(
-            resource_name,
-            resource_payload,
-            report,
-            key="files",
-            required=True,
-        )
+        files = _resource_file_names(resource_name, resource_payload, report, key="files")
         optional_files = _resource_file_names(
             resource_name,
             resource_payload,
             report,
             key="optional_files",
-            required=False,
         )
+        if not files and not optional_files:
+            report.error(f"Resource {resource_name!r} must list generated files")
         for file_name in [*files, *optional_files]:
             indexed_files.add(PurePosixPath(resource_path, file_name).as_posix())
     return indexed_files
@@ -271,26 +262,26 @@ def _validate_root_index(source_dir: Path, report: ValidationReport) -> dict[str
             report.error(f"Resource {resource_name!r} is missing path")
             continue
 
-        artifact_dir = source_dir / resource_path
-        if not artifact_dir.is_dir():
-            report.error(f"Resource {resource_name!r} directory is missing: {artifact_dir}")
-        elif not any(child.is_file() for child in artifact_dir.rglob("*")):
-            report.error(f"Resource {resource_name!r} directory is empty: {artifact_dir}")
-
-        required_files = _resource_file_names(
-            resource_name,
-            resource_payload,
-            report,
-            key="files",
-            required=True,
-        )
+        required_files = _resource_file_names(resource_name, resource_payload, report, key="files")
         optional_files = _resource_file_names(
             resource_name,
             resource_payload,
             report,
             key="optional_files",
-            required=False,
         )
+        if not required_files and not optional_files:
+            report.error(f"Resource {resource_name!r} must list generated files")
+
+        # A resource whose committed surface is entirely optional_files (e.g.
+        # testing) legitimately has no directory on a fresh checkout; only
+        # require the directory when committed files are expected in it.
+        artifact_dir = source_dir / resource_path
+        if required_files:
+            if not artifact_dir.is_dir():
+                report.error(f"Resource {resource_name!r} directory is missing: {artifact_dir}")
+            elif not any(child.is_file() for child in artifact_dir.rglob("*")):
+                report.error(f"Resource {resource_name!r} directory is empty: {artifact_dir}")
+
         for file_name in required_files:
             artifact_file = artifact_dir / file_name
             if not artifact_file.is_file():
@@ -357,12 +348,17 @@ def _validate_expected_content(source_dir: Path, report: ValidationReport) -> No
     ):
         report.error("configuration/environment_variables.json must include variables")
 
-    testing_index = _json_mapping(source_dir / "testing" / "index.json", report)
-    testing_summary = testing_index.get("summary")
-    if not isinstance(testing_summary, dict) or not _positive_number(
-        testing_summary.get("total_tests")
-    ):
-        report.error("testing/index.json must report a positive total_tests value")
+    # testing/* inventories are gitignored optional_files (regenerated on
+    # demand); only validate the content when the file is present, e.g. right
+    # after `uv run agent-regenerate` or inside the refresh/packaging workflow.
+    testing_index_path = source_dir / "testing" / "index.json"
+    if testing_index_path.is_file():
+        testing_index = _json_mapping(testing_index_path, report)
+        testing_summary = testing_index.get("summary")
+        if not isinstance(testing_summary, dict) or not _positive_number(
+            testing_summary.get("total_tests")
+        ):
+            report.error("testing/index.json must report a positive total_tests value")
 
     validation_index = _json_mapping(source_dir / "validation" / "index.json", report)
     validation_summary = validation_index.get("summary")
