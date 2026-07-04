@@ -220,6 +220,12 @@ class RiskBudgetLog:
                 field="path",
                 value=str(self._path),
             ) from error
+        except OSError as error:
+            raise BudgetIntegrityError(
+                f"Budget log lock is unusable: {error}",
+                field="path",
+                value=str(self._path),
+            ) from error
         try:
             current = self.current()
             expected_version = 1 if current is None else current.version + 1

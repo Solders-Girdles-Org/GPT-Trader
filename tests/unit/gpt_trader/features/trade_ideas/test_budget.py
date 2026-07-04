@@ -156,6 +156,17 @@ def test_append_times_out_when_lock_is_held(
     assert budget_log.current() is None
 
 
+def test_unusable_lock_file_raises_integrity_error(budget_log: RiskBudgetLog) -> None:
+    lock_path = Path(str(budget_log.path) + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.mkdir()
+
+    with pytest.raises(BudgetIntegrityError, match="lock is unusable"):
+        budget_log.append(build_entry(DEFAULT_RISK_BUDGET))
+
+    assert budget_log.current() is None
+
+
 def test_append_succeeds_after_lock_is_released(budget_log: RiskBudgetLog) -> None:
     budget_log.path.parent.mkdir(parents=True, exist_ok=True)
     foreign_lock = FileLock(str(budget_log.path) + ".lock")
