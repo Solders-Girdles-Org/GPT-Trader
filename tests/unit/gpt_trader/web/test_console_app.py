@@ -152,3 +152,22 @@ def test_decision_on_unknown_idea_returns_404(client: TestClient) -> None:
     response = client.post("/ideas/no-such-idea/approve", data={"reason": "x"})
 
     assert response.status_code == 404
+
+
+def test_needs_changes_idea_offers_only_reject(
+    service: TradeIdeaService, client: TestClient
+) -> None:
+    _propose_default(service)
+    service.request_changes(_DECISION_ID, actor_id="rj", reason="Tighten invalidation")
+
+    detail = client.get(f"/ideas/{_DECISION_ID}")
+    assert detail.status_code == 200
+    assert f"/ideas/{_DECISION_ID}/reject" in detail.text
+    assert f"/ideas/{_DECISION_ID}/approve" not in detail.text
+    assert f"/ideas/{_DECISION_ID}/request-changes" not in detail.text
+    assert "Awaiting resubmission" in detail.text
+
+    # The endpoint still refuses even if the form is bypassed.
+    approve = client.post(f"/ideas/{_DECISION_ID}/approve", data={"reason": "Trying anyway"})
+    assert approve.status_code == 400
+    assert service.get(_DECISION_ID).state is TradeIdeaState.NEEDS_CHANGES
