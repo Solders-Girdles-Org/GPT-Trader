@@ -1,15 +1,12 @@
 # Adopt an event-driven execution topology — rails as kernel, not workflow
 
 ---
-status: proposed
+status: accepted
 date: 2026-07-04
 deciders: rj
 supersedes:
 superseded-by:
 ---
-
-> While `status: proposed`, this is an open decision the owner has not yet made.
-> See the [decisions README](README.md) for the lifecycle.
 
 ## Context
 
@@ -97,13 +94,18 @@ closed and operating) without reopening its "no second proposer brain" rule.
 
 ## Decision
 
-*Open — fill in when the owner decides.*
+**Option A — adopt the event-driven topology.** Accepted 2026-07-04 by rj. The
+rails are a runtime risk kernel every execution path consults; the queue/sweep
+workflow is the kernel's human-review client; scheduled jobs are chores, never
+the heartbeat.
 
 ## Consequences
 
-- Kernel extraction, the in-process engine lane, the eligibility split, the
-  continuous portfolio monitors, and replay-accelerated evidence are sequenced
-  as GitHub issues; this record holds the shape, not the backlog.
+- The work is sequenced as GitHub issues: kernel extraction (#1189),
+  eligibility invariant/mode split (#1190), in-process event-driven lane
+  (#1191, blocked on #1189/#1190), continuous portfolio monitors (#1192),
+  rubric scorecard + replay-accelerated evidence (#1193). This record holds
+  the shape, not the backlog.
 - The hourly launchd cycle continues unchanged during the transition as an
   evidence harness, explicitly labeled scaffolding.
 - Any rubric scorecard built before or during the transition reads the
