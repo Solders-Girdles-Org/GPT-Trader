@@ -276,12 +276,18 @@ class TradeIdeaService:
         *,
         now_factory: Callable[[], datetime] = _utc_now,
     ) -> None:
+        self._root = root
         self._store = TradeIdeaStore(root / "records")
         self._audit = TradeIdeaAuditLog(root / "audit.jsonl")
         self._closeouts = CloseoutAttributionLog(root / "closeout_attributions.jsonl")
         self._budget_log = RiskBudgetLog(root / "risk_budget.jsonl")
         self._autonomy_log = AutonomyStateLog(root / "autonomy_state.jsonl")
         self._now = now_factory
+
+    @property
+    def root(self) -> Path:
+        """Storage root all of this service's durable artifacts live under."""
+        return self._root
 
     @property
     def audit_log(self) -> TradeIdeaAuditLog:

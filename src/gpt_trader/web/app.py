@@ -25,7 +25,6 @@ from gpt_trader.features.trade_ideas.review_metrics import compute_review_instru
 from gpt_trader.features.trade_ideas.service import (
     TradeIdeaService,
     create_trade_idea_service,
-    resolve_ideas_root,
     resolve_trade_idea_actor_id,
 )
 from gpt_trader.features.trade_ideas.service_models import (
@@ -148,8 +147,10 @@ def create_app(
     resolved_service = service or create_trade_idea_service(ideas_root)
     resolved_actor = resolve_trade_idea_actor_id(actor_id)
     # The cycle manifest lives beside the trade-idea stores; the CLI runner
-    # writes it under <ideas_root>/cycle (gpt-trader ideas cycle).
-    cycle_manifest_path = resolve_ideas_root(ideas_root) / "cycle" / "manifest.jsonl"
+    # writes it under <ideas_root>/cycle (gpt-trader ideas cycle). Derive it
+    # from the service's own root so an injected service and the feed can
+    # never point at different ideas roots.
+    cycle_manifest_path = resolved_service.root / "cycle" / "manifest.jsonl"
 
     app = FastAPI(title="GPT-Trader operator console", docs_url=None, redoc_url=None)
     templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
@@ -220,9 +221,16 @@ def create_app(
 
     @app.get("/accountant", response_class=HTMLResponse)
     def accountant(request: Request) -> HTMLResponse:
+        # Closeouts fold at their terminal event's audit time, not the time
+        # the attribution was entered — a delayed attribution must not
+        # re-apply P&L an intervening attestation already includes.
+        terminal_times = {
+            event.event_id: event.timestamp for event in resolved_service.list_audit_events().items
+        }
         summary = compute_paper_accounting(
             resolved_service.budget_log.history(),
             resolved_service.query_closeout_records().items,
+            terminal_times=terminal_times,
         )
         return templates.TemplateResponse(
             request=request,

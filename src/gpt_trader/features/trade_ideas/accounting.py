@@ -13,10 +13,15 @@ The equity ledger folds two kinds of events in timestamp order:
   measured the account, superseding anything derived. A lever change that
   carries the same equity forward is not an attestation and does not reset
   the ledger.
-- A closeout with a realized profit/loss amount adjusts the level. Closeouts
-  whose amount is unavailable are counted but cannot move the ledger, and
-  closeouts recorded before the first attestation contribute to the realized
-  total only — there is no level for them to adjust yet.
+- A closeout with a realized profit/loss amount adjusts the level. It folds at
+  its *terminal event* time (when the trade actually ended, resolved through
+  ``terminal_event_id`` by the caller), not at the time the attribution was
+  entered: an attestation made after a trade closed already includes that
+  trade's P&L, so a later-entered attribution must sort before it rather than
+  double-count. Closeouts whose amount is unavailable are counted but cannot
+  move the ledger, and closeouts that ended before the first attestation
+  contribute to the realized total only — there is no level for them to
+  adjust yet.
 
 The high-water mark is the peak of the whole ledger: a re-attestation moves
 the level but never erases the historical peak, so drawdown-from-peak stays
@@ -25,7 +30,7 @@ honest across resets.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -80,16 +85,26 @@ def _attestations(entries: Iterable[BudgetLogEntry]) -> list[EquityAttestation]:
 def compute_paper_accounting(
     budget_entries: Iterable[BudgetLogEntry],
     closeouts: Iterable[CloseoutAttribution],
+    *,
+    terminal_times: Mapping[str, datetime] | None = None,
 ) -> PaperAccountingSummary:
-    """Fold attestations and closeout amounts into the paper equity ledger."""
+    """Fold attestations and closeout amounts into the paper equity ledger.
+
+    ``terminal_times`` maps a closeout's ``terminal_event_id`` to the audit
+    timestamp of that terminal event; a closeout without a mapping falls back
+    to its attribution timestamp.
+    """
     attestations = _attestations(budget_entries)
-    ordered_closeouts = sorted(closeouts, key=lambda record: record.timestamp)
+    resolved_terminal_times = terminal_times or {}
+
+    def _closeout_time(record: CloseoutAttribution) -> datetime:
+        return resolved_terminal_times.get(record.terminal_event_id, record.timestamp)
 
     # Merge in timestamp order; on a tie the attestation applies first, so a
     # closeout stamped at the same instant adjusts the freshly attested level.
     events: list[tuple[datetime, int, EquityAttestation | CloseoutAttribution]] = [
         (attestation.timestamp, 0, attestation) for attestation in attestations
-    ] + [(record.timestamp, 1, record) for record in ordered_closeouts]
+    ] + [(_closeout_time(record), 1, record) for record in closeouts]
     events.sort(key=lambda event: (event[0], event[1]))
 
     equity: Decimal | None = None

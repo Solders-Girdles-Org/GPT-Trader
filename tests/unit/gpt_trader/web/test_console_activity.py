@@ -55,8 +55,10 @@ def service(tmp_path: Path) -> TradeIdeaService:
 
 
 @pytest.fixture
-def client(service: TradeIdeaService, tmp_path: Path) -> TestClient:
-    return TestClient(create_app(service=service, ideas_root=tmp_path, actor_id="rj"))
+def client(service: TradeIdeaService) -> TestClient:
+    # No ideas_root on purpose: the cycle manifest must be found under the
+    # injected service's own root, never independently re-resolved.
+    return TestClient(create_app(service=service, actor_id="rj"))
 
 
 def _write_manifest(ideas_root: Path, *rows: object) -> None:
@@ -118,6 +120,20 @@ def test_activity_renders_empty_state_without_manifest(client: TestClient) -> No
 
     assert response.status_code == 200
     assert "No cycle turns recorded yet" in response.text
+
+
+def test_activity_surfaces_unreadable_manifest_file_instead_of_crashing(
+    tmp_path: Path, client: TestClient
+) -> None:
+    # A directory left at the manifest path (e.g. after a failed append) must
+    # surface as a manifest-health error, not a 500.
+    (tmp_path / "cycle" / "manifest.jsonl").mkdir(parents=True)
+
+    response = client.get("/activity")
+
+    assert response.status_code == 200
+    assert "Manifest health" in response.text
+    assert "unreadable" in response.text
 
 
 def test_activity_lists_recent_audit_events(service: TradeIdeaService, client: TestClient) -> None:

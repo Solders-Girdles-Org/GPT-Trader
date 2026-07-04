@@ -44,13 +44,14 @@ def _closeout(
     *,
     at: datetime,
     amount: Decimal | None,
+    terminal_event_id: str = "event-1",
 ) -> CloseoutAttribution:
     return CloseoutAttribution(
         decision_id=decision_id,
         timestamp=at,
         actor_type="human",
         actor_id="rj",
-        terminal_event_id="event-1",
+        terminal_event_id=terminal_event_id,
         record_hash="hash-1",
         resolution=CloseoutResolution.THESIS_TARGET,
         max_loss=MaxLossSnapshot(amount=Decimal("50")),
@@ -139,6 +140,36 @@ def test_unavailable_amounts_are_counted_but_do_not_move_the_ledger() -> None:
     assert summary.current_equity == Decimal("1010")
     assert summary.closeout_count == 2
     assert summary.closeout_amount_unavailable_count == 1
+
+
+def test_delayed_attribution_folds_at_terminal_time_not_entry_time() -> None:
+    # Trade ends at T1, operator attests equity at T2 (which already includes
+    # that trade's P&L), attribution is entered at T3. Folding at terminal
+    # time puts the closeout before the attestation instead of re-applying
+    # its P&L on top of the attested level.
+    entries = [
+        _budget_entry(1, at=_START, equity=Decimal("1000")),
+        _budget_entry(2, at=_START + timedelta(hours=2), equity=Decimal("1200")),
+    ]
+    closeouts = [
+        _closeout(
+            "trade-1",
+            at=_START + timedelta(hours=3),  # attribution entered after the attestation
+            amount=Decimal("200"),
+            terminal_event_id="terminal-1",
+        )
+    ]
+
+    summary = compute_paper_accounting(
+        entries,
+        closeouts,
+        terminal_times={"terminal-1": _START + timedelta(hours=1)},
+    )
+
+    assert summary.current_equity == Decimal("1200")  # not double-counted to 1400
+    assert summary.high_water_mark == Decimal("1200")
+    assert summary.realized_profit_loss_since_attestation == Decimal("0")
+    assert summary.realized_profit_loss_total == Decimal("200")
 
 
 def test_closeout_before_first_attestation_counts_toward_total_only() -> None:

@@ -19,7 +19,13 @@
     <div class="value">{{ feed.turn_count }}</div>
     <div class="muted">{{ feed.completed_count }} completed · {{ feed.failed_count }} failed</div>
   </div>
-  {% if feed.unreadable_line_count %}
+  {% if feed.manifest_error %}
+  <div class="card">
+    <div class="label">Manifest health</div>
+    <div class="value bad">unreadable</div>
+    <div class="muted">{{ feed.manifest_error }}</div>
+  </div>
+  {% elif feed.unreadable_line_count %}
   <div class="card">
     <div class="label">Manifest health</div>
     <div class="value warn">{{ feed.unreadable_line_count }}</div>

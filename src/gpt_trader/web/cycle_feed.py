@@ -62,6 +62,10 @@ class CycleFeed:
     completed_count: int
     failed_count: int
     unreadable_line_count: int
+    # Set when the manifest exists but cannot be read at all (permissions,
+    # a directory left at the path, undecodable bytes); a missing manifest
+    # is the normal pre-first-turn state, not an error.
+    manifest_error: str | None = None
 
 
 def _parse_timestamp(value: Any) -> datetime | None:
@@ -146,10 +150,14 @@ def load_cycle_feed(manifest_path: Path, *, limit: int = 50) -> CycleFeed:
     """Load the manifest newest-first; a missing file is an empty feed."""
     turns: list[CycleTurn] = []
     unreadable_line_count = 0
+    manifest_error: str | None = None
     try:
         lines = manifest_path.read_text(encoding="utf-8").splitlines()
     except FileNotFoundError:
         lines = []
+    except (OSError, UnicodeDecodeError) as error:
+        lines = []
+        manifest_error = f"{type(error).__name__}: {error}"
     for line in lines:
         if not line.strip():
             continue
@@ -174,4 +182,5 @@ def load_cycle_feed(manifest_path: Path, *, limit: int = 50) -> CycleFeed:
         completed_count=completed_count,
         failed_count=len(turns) - completed_count,
         unreadable_line_count=unreadable_line_count,
+        manifest_error=manifest_error,
     )

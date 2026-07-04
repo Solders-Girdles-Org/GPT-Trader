@@ -27,8 +27,8 @@ def service(tmp_path: Path) -> TradeIdeaService:
 
 
 @pytest.fixture
-def client(service: TradeIdeaService, tmp_path: Path) -> TestClient:
-    return TestClient(create_app(service=service, ideas_root=tmp_path, actor_id="rj"))
+def client(service: TradeIdeaService) -> TestClient:
+    return TestClient(create_app(service=service, actor_id="rj"))
 
 
 def _record_closed_trade(service: TradeIdeaService, amount: Decimal) -> None:
