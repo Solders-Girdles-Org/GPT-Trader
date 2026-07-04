@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}{{ idea.decision_id }} — GPT-Trader console{% endblock %}
+{% block content %}
+<h1>{{ idea.decision_id }} <span class="pill">{{ view.state.value }}</span></h1>
+
+{% if error %}<div class="banner">{{ error }}</div>{% endif %}
+
+<div class="cards">
+  <div class="card">
+    <div class="label">Instrument</div>
+    <div class="value">{{ idea.instrument }}</div>
+    <div class="muted">{{ idea.product_type.value }} · {{ idea.direction.value }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Confidence</div>
+    <div class="value">{{ idea.confidence.label.value }}</div>
+    <div class="muted">{{ idea.confidence.rationale or "no rationale recorded" }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Max loss</div>
+    <div class="value">{% if idea.max_loss.percent_of_account is not none %}{{ idea.max_loss.percent_of_account }}%{% else %}—{% endif %}</div>
+    <div class="muted">{% if idea.max_loss.amount is not none %}${{ idea.max_loss.amount }}{% else %}amount unknown{% endif %}</div>
+  </div>
+  <div class="card">
+    <div class="label">Eligibility</div>
+    {% if violations %}
+    <div class="value bad">{{ violations | length }} violation{{ "s" if violations | length != 1 }}</div>
+    {% else %}
+    <div class="value ok">eligible</div>
+    {% endif %}
+  </div>
+</div>
+
+{% if violations %}
+<h2>Approval blockers</h2>
+<ul>{% for violation in violations %}<li class="bad">{{ violation }}</li>{% endfor %}</ul>
+{% endif %}
+
+{% if actionable %}
+<h2>Decide</h2>
+<form class="decision" method="post" action="/ideas/{{ idea.decision_id }}/approve">
+  <input type="text" name="reason" placeholder="Reason (required, audited)" required>
+  <button class="approve" type="submit">Approve</button>
+</form>
+<form class="decision" method="post" action="/ideas/{{ idea.decision_id }}/request-changes">
+  <input type="text" name="reason" placeholder="What must change (required, audited)" required>
+  <button class="changes" type="submit">Request changes</button>
+</form>
+<form class="decision" method="post" action="/ideas/{{ idea.decision_id }}/reject">
+  <input type="text" name="reason" placeholder="Reason (required, audited)" required>
+  <button class="reject" type="submit">Reject</button>
+</form>
+{% endif %}
+
+<h2>Thesis</h2>
+<p>{{ idea.thesis }}</p>
+<p class="muted">Invalidation: {{ idea.invalidation }} · Target exit: {{ idea.target_exit }} · Failure mode: {{ idea.failure_mode }}</p>
+
+<h2>Source data provenance</h2>
+{% if idea.data_used %}
+<ul>{% for source in idea.data_used %}<li>{{ source }}</li>{% endfor %}</ul>
+{% else %}
+<p class="muted">No data sources recorded.</p>
+{% endif %}
+
+<h2>Record versions</h2>
+<table>
+  <tr><th>#</th><th>Pinned at</th><th>Pinned by</th><th>Record hash</th></tr>
+  {% for version in versions %}
+  <tr>
+    <td>v{{ version.number }}</td>
+    <td>{{ version.pinned_at | timestamp }}</td>
+    <td>{{ version.pinned_by }}</td>
+    <td class="muted">{{ version.record_hash[:16] }}…{% if version.idea is none %} <span class="bad">(version not loadable)</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h2>Audit trail</h2>
+<table>
+  <tr><th>Time</th><th>Action</th><th>Actor</th><th>State</th><th>Reason</th></tr>
+  {% for event in view.events %}
+  <tr>
+    <td>{{ event.timestamp | timestamp }}</td>
+    <td><span class="pill">{{ event.action.value }}</span></td>
+    <td>{{ event.actor_id }} <span class="muted">({{ event.actor_type.value }})</span></td>
+    <td>{{ event.after_state.value }}</td>
+    <td>{{ event.reason }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h2>Full record</h2>
+<pre>{{ record | pretty_json }}</pre>
+{% endblock %}

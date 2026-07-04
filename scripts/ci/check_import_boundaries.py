@@ -148,6 +148,32 @@ _TRADE_IDEAS_RULE = ImportRule(
     allowlist_import_prefixes=TRADE_IDEAS_ALLOWED_IMPORT_PREFIXES,
 )
 
+# The operator web console is a thin adapter over TradeIdeaService
+# (docs/decisions/adopt-operator-web-console.md): it renders durable
+# trade-idea artifacts and forwards decisions to identity-stamped service
+# calls. Freezing its dependency set structurally enforces the decision's
+# owner constraint — no live_trade imports, no order-constructing code path.
+WEB_CONSOLE_ALLOWED_IMPORT_PREFIXES: tuple[str, ...] = (
+    "gpt_trader.core",
+    "gpt_trader.errors",
+    "gpt_trader.features.trade_ideas",
+    "gpt_trader.web",
+)
+
+_WEB_CONSOLE_RULE = ImportRule(
+    name="web_console_frozen_dependencies",
+    description=(
+        "gpt_trader.web may only import gpt_trader.core, gpt_trader.errors, "
+        "gpt_trader.features.trade_ideas, and itself — never live_trade or any "
+        "order-constructing layer (docs/decisions/adopt-operator-web-console.md). "
+        "Extend WEB_CONSOLE_ALLOWED_IMPORT_PREFIXES in "
+        "scripts/ci/check_import_boundaries.py only with an architecture rationale."
+    ),
+    source_root=REPO_ROOT / "src" / "gpt_trader" / "web",
+    forbidden_prefixes=("gpt_trader",),
+    allowlist_import_prefixes=WEB_CONSOLE_ALLOWED_IMPORT_PREFIXES,
+)
+
 # Frozen record of today's cross-slice topology (verified by AST scan,
 # 2026-07-01). Every (source_slice, target_slice) import edge between feature
 # slices must appear here; anything else fails CI. This is a ratchet: shrink
@@ -271,6 +297,7 @@ RULES: tuple[ImportRule, ...] = (
     *(_entrypoint_guard_rule(package, label) for package, label in _ENTRYPOINT_GUARDED_PACKAGES),
     _MONITORING_FEATURES_RULE,
     _TRADE_IDEAS_RULE,
+    _WEB_CONSOLE_RULE,
     *(_cross_slice_rule(slice_name) for slice_name in _discover_feature_slices()),
 )
 

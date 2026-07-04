@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}GPT-Trader console{% endblock %}</title>
+  <style>
+    :root {
+      --bg: #12151a; --panel: #1b2028; --line: #2c3440;
+      --text: #d7dde6; --muted: #8b97a6;
+      --ok: #4cc38a; --warn: #e5c07b; --bad: #e06c75; --accent: #61afef;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 14px/1.5 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    }
+    header {
+      display: flex; justify-content: space-between; align-items: baseline;
+      padding: 0.8rem 1.2rem; border-bottom: 1px solid var(--line);
+    }
+    header a { color: var(--text); text-decoration: none; font-weight: 600; }
+    header .actor { color: var(--muted); font-size: 0.85rem; }
+    main { max-width: 72rem; margin: 0 auto; padding: 1.2rem; }
+    h1 { font-size: 1.15rem; margin: 0 0 0.8rem; }
+    h2 { font-size: 0.95rem; margin: 1.6rem 0 0.5rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); }
+    th, td { padding: 0.45rem 0.7rem; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--muted); font-weight: 500; font-size: 0.8rem; }
+    a { color: var(--accent); }
+    .cards { display: flex; gap: 0.8rem; flex-wrap: wrap; }
+    .card {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+      padding: 0.6rem 0.9rem; min-width: 10rem;
+    }
+    .card .label { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .card .value { font-size: 1.15rem; font-weight: 600; }
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .bad { color: var(--bad); }
+    .muted { color: var(--muted); }
+    .pill {
+      display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px;
+      font-size: 0.75rem; border: 1px solid var(--line); white-space: nowrap;
+    }
+    .banner {
+      border: 1px solid var(--bad); background: rgba(224, 108, 117, 0.12);
+      color: var(--bad); border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0 0 1rem;
+    }
+    form.decision { display: flex; gap: 0.5rem; align-items: center; margin: 0.4rem 0; flex-wrap: wrap; }
+    input[type="text"] {
+      background: var(--bg); border: 1px solid var(--line); color: var(--text);
+      border-radius: 4px; padding: 0.35rem 0.55rem; min-width: 22rem;
+    }
+    button {
+      border: 1px solid var(--line); border-radius: 4px; padding: 0.35rem 0.8rem;
+      background: var(--panel); color: var(--text); cursor: pointer;
+    }
+    button.approve { border-color: var(--ok); color: var(--ok); }
+    button.reject { border-color: var(--bad); color: var(--bad); }
+    button.changes { border-color: var(--warn); color: var(--warn); }
+    pre {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+      padding: 0.7rem 0.9rem; overflow-x: auto; font-size: 0.8rem;
+    }
+    ul { margin: 0.2rem 0; padding-left: 1.2rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/">GPT-Trader operator console</a>
+    <span class="actor">acting as <strong>{{ actor_id }}</strong></span>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

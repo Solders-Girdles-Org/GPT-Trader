@@ -72,18 +72,23 @@ src/gpt_trader/
 ├── preflight/           # Production preflight verification and startup checks
 ├── security/            # Security primitives: input sanitization, secrets management
 ├── utilities/           # Shared helpers (async, datetime, quantization, logging facade)
-└── validation/          # Declarative validators and decorators
+├── validation/          # Declarative validators and decorators
+└── web/                 # Operator web console: local-only thin adapter over TradeIdeaService
 ```
 
 Import boundaries are enforced in CI (Test Guardrails, required) by
-`scripts/ci/check_import_boundaries.py`, which checks three rule families:
+`scripts/ci/check_import_boundaries.py`, which checks four rule families:
 lower layers must never import the entrypoint layers (CLI/preflight) or the
 DI container; `gpt_trader.monitoring` must not import feature slices at
 runtime (TYPE_CHECKING-only imports allowed; the existing debt edges are
-frozen in an allowlist); and slice-to-slice imports inside
+frozen in an allowlist); slice-to-slice imports inside
 `gpt_trader.features` — including the frozen dependency set of
 `features/trade_ideas` (core + errors only) — are ratcheted to an explicit
-allowlist (`CROSS_SLICE_ALLOWED_EDGES`) that records today's actual topology.
+allowlist (`CROSS_SLICE_ALLOWED_EDGES`) that records today's actual topology;
+and `gpt_trader.web` (the operator console,
+[adopt-operator-web-console.md](decisions/adopt-operator-web-console.md)) may
+import only `features/trade_ideas`, core, and errors — structurally excluding
+`live_trade` and every order-constructing layer.
 New edges require an architecture rationale; shrinking the allowlists is
 always welcome.
 
