@@ -57,19 +57,11 @@ def _latest_state_counts(events: list[AuditEvent]) -> Counter[TradeIdeaState]:
 
 
 def _validate_budget_history(budget_log: RiskBudgetLog) -> tuple[int, int] | None:
+    # history() raises BudgetIntegrityError on malformed lines or
+    # non-contiguous versions, so reading it is the validation.
     entries = budget_log.history()
     if not entries:
         return None
-    for expected_version, entry in enumerate(entries, start=1):
-        if entry.budget.version != expected_version:
-            raise ValidationError(
-                (
-                    "Risk budget versions must be contiguous; "
-                    f"expected {expected_version}, got {entry.budget.version}"
-                ),
-                field="version",
-                value=entry.budget.version,
-            )
     return len(entries), entries[-1].budget.version
 
 
@@ -154,6 +146,12 @@ def check_trade_ideas_readiness(checker: PreflightCheck) -> bool:
     for append_error in (
         _existing_log_append_error(audit_path, label="audit log"),
         _existing_log_append_error(budget_path, label="risk budget log"),
+        # Every budget append acquires this sidecar lock, so an unusable
+        # lock path fails seeding/renegotiation even when the log is fine.
+        _existing_log_append_error(
+            budget_path.with_name(budget_path.name + ".lock"),
+            label="risk budget lock",
+        ),
     ):
         if append_error is not None:
             checker.log_error(append_error, details=details)

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -19,6 +18,7 @@ from gpt_trader.app.risk_budget_seed import (
 from gpt_trader.features.trade_ideas.audit import ActorType
 from gpt_trader.features.trade_ideas.budget import (
     DEFAULT_RISK_BUDGET,
+    BudgetIntegrityError,
     BudgetLogEntry,
     RiskBudgetLog,
 )
@@ -74,7 +74,7 @@ class TestResolveRiskBudgetRuntimeSeed:
     def test_corrupt_log_fails_closed(self, tmp_path: Path) -> None:
         (tmp_path / "risk_budget.jsonl").write_text("not json\n", encoding="utf-8")
 
-        with pytest.raises(json.JSONDecodeError):
+        with pytest.raises(BudgetIntegrityError, match="line 1 is malformed"):
             resolve_risk_budget_runtime_seed(tmp_path)
 
     def test_env_root_resolution(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

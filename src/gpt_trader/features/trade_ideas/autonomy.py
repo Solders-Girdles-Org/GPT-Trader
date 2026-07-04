@@ -111,7 +111,7 @@ class AutonomyResolution:
 class AutonomyStateLog:
     """Append-only JSONL log of autonomy-level versions; the last entry is current.
 
-    Unlike the budget log, reads validate version sequencing so a tampered or
+    Like the budget log, reads validate version sequencing so a tampered or
     truncated log is detected at resolution time and can fail closed.
     """
 

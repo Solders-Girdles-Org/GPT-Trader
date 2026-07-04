@@ -257,6 +257,24 @@ def test_trade_ideas_readiness_fails_when_latest_record_id_mismatches(
     assert result["details"]["ideas_root"] == str(ideas_root)
 
 
+def test_trade_ideas_readiness_fails_when_budget_lock_is_unusable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ideas_root = tmp_path / "trade_ideas"
+    _seed_budget(ideas_root)
+    lock_path = ideas_root / "risk_budget.jsonl.lock"
+    if lock_path.exists():
+        lock_path.unlink()
+    lock_path.mkdir()
+    monkeypatch.setenv("GPT_TRADER_IDEAS_ROOT", str(ideas_root))
+
+    checker = PreflightCheck(profile="dev")
+
+    assert check_trade_ideas_readiness(checker) is False
+    result = _failed_result(checker, "risk budget lock is not a file")
+    assert result["details"]["ideas_root"] == str(ideas_root)
+
+
 def test_trade_ideas_readiness_fails_when_budget_is_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
