@@ -1034,8 +1034,8 @@ def register(subparsers: Any) -> None:
         description=(
             "Machine leg of the paper lane: place a simulated market order for a "
             "human-approved idea, or for an auto-sweep system-approved idea only "
-            f"when {AUTO_EXECUTION_ENV_VAR}=1 and audited bounded_autonomy both "
-            "pass (client_order_id = decision id), then record the submission and "
+            f"when {AUTO_EXECUTION_ENV_VAR} is enabled and the audited autonomy mode "
+            "is bounded_autonomy (client_order_id = decision id), then record the submission and "
             "fill through TradeIdeaService. Only the deterministic paper broker is "
             "reachable from this command; it never contacts a live broker or "
             "account."

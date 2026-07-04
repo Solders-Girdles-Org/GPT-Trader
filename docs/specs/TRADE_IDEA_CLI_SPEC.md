@@ -585,7 +585,7 @@ Stage 2 auto-approval inside the budget envelope
 - Executes one approved idea against the offline deterministic paper broker and
   records the `submitted`/`filled` lifecycle through `PaperIdeaExecutor`.
 - Human-approved ideas execute as before. System-approved ideas execute only
-  under the Stage 2 execution gate (`GPT_TRADER_IDEAS_AUTO_EXECUTION=1` plus
+  under the Stage 2 execution gate (`GPT_TRADER_IDEAS_AUTO_EXECUTION` enabled plus
   audited `bounded_autonomy`, latest approval actor `auto-approval-sweep`).
 - No live broker/account/API is reachable from this command; the paper broker
   type allowlist remains the execution boundary.
