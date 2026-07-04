@@ -26,7 +26,7 @@ from gpt_trader.features.trade_ideas.autonomy import (
     RATCHET_ACTOR_ID,
     AutonomyIntegrityError,
 )
-from gpt_trader.features.trade_ideas.budget import RiskBudget
+from gpt_trader.features.trade_ideas.budget import BudgetIntegrityError, RiskBudget
 from gpt_trader.features.trade_ideas.models import AutonomyMode, TradeIdea
 from gpt_trader.features.trade_ideas.review_metrics import compute_review_instrumentation
 from gpt_trader.features.trade_ideas.service import (
@@ -111,7 +111,7 @@ def _queue_rows(service: TradeIdeaService) -> list[dict[str, Any]]:
                     "view": view,
                     "idea": view.idea,
                     "state": view.state,
-                    "violations": service.approval_violations(view.idea),
+                    "violations": service.peek_approval_violations(view.idea),
                     "expires_in": (
                         _format_duration(expiration.seconds_until_expiry) if expiration else None
                     ),
@@ -307,7 +307,7 @@ def create_app(
                 "can_approve": TradeIdeaState.APPROVED in allowed_targets,
                 "can_request_changes": TradeIdeaState.NEEDS_CHANGES in allowed_targets,
                 "can_reject": TradeIdeaState.REJECTED in allowed_targets,
-                "violations": resolved_service.approval_violations(view.idea),
+                "violations": resolved_service.peek_approval_violations(view.idea),
                 "versions": _record_versions(resolved_service, view),
                 "error": error,
             },
@@ -420,20 +420,28 @@ def create_app(
                 request, error=message, form_values=form_values, status_code=400
             )
 
+        def _version_conflict() -> HTMLResponse:
+            # Optimistic-concurrency guard: the form was rendered against a
+            # version that is no longer current (another operator, the CLI, or
+            # an agent enacted a change since). Render the *current* levers,
+            # not the submitted ones — echoing stale values behind a fresh
+            # base_version would let a reflexive resubmit silently revert the
+            # concurrent change.
+            return _render_envelope(
+                request,
+                error=(
+                    f"The budget moved to v{resolved_service.peek_budget().version} after "
+                    f"this form was loaded (v{base_version}). The current levers are shown "
+                    "below; reapply your change if it still holds."
+                ),
+                status_code=409,
+            )
+
         cleaned_reason = reason.strip()
         if not cleaned_reason:
             return _form_error("A reason is required for every budget version.")
-        current_version = resolved_service.peek_budget().version
-        if base_version != current_version:
-            # Optimistic-concurrency guard: the form was rendered against a
-            # version that is no longer current (another operator, the CLI, or
-            # an agent enacted a change since). The append-side sequencing
-            # check in RiskBudgetLog remains the authority for races past this
-            # point; this just turns the common case into a clear message.
-            return _form_error(
-                f"The budget moved to v{current_version} after this form was "
-                f"loaded (v{base_version}). Review the current levers and reapply."
-            )
+        if base_version != resolved_service.peek_budget().version:
+            return _version_conflict()
         try:
             candidate = _budget_from_form(
                 base_version=base_version,
@@ -444,6 +452,10 @@ def create_app(
             return _form_error(str(exc))
         try:
             resolved_service.update_budget(candidate, ActorType.HUMAN, resolved_actor)
+        except BudgetIntegrityError:
+            # The append-side sequencing check in RiskBudgetLog caught a race
+            # past the pre-check; same conflict, same fresh-lever re-render.
+            return _version_conflict()
         except ValidationError as exc:
             return _form_error(str(exc))
         return RedirectResponse(url="/envelope", status_code=303)

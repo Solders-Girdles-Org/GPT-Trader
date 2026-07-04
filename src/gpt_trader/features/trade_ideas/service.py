@@ -467,15 +467,47 @@ class TradeIdeaService:
         *,
         actor_type: ActorType = ActorType.HUMAN,
     ) -> list[str]:
-        """Return every current-policy reason an idea could not be approved."""
-        resolution = self.current_autonomy()
+        """Return every current-policy reason an idea could not be approved.
+
+        Decision-path variant: seeds the budget and autonomy logs on first
+        use. Render-only paths must use ``peek_approval_violations``.
+        """
+        return self._approval_violations(
+            idea,
+            actor_type=actor_type,
+            resolution=self.current_autonomy(),
+            budget=self.current_budget(),
+        )
+
+    def peek_approval_violations(
+        self,
+        idea: TradeIdea,
+        *,
+        actor_type: ActorType = ActorType.HUMAN,
+    ) -> list[str]:
+        """Return approval violations without seeding any log (read-only paths)."""
+        return self._approval_violations(
+            idea,
+            actor_type=actor_type,
+            resolution=self.peek_autonomy(),
+            budget=self.peek_budget(),
+        )
+
+    def _approval_violations(
+        self,
+        idea: TradeIdea,
+        *,
+        actor_type: ActorType,
+        resolution: AutonomyResolution,
+        budget: RiskBudget,
+    ) -> list[str]:
         policy = ApprovalPolicy(resolution.mode)
         return [
             *self._autonomy_resolution_violations(resolution),
             *policy.approval_violations(
                 idea,
                 actor_type=actor_type,
-                budget=self.current_budget(),
+                budget=budget,
                 open_approved_count=self.open_approved_count(),
                 now=self._now(),
                 review_started_at=self._review_started_at(idea.decision_id),

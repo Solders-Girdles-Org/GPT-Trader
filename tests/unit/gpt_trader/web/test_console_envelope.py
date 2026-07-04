@@ -70,8 +70,16 @@ def test_envelope_renders_current_budget_and_autonomy(
     assert "Operator-attested equity for tests" in response.text  # budget history reason
 
 
-def test_envelope_get_does_not_seed_logs(tmp_path: Path, client: TestClient) -> None:
+def test_envelope_get_does_not_seed_logs(
+    tmp_path: Path, service: TradeIdeaService, client: TestClient
+) -> None:
+    # A pending idea exercises the per-row violation check, which historically
+    # went through the seeding current_budget()/current_autonomy() reads; the
+    # console must use the peek variant so a GET never creates durable state.
+    service.propose(build_trade_idea(), actor_id="idea-generator-v1")
+
     client.get("/envelope")
+    client.get("/")
 
     assert not (tmp_path / "risk_budget.jsonl").exists()
     assert not (tmp_path / "autonomy_state.jsonl").exists()
@@ -123,7 +131,7 @@ def test_budget_change_requires_a_reason(service: TradeIdeaService, client: Test
     assert service.budget_log.history() == []
 
 
-def test_stale_form_version_is_refused_with_a_conflict_message(
+def test_stale_form_version_is_refused_and_re_renders_current_levers(
     service: TradeIdeaService, client: TestClient
 ) -> None:
     stale = _lever_form(service, max_daily_loss_pct="8")
@@ -131,8 +139,12 @@ def test_stale_form_version_is_refused_with_a_conflict_message(
 
     response = client.post("/envelope/budget", data=stale, follow_redirects=False)
 
-    assert response.status_code == 400
+    assert response.status_code == 409
     assert "moved to v2" in response.text
+    # The conflict page must show the current levers, not echo the stale
+    # submission: resubmitting stale values would silently revert v2.
+    assert 'name="max_daily_loss_pct" value="10"' in response.text
+    assert 'name="base_version" value="2"' in response.text
     assert service.budget_log.history()[-1].budget.version == 2
 
 
