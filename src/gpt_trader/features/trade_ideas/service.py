@@ -342,19 +342,27 @@ class TradeIdeaService:
         resolution = self.peek_autonomy()
         if resolution.source != AUTONOMY_SOURCE_SEEDED_DEFAULT:
             return resolution
-        self._autonomy_log.append(
-            AutonomyStateEntry(
-                version=1,
-                timestamp=self._now(),
-                mode=DEFAULT_AUTONOMY_MODE,
-                actor_type=ActorType.SYSTEM,
-                actor_id="seed-defaults",
-                reason=(
-                    "Seeded default accepted in docs/decisions/persistent-autonomy-state.md: "
-                    "human approval required for every execution"
-                ),
+        try:
+            self._autonomy_log.append(
+                AutonomyStateEntry(
+                    version=1,
+                    timestamp=self._now(),
+                    mode=DEFAULT_AUTONOMY_MODE,
+                    actor_type=ActorType.SYSTEM,
+                    actor_id="seed-defaults",
+                    reason=(
+                        "Seeded default accepted in docs/decisions/persistent-autonomy-state.md: "
+                        "human approval required for every execution"
+                    ),
+                )
             )
-        )
+        except AutonomyIntegrityError:
+            # Another process won the seed race under the log lock; adopt
+            # whatever it appended instead of failing this decision path.
+            resolution = self.peek_autonomy()
+            if resolution.source != AUTONOMY_SOURCE_LOG:
+                raise
+            return resolution
         return AutonomyResolution(
             mode=DEFAULT_AUTONOMY_MODE,
             version=1,

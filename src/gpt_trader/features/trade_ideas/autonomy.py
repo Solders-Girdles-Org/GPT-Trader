@@ -24,6 +24,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from filelock import FileLock, Timeout
+
 from gpt_trader.core.risk_units import trading_day
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.trade_ideas.audit import ActorType
@@ -45,7 +47,7 @@ AUTONOMY_SOURCE_FAIL_CLOSED = "fail_closed"
 
 
 class AutonomyIntegrityError(ValidationError):
-    """Raised when the autonomy log is malformed or an append breaks sequencing."""
+    """Raised when the autonomy log is malformed, contended, or an append breaks sequencing."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,30 +113,54 @@ class AutonomyResolution:
 class AutonomyStateLog:
     """Append-only JSONL log of autonomy-level versions; the last entry is current.
 
-    Like the budget log, reads validate version sequencing so a tampered or
-    truncated log is detected at resolution time and can fail closed.
+    Like the budget log, appends hold an OS-level file lock while re-reading
+    the current version, so two processes (e.g. the CLI and the web console)
+    cannot both append the same next version; the loser gets an
+    ``AutonomyIntegrityError`` and must re-read the state it is acting on.
+    Reads validate version sequencing so a tampered or truncated log is
+    detected at resolution time and can fail closed.
     """
+
+    _LOCK_TIMEOUT_SECONDS = 10.0
 
     def __init__(self, path: Path) -> None:
         self._path = path
+        self._lock = FileLock(str(path) + ".lock")
 
     @property
     def path(self) -> Path:
         return self._path
 
     def append(self, entry: AutonomyStateEntry) -> None:
-        current = self.current()
-        expected_version = 1 if current is None else current.version + 1
-        if entry.version != expected_version:
-            raise AutonomyIntegrityError(
-                f"Autonomy state version must be {expected_version}, got {entry.version}",
-                field="version",
-                value=entry.version,
-            )
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(entry.to_dict(), sort_keys=True, separators=(",", ":"))
-        with self._path.open("a", encoding="utf-8") as handle:
-            handle.write(line + "\n")
+        try:
+            self._lock.acquire(timeout=self._LOCK_TIMEOUT_SECONDS)
+        except Timeout as error:
+            raise AutonomyIntegrityError(
+                f"Timed out waiting for the autonomy state log lock: {self._lock.lock_file}",
+                field="path",
+                value=str(self._path),
+            ) from error
+        except OSError as error:
+            raise AutonomyIntegrityError(
+                f"Autonomy state log lock is unusable: {error}",
+                field="path",
+                value=str(self._path),
+            ) from error
+        try:
+            current = self.current()
+            expected_version = 1 if current is None else current.version + 1
+            if entry.version != expected_version:
+                raise AutonomyIntegrityError(
+                    f"Autonomy state version must be {expected_version}, got {entry.version}",
+                    field="version",
+                    value=entry.version,
+                )
+            line = json.dumps(entry.to_dict(), sort_keys=True, separators=(",", ":"))
+            with self._path.open("a", encoding="utf-8") as handle:
+                handle.write(line + "\n")
+        finally:
+            self._lock.release()
 
     def history(self) -> list[AutonomyStateEntry]:
         if not self._path.exists():
@@ -163,7 +189,7 @@ class AutonomyStateLog:
                             value=entry.version,
                         )
                     entries.append(entry)
-        except OSError as error:
+        except (OSError, UnicodeDecodeError) as error:
             raise AutonomyIntegrityError(
                 f"Autonomy state log is unreadable: {error}",
                 field="path",
