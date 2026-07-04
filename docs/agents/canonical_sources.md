@@ -58,7 +58,7 @@ contract, and the freshness gate.
 | Resource (generator) | Committed files | Verdict |
 |----------------------|-----------------|---------|
 | `schemas`, `models`, `logging`, `observability`, `configuration`, `validation`, `broker`, `health` | small JSON/MD inventories | **Keep committed.** Derived truth read as agent context and validated/packaged; low churn. |
-| `testing` (`generate_test_inventory.py`) | `testing/index.json`, `testing/markers.json` | **Keep committed.** These are the testing-scoped inventory (distinct from the global `var/agents/index.json` registry). The machine-only `testing/test_inventory.json` (~1.8 MB) and `testing/source_test_map.json` are gitignored and regenerated on demand. |
+| `testing` (`generate_test_inventory.py`) | none | **Fully regenerate-on-demand.** All four inventories (`index.json`, `markers.json`, `test_inventory.json`, `source_test_map.json`) are gitignored `optional_files` regenerated via `uv run agent-regenerate`; decision accepted 2026-07-04 in [stop-committing-high-churn-agent-inventories](../decisions/stop-committing-high-churn-agent-inventories.md) (#1130). |
 | `reasoning` (`generate_reasoning_artifacts.py`) | 8 curated `.md` maps | **`.md` committed; `.json`/`.dot` machine forms gitignored.** The `.md` summaries are curated in [reasoning_artifacts.md](reasoning_artifacts.md); the machine forms regenerate on nearly any `src/**` change, so they are regenerate-on-demand `optional_files`. |
 
 ### Churn verdict — executed 2026-07-01 (owner-approved)

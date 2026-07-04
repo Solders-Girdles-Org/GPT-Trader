@@ -52,10 +52,10 @@
     "testing": {
       "path": "testing/",
       "description": "Test inventory with markers and fixtures",
-      "files": [
-        "markers.json"
-      ],
+      "files": [],
       "optional_files": [
+        "index.json",
+        "markers.json",
         "test_inventory.json",
         "source_test_map.json"
       ],

@@ -1,8 +1,8 @@
 # Stop committing high-churn generated agent inventories
 
 ---
-status: proposed
-date: 2026-07-02
+status: accepted
+date: 2026-07-04
 deciders: rj
 supersedes:
 superseded-by:
@@ -61,17 +61,23 @@ demand — executed 2026-07-01 with owner approval.
 
 ## Decision
 
-_Open. Recommendation: Option A — it follows the repo's own "prefer derived
-over authored" rule and the already-approved 2026-07-01 precedent, and it is
-the only option that removes the churn rather than hiding it._
+Option A, accepted by rj on 2026-07-04. It follows the repo's own "prefer
+derived over authored" rule and the already-approved 2026-07-01 precedent, and
+it is the only option that removes the churn rather than hiding it. The
+curated `reasoning/*.md` summaries stay committed (4 post-pass touches;
+decommitting them is not evidence-driven).
 
 ## Consequences
 
-Fill in when accepted. Expected shape for Option A: gitignore + `optional_files`
-registration for the affected groups, absent-tolerant validation in
-`agent_artifacts.py` for those groups, freshness gate shrinks to the remaining
-committed set, and the measured share of commits touching `var/agents` drops
-from ~55% to under 15%. Follow-up work is tracked in issue #1130.
+Executed with the acceptance (issue #1130): `var/agents/testing/index.json` and
+`var/agents/testing/markers.json` are gitignored and registered as
+`optional_files`; `agent-artifacts validate` tolerates a resource whose
+committed surface is entirely `optional_files` (including an absent directory
+on a fresh checkout) while still validating content when the files are present;
+the freshness gate shrinks to the remaining committed set because
+`agent-regenerate --verify` already excludes git-ignored outputs from its
+comparison. Expected measured effect: share of commits touching `var/agents`
+drops from ~55% to under 15% (re-measure after two weeks per #1130).
 
 ## Safety boundary
 
