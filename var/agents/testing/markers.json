@@ -92,7 +92,7 @@
     ]
   },
   "counts": {
-    "unit": 5864,
+    "unit": 5865,
     "asyncio": 310,
     "parametrize": 180,
     "integration": 87,
