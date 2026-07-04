@@ -50,14 +50,15 @@ uv run ruff check . --fix               # lint (auto-fix)
 uv run black .                          # format
 uv run mypy src/gpt_trader              # type check
 uv run agent-naming                     # naming conventions
-make ci-required                        # full local PR-readiness gate
-uv run local-ci --profile quick         # faster loop (skips readiness + artifact freshness)
+uv run local-ci                         # full local PR gate (make ci-required = alias)
+uv run local-ci --profile quick         # faster loop (skips readiness, artifacts, optional suites)
 ```
 
 ## Before you open a PR
 
-- Run `make ci-required` (lint/format, docs audits, type check, agent-artifact
-  freshness, test guardrails, core unit tests). The blocking/advisory contract is
+- Run `uv run local-ci` (lint/format, docs audits, type check, advisory
+  agent-artifact freshness, test guardrails, unit/property/contract/integration
+  tests). The blocking/advisory contract is
   owned by [docs/DEVELOPMENT_GUIDELINES.md](docs/DEVELOPMENT_GUIDELINES.md).
 - If your change can affect generated `var/agents/**` context, run
   `uv run agent-regenerate` and commit the updated artifacts; confirm with
