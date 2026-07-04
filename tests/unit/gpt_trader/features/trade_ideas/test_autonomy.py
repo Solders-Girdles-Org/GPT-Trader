@@ -5,6 +5,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from filelock import FileLock
 
 from gpt_trader.features.trade_ideas import (
     DEFAULT_AUTONOMY_MODE,
@@ -120,6 +121,70 @@ def test_version_gap_in_file_raises_integrity_error(autonomy_log: AutonomyStateL
 
     with pytest.raises(AutonomyIntegrityError, match="version 5; expected 2"):
         autonomy_log.history()
+
+
+def test_invalid_utf8_raises_integrity_error(autonomy_log: AutonomyStateLog) -> None:
+    autonomy_log.path.parent.mkdir(parents=True, exist_ok=True)
+    autonomy_log.path.write_bytes(b"\xff\xfe not utf-8\n")
+
+    with pytest.raises(AutonomyIntegrityError, match="unreadable"):
+        autonomy_log.history()
+
+    resolution = resolve_autonomy(autonomy_log)
+    assert resolution.mode is FAIL_CLOSED_AUTONOMY_MODE
+
+
+def test_duplicated_version_in_file_raises_integrity_error(
+    autonomy_log: AutonomyStateLog,
+) -> None:
+    # The artifact an unlocked concurrent append would have left behind:
+    # two entries both claiming the same next version.
+    autonomy_log.append(build_entry())
+    line = autonomy_log.path.read_text(encoding="utf-8")
+    autonomy_log.path.write_text(line + line, encoding="utf-8")
+
+    with pytest.raises(AutonomyIntegrityError, match="version 1; expected 2"):
+        autonomy_log.history()
+
+    with pytest.raises(AutonomyIntegrityError):
+        autonomy_log.current()
+
+
+def test_append_times_out_when_lock_is_held(
+    autonomy_log: AutonomyStateLog, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(AutonomyStateLog, "_LOCK_TIMEOUT_SECONDS", 0.05)
+    autonomy_log.path.parent.mkdir(parents=True, exist_ok=True)
+    foreign_lock = FileLock(str(autonomy_log.path) + ".lock")
+    with foreign_lock.acquire(timeout=1):
+        with pytest.raises(AutonomyIntegrityError, match="autonomy state log lock"):
+            autonomy_log.append(build_entry())
+
+    assert autonomy_log.current() is None
+
+
+def test_unusable_lock_file_raises_integrity_error(autonomy_log: AutonomyStateLog) -> None:
+    lock_path = Path(str(autonomy_log.path) + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.mkdir()
+
+    with pytest.raises(AutonomyIntegrityError, match="lock is unusable"):
+        autonomy_log.append(build_entry())
+
+    assert autonomy_log.current() is None
+
+
+def test_append_succeeds_after_lock_is_released(autonomy_log: AutonomyStateLog) -> None:
+    autonomy_log.path.parent.mkdir(parents=True, exist_ok=True)
+    foreign_lock = FileLock(str(autonomy_log.path) + ".lock")
+    with foreign_lock.acquire(timeout=1):
+        pass
+
+    autonomy_log.append(build_entry())
+
+    current = autonomy_log.current()
+    assert current is not None
+    assert current.version == 1
 
 
 def test_resolve_absent_log_is_seeded_default(autonomy_log: AutonomyStateLog) -> None:

@@ -15,6 +15,8 @@ from gpt_trader.features.trade_ideas import (
     ActorType,
     AutonomyIntegrityError,
     AutonomyMode,
+    AutonomyStateEntry,
+    AutonomyStateLog,
     CloseoutResolution,
     PolicyViolationError,
     RiskBudget,
@@ -94,6 +96,40 @@ def test_current_autonomy_seeds_default_on_first_use(
     assert len(history) == 1
     assert history[0].actor_type is ActorType.SYSTEM
     assert history[0].actor_id == "seed-defaults"
+
+
+def test_current_autonomy_adopts_concurrent_seed(
+    service: TradeIdeaService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_append = AutonomyStateLog.append
+
+    def racing_append(self: AutonomyStateLog, entry: AutonomyStateEntry) -> None:
+        # A concurrent process seeds first, so this append loses the version
+        # race under the log lock instead of duplicating version 1.
+        winner = AutonomyStateLog(self.path)
+        real_append(
+            winner,
+            AutonomyStateEntry(
+                version=1,
+                timestamp=datetime(2026, 6, 12, 10, 0, tzinfo=UTC),
+                mode=AutonomyMode.HUMAN_APPROVED_EXECUTION,
+                actor_type=ActorType.SYSTEM,
+                actor_id="other-process",
+                reason="Seeded default from a concurrent process",
+            ),
+        )
+        real_append(self, entry)
+
+    monkeypatch.setattr(AutonomyStateLog, "append", racing_append)
+
+    resolution = service.current_autonomy()
+
+    assert resolution.mode is AutonomyMode.HUMAN_APPROVED_EXECUTION
+    assert resolution.version == 1
+    assert resolution.source == AUTONOMY_SOURCE_LOG
+    history = service.autonomy_history()
+    assert [entry.version for entry in history] == [1]
+    assert history[0].actor_id == "other-process"
 
 
 def test_human_raise_is_audited_and_becomes_current(service: TradeIdeaService) -> None:
