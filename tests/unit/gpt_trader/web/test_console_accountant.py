@@ -85,3 +85,27 @@ def test_accountant_renders_without_any_attestation(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert "no attested equity yet" in response.text
+    assert "incomplete:" not in response.text
+
+
+def test_accountant_marks_daily_loss_usage_incomplete_when_evidence_is_missing(
+    service: TradeIdeaService, client: TestClient
+) -> None:
+    # A same-day closeout without any P&L evidence cannot be priced into
+    # daily-loss usage; the subset total must be marked incomplete, not exact.
+    attest_account_equity(service, equity=Decimal("20000"))
+    service.propose(build_trade_idea(), actor_id="idea-generator-v1")
+    service.approve(_DECISION_ID, actor_id="rj", reason="Risk verified")
+    service.record_submission(_DECISION_ID, actor_id="paper-cycle", venue="paper")
+    service.record_fill(_DECISION_ID, actor_id="paper-broker", venue="paper")
+    service.record_closeout_attribution(
+        _DECISION_ID,
+        actor_id="rj",
+        resolution=CloseoutResolution.THESIS_TARGET,
+        realized_profit_loss_unavailable_reason="fill evidence missing",
+    )
+
+    response = client.get("/accountant")
+
+    assert response.status_code == 200
+    assert "incomplete: 1 record without loss evidence" in response.text

@@ -93,6 +93,26 @@ def test_activity_tolerates_unreadable_manifest_lines(tmp_path: Path, client: Te
     assert "unreadable manifest line" in response.text
 
 
+def test_activity_treats_corrupt_row_fields_as_unreadable(
+    tmp_path: Path, client: TestClient
+) -> None:
+    # Valid JSON with a corrupt field (schema drift, manual repair) must be
+    # counted as unreadable, not turn the page into a 500.
+    corrupt_row = {
+        "run_id": "cycle-20260704T110000Z-bad999",
+        "outcome": "completed",
+        "proposers": [{"proposer_id": "baseline-v1", "proposal_count": "not-a-number"}],
+    }
+    _write_manifest(tmp_path, _COMPLETED_ROW, corrupt_row)
+
+    response = client.get("/activity")
+
+    assert response.status_code == 200
+    assert "cycle-20260704T090000Z-abc123" in response.text
+    assert "cycle-20260704T110000Z-bad999" not in response.text
+    assert "unreadable manifest line" in response.text
+
+
 def test_activity_renders_empty_state_without_manifest(client: TestClient) -> None:
     response = client.get("/activity")
 

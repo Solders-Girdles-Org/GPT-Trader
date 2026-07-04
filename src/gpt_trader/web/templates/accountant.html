@@ -45,16 +45,23 @@
 <h2>Budget levers vs usage</h2>
 <table>
   <tr><th>Lever</th><th>Budget</th><th>In use</th><th>Headroom</th></tr>
+  {% set daily_loss_unavailable = headroom.same_day_realized_loss_unavailable_count + headroom.open_at_risk_unavailable_count %}
   <tr>
     <td>Daily loss</td>
     <td>{{ budget.max_daily_loss_pct | percent }}</td>
-    <td>{{ headroom.daily_loss_used_pct | percent }}</td>
+    <td>
+      {{ headroom.daily_loss_used_pct | percent }}
+      {% if daily_loss_unavailable %}<div class="warn">incomplete: {{ daily_loss_unavailable }} record{{ "s" if daily_loss_unavailable != 1 }} without loss evidence</div>{% endif %}
+    </td>
     <td>{{ headroom.daily_loss_headroom_pct | percent }}</td>
   </tr>
   <tr>
     <td>Open notional</td>
     <td>{{ budget.max_open_notional_pct | percent }}</td>
-    <td>{{ headroom.open_notional_pct | percent }} <span class="muted">({{ headroom.open_notional | money }})</span></td>
+    <td>
+      {{ headroom.open_notional_pct | percent }} <span class="muted">({{ headroom.open_notional | money }})</span>
+      {% if headroom.open_notional_unavailable_count %}<div class="warn">incomplete: {{ headroom.open_notional_unavailable_count }} idea{{ "s" if headroom.open_notional_unavailable_count != 1 }} without a notional</div>{% endif %}
+    </td>
     <td>{{ headroom.open_notional_headroom_pct | percent }} <span class="muted">({{ headroom.open_notional_headroom | money }})</span></td>
   </tr>
   <tr>

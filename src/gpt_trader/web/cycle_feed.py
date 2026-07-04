@@ -161,7 +161,12 @@ def load_cycle_feed(manifest_path: Path, *, limit: int = 50) -> CycleFeed:
         if not isinstance(row, dict):
             unreadable_line_count += 1
             continue
-        turns.append(_parse_turn(row))
+        try:
+            turns.append(_parse_turn(row))
+        except (TypeError, ValueError):
+            # Valid JSON with a corrupt field (schema drift, manual repair)
+            # is still an unreadable row, never a 500 on the activity page.
+            unreadable_line_count += 1
     completed_count = sum(1 for turn in turns if turn.outcome == "completed")
     return CycleFeed(
         turns=tuple(reversed(turns[-limit:])),
