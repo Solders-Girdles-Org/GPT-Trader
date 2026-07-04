@@ -310,12 +310,14 @@ uv run agent-naming
 Run the full PR-readiness gate before opening a PR:
 
 ```bash
-make ci-required
+uv run local-ci
 ```
 
-For quick iteration the commands below cover the most common failures, but they
-are **not** a full substitute for `make ci-required` (which also runs docs
-audits, `agent-regenerate --verify`, and test guardrails):
+(`make ci-required` is a thin alias for the same command.) For quick iteration
+the commands below cover the most common failures, but they are **not** a full
+substitute for `uv run local-ci` (which also runs docs audits,
+`agent-regenerate --verify`, test guardrails, and the
+property/contract/integration suites):
 
 ```bash
 uv run ruff check .

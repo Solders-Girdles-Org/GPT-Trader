@@ -21,7 +21,7 @@ Related issue / finding / routed package:
 - [ ] Markers used appropriately (`unit`/`integration`/`slow`/`perf`)
 
 ## Quality Gates
-- [ ] `make ci-required` passes locally (lint/format, docs audits, type check, agent freshness, test guardrails, core unit tests)
+- [ ] `uv run local-ci` passes locally (lint/format, docs audits, type check, advisory agent freshness, test guardrails, unit/property/contract/integration tests)
 - [ ] `uv run mypy src/gpt_trader` clean, or new errors documented in the summary
 - [ ] No `sys.path` hacks in tests; `AsyncMock` (not `MagicMock`) on `async def`
 - [ ] Import boundaries respected (`scripts/ci/check_import_boundaries.py`)

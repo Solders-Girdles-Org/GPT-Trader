@@ -128,13 +128,13 @@ uv run pytest tests/property -q
 
 ### Local CI Profiles
 
-Three levels of local validation, from fastest to most thorough:
-
-| Command | Use when |
-|---------|----------|
-| `uv run local-ci --profile quick` | Fast development feedback; skips readiness inputs and agent-artifact freshness (with explicit banners) |
-| `make ci-required` | The local PR-readiness surface, including generated agent-artifact freshness — run before opening a PR |
-| `uv run local-ci` | Strict/full runs that also need local-live readiness evidence before a PR handoff |
+The canonical local validation command is `uv run local-ci`. Its default `pr`
+profile matches the GitHub `pull_request` required-check surface — run it
+before opening a PR (`make ci-required` is a thin alias). Use
+`uv run local-ci --profile quick` for fast development feedback (skips
+readiness inputs, agent-artifact freshness, and the
+property/contract/integration suites, with explicit banners), and
+`--profile strict` when you also need local-live readiness evidence.
 
 When strict/full fails on stale generated artifacts, run
 `uv run agent-regenerate` and then `uv run agent-regenerate --verify`. When it
@@ -160,7 +160,8 @@ uv run agent-regenerate --only testing
 ### Agent Tools
 
 Commands for AI-assisted development. The canonical local quality gate is
-`make ci-required`; these helpers are optional conveniences on top of it:
+`uv run local-ci` (`make ci-required` is a thin alias); these helpers are
+optional conveniences on top of it:
 
 ```bash
 uv run agent-check      # Optional JSON summary of lint/format/types/tests
