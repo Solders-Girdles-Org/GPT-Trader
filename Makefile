@@ -75,17 +75,11 @@ test-guardrails:
 stage1-smoke:
 	uv run python scripts/ops/stage1_rails_smoke.py
 
+# Thin alias for the canonical local validation command (#1131). The step
+# list lives in src/gpt_trader/ci/local_ci.py; the default pr profile matches
+# the GitHub pull_request required-check surface.
 ci-required:
-	$(MAKE) lint
-	uv run ruff check scripts/ops scripts/analysis/backtest_runner.py scripts/monitoring scripts/production_preflight.py
-	uv run python scripts/ci/check_orchestration_imports.py
-	uv run python scripts/ci/check_deprecation_registry.py
-	$(MAKE) docs-audit
-	$(MAKE) typecheck
-	uv run agent-regenerate --verify || echo "::warning::Agent artifacts stale (advisory; run 'uv run agent-regenerate' to refresh). Non-PR CI still enforces this."
-	$(MAKE) test-guardrails
-	GPT_TRADER_STRICT_CONTAINER=1 PYTHONWARNINGS=default uv run pytest tests/unit -n auto -q
-	$(MAKE) stage1-smoke
+	uv run local-ci
 
 legacy-patterns:
 	uv run python scripts/ci/check_legacy_patterns.py

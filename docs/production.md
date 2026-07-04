@@ -60,14 +60,14 @@ is ready.
 ## Validation Commands
 
 ```bash
-# Strict/full local gate: PR-readiness plus local/live readiness evidence
+# Canonical local gate (pr profile): the GitHub pull_request required surface
 uv run local-ci
 
-# Fast development loop: skips readiness and agent-artifact freshness
+# Fast development loop: skips readiness, artifact freshness, optional suites
 uv run local-ci --profile quick
 
-# Local PR-readiness surface without the canary readiness gate
-make ci-required
+# Strict/full: PR surface plus local/live readiness evidence
+uv run local-ci --profile strict
 
 # Profile and live-readiness diagnostics
 uv run python scripts/production_preflight.py --profile canary

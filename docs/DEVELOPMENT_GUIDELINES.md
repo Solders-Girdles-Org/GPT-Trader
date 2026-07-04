@@ -130,76 +130,39 @@ output inputs, and `Dependency Review` runs for dependency manifest changes.
 
 ### Local CI Command
 
-For a fail-fast entrypoint that matches the local PR-readiness command set, run:
-
-```bash
-make ci-required
-```
-
-It runs lint/format, docs audits, mypy, agent artifacts freshness, test
-guardrails, core unit tests, and the Stage 1 rails end-to-end smoke
-(`scripts/ops/stage1_rails_smoke.py`, also `make stage1-smoke`), stopping on
-the first failure. Use
-it when you want the local PR-readiness surface without optional suites or local
-readiness evidence. Agent artifacts freshness is advisory here: stale artifacts
-warn without stopping the run, while non-PR GitHub CI remains the blocking
-enforcement point.
-
-Run the local CI command when you want the same local PR-readiness set plus
-the repository's optional local profile controls:
+There is one canonical local validation command:
 
 ```bash
 uv run local-ci
 ```
 
-This covers the same core validation categories used around PRs: lint + format,
-docs audits, mypy, agent artifacts freshness, test guardrails, and core unit
-tests. Profile-specific local checks can still differ from GitHub pull_request
-enforcement, especially around readiness evidence.
+The default `pr` profile matches the GitHub `pull_request` required-check
+surface: lint/format, docs audits, type check, test guardrails, core unit
+tests plus the Stage 1 rails smoke, and the property/contract/integration
+suites. Agent artifacts freshness runs as an advisory warning (stale artifacts
+warn without failing, matching the non-blocking PR lane). Two other profiles
+exist: `strict` (alias `full`) adds the canary readiness gate
+(`scripts/ci/check_readiness_gate.py --profile canary --strict`) as local/live
+evidence beyond the PR surface, and `quick` (alias `dev`) skips the readiness
+gate, artifacts freshness, and the property/contract/integration suites for a
+fast development loop (re-enable a single suite with
+`--include-property-tests`, `--include-contract-tests`, or
+`--include-integration-tests`; `--include-agent-health` adds the agent-health
+fast checks to any profile). The CLI banner prints the active profile and the
+status of each toggled check before executing.
 
-The command accepts `--profile`/`-p` to select either the default strict/full
-profile or the quick/dev profile. Strict (the default and the `full` alias) runs
-the local PR-readiness validation set, keeps agent artifacts freshness enabled as
-an advisory warning, and adds the canary readiness gate as local/live readiness
-evidence. GitHub pull_request CI and `make ci-required` do not enforce that
-canary readiness gate.
-The CLI prints the active profile plus the status of the readiness gate and
-agent-artifacts checks before executing any steps. Quick (aliased as `dev`)
-intentionally disables those two checks so you can run local CI without needing
-readiness reports or regenerating `var/agents`; the output still documents which
-checks were skipped and why.
-
-| Command | Intended use | Agent artifacts freshness | Readiness gate |
-| --- | --- | --- | --- |
-| `make ci-required` | Local PR-readiness validation surface | Advisory, non-blocking | Not run |
-| GitHub `pull_request` CI | GitHub PR validation in Actions | Path-conditional; non-blocking if stale when run | Not run |
-| `uv run local-ci` / strict/full | Local PR-readiness validation plus local/live readiness evidence | Advisory, non-blocking | Runs `scripts/ci/check_readiness_gate.py --profile canary --strict` |
-| `uv run local-ci --profile quick` | Fast development loop | Skipped with an explicit banner reason | Skipped with an explicit banner reason |
-
-Optional suites:
-
-```bash
-uv run local-ci --include-property-tests
-uv run local-ci --include-contract-tests
-uv run local-ci --include-agent-health
-```
-
-For quick loops you can explicitly request the dev profile:
-
-```bash
-uv run local-ci --profile quick
-uv run local-ci --profile dev
-```
+`make ci-required` survives as a thin alias that runs `uv run local-ci`
+verbatim.
 
 Need help diagnosing `uv run local-ci` failures? See the [Local CI troubleshooting](#local-ci-troubleshooting) steps below.
 
 ### Local CI troubleshooting
 
-Local CI (`make ci-required` / `uv run local-ci`) can report issues before the
-unit tests run. Stale agent artifacts are advisory in local runs and should be
-regenerated before merge; readiness gate inputs can still fail strict/full
-`uv run local-ci`. The readiness gate applies to strict/full `uv run local-ci`
-and direct readiness checks, not to `make ci-required` or GitHub pull_request CI.
+Local CI (`uv run local-ci`) can report issues before the unit tests run.
+Stale agent artifacts are advisory in local runs and should be regenerated
+before merge; readiness gate inputs can still fail the strict/full profile.
+The readiness gate applies only to the strict/full profile and direct
+readiness checks, not to the default `pr` profile or GitHub pull_request CI.
 When you hit one of these findings, follow the sequence below before re-running
 the command.
 
