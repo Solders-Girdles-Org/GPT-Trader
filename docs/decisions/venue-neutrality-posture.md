@@ -96,13 +96,16 @@ instrument-as-string, notional-denominated budget vocabulary.
 
 ## Consequences
 
-- No code changes now; this record is the constraint reviewers cite.
-- When a second venue (e.g., Robinhood) becomes concrete, open an issue
-  referencing this record. The expansion work is expected to be additive, not
-  a rework: a trading-calendar service; an instrument taxonomy replacing the
-  opaque string; a buying-power/defined-risk dimension in the budget
-  vocabulary; a second recorder snapshot source; a `TicketVenue` entry and
-  export-payload renderer; a per-venue paper broker for the execution lane.
+- No code changes now; this record is the constraint reviewers cite. No
+  follow-up issues are filed either — deferring the work *is* the decision,
+  so there is no backlog to track.
+- When a second venue (e.g., Robinhood) becomes concrete, open one scoping
+  issue referencing this record. Its expected scope — recorded here so that
+  issue starts additive, not as a rework — is: a trading-calendar service; an
+  instrument taxonomy replacing the opaque string; a buying-power/defined-risk
+  dimension in the budget vocabulary; a second recorder snapshot source; a
+  `TicketVenue` entry and export-payload renderer; a per-venue paper broker
+  for the execution lane.
 - Product-vocabulary flags already in the budget (`allow_naked_shorts`,
   `allow_futures_leverage`) are grandfathered; new product flags should
   trigger the taxonomy discussion rather than accrete as booleans.
