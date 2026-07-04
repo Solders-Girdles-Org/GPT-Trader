@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -176,6 +177,36 @@ def test_non_numeric_lever_re_renders_with_a_field_named_error(
     assert response.status_code == 400
     assert "max_daily_loss_pct must be a decimal number" in response.text
     assert service.budget_log.history() == []
+
+
+def test_concurrent_submissions_from_the_same_version_have_one_winner(
+    service: TradeIdeaService, client: TestClient
+) -> None:
+    # Four forms rendered from the same budget version and submitted together:
+    # the route lock serializes check+append, so for every interleaving
+    # exactly one submission enacts v2 and the rest get the conflict page —
+    # never multiple accepted appends of "the same" next version.
+    forms = [
+        _lever_form(service, max_daily_loss_pct=str(value), reason=f"Operator {value}")
+        for value in (6, 7, 8, 9)
+    ]
+    statuses: list[int] = []
+    statuses_lock = threading.Lock()
+
+    def submit(form: dict[str, str]) -> None:
+        response = client.post("/envelope/budget", data=form, follow_redirects=False)
+        with statuses_lock:
+            statuses.append(response.status_code)
+
+    threads = [threading.Thread(target=submit, args=(form,)) for form in forms]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert sorted(statuses) == [303, 409, 409, 409]
+    entries = service.budget_log.history()
+    assert [entry.budget.version for entry in entries] == [1, 2]
 
 
 def test_ratchet_entry_renders_with_its_breach_evidence(

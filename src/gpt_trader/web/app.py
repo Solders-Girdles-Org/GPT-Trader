@@ -9,6 +9,7 @@ required reason. The console holds no state of its own.
 from __future__ import annotations
 
 import json
+import threading
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -250,6 +251,12 @@ def create_app(
     # from the service's own root so an injected service and the feed can
     # never point at different ideas roots.
     cycle_manifest_path = resolved_service.root / "cycle" / "manifest.jsonl"
+    # Serializes the staleness pre-check + audited append for budget updates:
+    # sync route handlers run on a threadpool, so without this two forms
+    # rendered from the same version could both pass the pre-check and both
+    # append "the same" next version (RiskBudgetLog.append has no lock of its
+    # own). In-process only — console writes for one operator identity.
+    budget_update_lock = threading.Lock()
 
     app = FastAPI(title="GPT-Trader operator console", docs_url=None, redoc_url=None)
     templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
@@ -437,30 +444,33 @@ def create_app(
                 status_code=409,
             )
 
-        # The staleness guard runs before any other validation: every other
-        # error path echoes the submitted levers back under a fresh hidden
-        # base_version, which must never happen for a stale submission.
-        if base_version != resolved_service.peek_budget().version:
-            return _version_conflict()
-        cleaned_reason = reason.strip()
-        if not cleaned_reason:
-            return _form_error("A reason is required for every budget version.")
-        try:
-            candidate = _budget_from_form(
-                base_version=base_version,
-                reason=cleaned_reason,
-                values=form_values,
-            )
-        except ValueError as exc:
-            return _form_error(str(exc))
-        try:
-            resolved_service.update_budget(candidate, ActorType.HUMAN, resolved_actor)
-        except BudgetIntegrityError:
-            # The append-side sequencing check in RiskBudgetLog caught a race
-            # past the pre-check; same conflict, same fresh-lever re-render.
-            return _version_conflict()
-        except ValidationError as exc:
-            return _form_error(str(exc))
+        with budget_update_lock:
+            # The staleness guard runs before any other validation: every
+            # other error path echoes the submitted levers back under a fresh
+            # hidden base_version, which must never happen for a stale
+            # submission.
+            if base_version != resolved_service.peek_budget().version:
+                return _version_conflict()
+            cleaned_reason = reason.strip()
+            if not cleaned_reason:
+                return _form_error("A reason is required for every budget version.")
+            try:
+                candidate = _budget_from_form(
+                    base_version=base_version,
+                    reason=cleaned_reason,
+                    values=form_values,
+                )
+            except ValueError as exc:
+                return _form_error(str(exc))
+            try:
+                resolved_service.update_budget(candidate, ActorType.HUMAN, resolved_actor)
+            except BudgetIntegrityError:
+                # An out-of-process writer (CLI, agent) moved the log between
+                # the pre-check and the append; same conflict, same
+                # fresh-lever re-render.
+                return _version_conflict()
+            except ValidationError as exc:
+                return _form_error(str(exc))
         return RedirectResponse(url="/envelope", status_code=303)
 
     @app.get("/accountant", response_class=HTMLResponse)
