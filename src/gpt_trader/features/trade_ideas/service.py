@@ -52,6 +52,7 @@ from gpt_trader.features.trade_ideas.broker_payloads import (
 )
 from gpt_trader.features.trade_ideas.budget import (
     DEFAULT_RISK_BUDGET,
+    BudgetIntegrityError,
     BudgetLogEntry,
     RiskBudget,
     RiskBudgetLog,
@@ -312,14 +313,22 @@ class TradeIdeaService:
         budget = self._budget_log.current()
         if budget is not None:
             return budget
-        self._budget_log.append(
-            BudgetLogEntry(
-                timestamp=self._now(),
-                actor_type=ActorType.SYSTEM,
-                actor_id="seed-defaults",
-                budget=DEFAULT_RISK_BUDGET,
+        try:
+            self._budget_log.append(
+                BudgetLogEntry(
+                    timestamp=self._now(),
+                    actor_type=ActorType.SYSTEM,
+                    actor_id="seed-defaults",
+                    budget=DEFAULT_RISK_BUDGET,
+                )
             )
-        )
+        except BudgetIntegrityError:
+            # Another process won the seed race under the log lock; adopt
+            # whatever it appended instead of failing this read path.
+            budget = self._budget_log.current()
+            if budget is None:
+                raise
+            return budget
         return DEFAULT_RISK_BUDGET
 
     # -- autonomy ----------------------------------------------------------

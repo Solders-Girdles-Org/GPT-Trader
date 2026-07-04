@@ -17,9 +17,11 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
+
+from filelock import FileLock, Timeout
 
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.trade_ideas.audit import ActorType
@@ -41,7 +43,7 @@ def _require_non_negative_int(value: int, field: str) -> None:
 
 
 class BudgetIntegrityError(ValidationError):
-    """Raised when a budget append would break version sequencing."""
+    """Raised when the budget log is malformed, contended, or an append breaks sequencing."""
 
 
 def _require_boolean(value: Any, field: str) -> bool:
@@ -184,38 +186,94 @@ class BudgetLogEntry:
 
 
 class RiskBudgetLog:
-    """Append-only JSONL log of budget versions; the last entry is current."""
+    """Append-only JSONL log of budget versions; the last entry is current.
+
+    Appends hold an OS-level file lock while re-reading the current version,
+    so two processes (e.g. the CLI and the web console) cannot both append
+    the same next version; the loser gets a ``BudgetIntegrityError`` and must
+    re-read the budget it is renegotiating against.
+
+    Reads validate version sequencing and fail closed by raising
+    ``BudgetIntegrityError``: the budget powers approval decisions, and the
+    seeded defaults may be wider (and lack the operator-attested equity) than
+    the operator's current version, so a tampered or duplicated log must stop
+    budget resolution rather than fall back.
+    """
+
+    _LOCK_TIMEOUT_SECONDS = 10.0
 
     def __init__(self, path: Path) -> None:
         self._path = path
+        self._lock = FileLock(str(path) + ".lock")
 
     @property
     def path(self) -> Path:
         return self._path
 
     def append(self, entry: BudgetLogEntry) -> None:
-        current = self.current()
-        expected_version = 1 if current is None else current.version + 1
-        if entry.budget.version != expected_version:
-            raise BudgetIntegrityError(
-                f"Budget version must be {expected_version}, got {entry.budget.version}",
-                field="version",
-                value=entry.budget.version,
-            )
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(entry.to_dict(), sort_keys=True, separators=(",", ":"))
-        with self._path.open("a", encoding="utf-8") as handle:
-            handle.write(line + "\n")
+        try:
+            self._lock.acquire(timeout=self._LOCK_TIMEOUT_SECONDS)
+        except Timeout as error:
+            raise BudgetIntegrityError(
+                f"Timed out waiting for the budget log lock: {self._lock.lock_file}",
+                field="path",
+                value=str(self._path),
+            ) from error
+        try:
+            current = self.current()
+            expected_version = 1 if current is None else current.version + 1
+            if entry.budget.version != expected_version:
+                raise BudgetIntegrityError(
+                    f"Budget version must be {expected_version}, got {entry.budget.version}",
+                    field="version",
+                    value=entry.budget.version,
+                )
+            line = json.dumps(entry.to_dict(), sort_keys=True, separators=(",", ":"))
+            with self._path.open("a", encoding="utf-8") as handle:
+                handle.write(line + "\n")
+        finally:
+            self._lock.release()
 
     def history(self) -> list[BudgetLogEntry]:
         if not self._path.exists():
             return []
         entries: list[BudgetLogEntry] = []
-        with self._path.open("r", encoding="utf-8") as handle:
-            for line in handle:
-                line = line.strip()
-                if line:
-                    entries.append(BudgetLogEntry.from_dict(json.loads(line)))
+        try:
+            with self._path.open("r", encoding="utf-8") as handle:
+                for line_number, raw_line in enumerate(handle, start=1):
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = BudgetLogEntry.from_dict(json.loads(line))
+                    except (
+                        KeyError,
+                        TypeError,
+                        ValueError,
+                        InvalidOperation,
+                        json.JSONDecodeError,
+                    ) as error:
+                        raise BudgetIntegrityError(
+                            f"Budget log line {line_number} is malformed: {error}",
+                            field="line",
+                            value=line_number,
+                        ) from error
+                    expected_version = len(entries) + 1
+                    if entry.budget.version != expected_version:
+                        raise BudgetIntegrityError(
+                            f"Budget log line {line_number} has version "
+                            f"{entry.budget.version}; expected {expected_version}",
+                            field="version",
+                            value=entry.budget.version,
+                        )
+                    entries.append(entry)
+        except OSError as error:
+            raise BudgetIntegrityError(
+                f"Budget log is unreadable: {error}",
+                field="path",
+                value=str(self._path),
+            ) from error
         return entries
 
     def current(self) -> RiskBudget | None:

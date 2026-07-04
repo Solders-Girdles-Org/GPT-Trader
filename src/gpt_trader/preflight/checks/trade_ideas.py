@@ -57,19 +57,11 @@ def _latest_state_counts(events: list[AuditEvent]) -> Counter[TradeIdeaState]:
 
 
 def _validate_budget_history(budget_log: RiskBudgetLog) -> tuple[int, int] | None:
+    # history() raises BudgetIntegrityError on malformed lines or
+    # non-contiguous versions, so reading it is the validation.
     entries = budget_log.history()
     if not entries:
         return None
-    for expected_version, entry in enumerate(entries, start=1):
-        if entry.budget.version != expected_version:
-            raise ValidationError(
-                (
-                    "Risk budget versions must be contiguous; "
-                    f"expected {expected_version}, got {entry.budget.version}"
-                ),
-                field="version",
-                value=entry.budget.version,
-            )
     return len(entries), entries[-1].budget.version
 
 
