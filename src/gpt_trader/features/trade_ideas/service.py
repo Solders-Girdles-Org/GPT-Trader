@@ -276,6 +276,7 @@ class TradeIdeaService:
         *,
         now_factory: Callable[[], datetime] = _utc_now,
     ) -> None:
+        self._root = root
         self._store = TradeIdeaStore(root / "records")
         self._audit = TradeIdeaAuditLog(root / "audit.jsonl")
         self._closeouts = CloseoutAttributionLog(root / "closeout_attributions.jsonl")
@@ -284,12 +285,21 @@ class TradeIdeaService:
         self._now = now_factory
 
     @property
+    def root(self) -> Path:
+        """Storage root all of this service's durable artifacts live under."""
+        return self._root
+
+    @property
     def audit_log(self) -> TradeIdeaAuditLog:
         return self._audit
 
     @property
     def closeout_log(self) -> CloseoutAttributionLog:
         return self._closeouts
+
+    @property
+    def budget_log(self) -> RiskBudgetLog:
+        return self._budget_log
 
     # -- budget ----------------------------------------------------------
 
@@ -551,7 +561,9 @@ class TradeIdeaService:
     def budget_headroom(self, *, now: datetime | None = None) -> dict[str, object]:
         """Return read-only aggregate budget headroom for operators and agents."""
         evaluation_time = now or self._now()
-        budget = self.current_budget()
+        # Non-mutating read: rendering headroom (console pages, budget show)
+        # must not seed risk_budget.jsonl; decision paths seed on first use.
+        budget = self.peek_budget()
         context = self.approval_budget_context(now=evaluation_time)
         account_equity = context.account_equity_snapshot
         daily_loss_used_pct = context.same_day_realized_loss_pct + context.open_approved_at_risk_pct

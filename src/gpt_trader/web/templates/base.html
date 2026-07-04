@@ -20,6 +20,8 @@
       padding: 0.8rem 1.2rem; border-bottom: 1px solid var(--line);
     }
     header a { color: var(--text); text-decoration: none; font-weight: 600; }
+    header nav { display: inline; margin-left: 1rem; }
+    header nav a { color: var(--muted); font-weight: 400; margin-right: 0.8rem; font-size: 0.9rem; }
     header .actor { color: var(--muted); font-size: 0.85rem; }
     main { max-width: 72rem; margin: 0 auto; padding: 1.2rem; }
     h1 { font-size: 1.15rem; margin: 0 0 0.8rem; }
@@ -68,7 +70,14 @@
 </head>
 <body>
   <header>
-    <a href="/">GPT-Trader operator console</a>
+    <div>
+      <a href="/">GPT-Trader operator console</a>
+      <nav>
+        <a href="/">Queue</a>
+        <a href="/accountant">Accountant</a>
+        <a href="/activity">Activity</a>
+      </nav>
+    </div>
     <span class="actor">acting as <strong>{{ actor_id }}</strong></span>
   </header>
   <main>

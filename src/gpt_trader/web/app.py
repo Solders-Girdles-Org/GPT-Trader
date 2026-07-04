@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from gpt_trader.errors import ValidationError
+from gpt_trader.features.trade_ideas.accounting import compute_paper_accounting
+from gpt_trader.features.trade_ideas.audit import AuditAction
 from gpt_trader.features.trade_ideas.models import TradeIdea
 from gpt_trader.features.trade_ideas.review_metrics import compute_review_instrumentation
 from gpt_trader.features.trade_ideas.service import (
@@ -30,8 +33,12 @@ from gpt_trader.features.trade_ideas.service_models import (
     UnknownTradeIdeaError,
 )
 from gpt_trader.features.trade_ideas.workflow import ALLOWED_TRANSITIONS, TradeIdeaState
+from gpt_trader.web.cycle_feed import load_cycle_feed
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+# Newest audit events shown on the activity page.
+_ACTIVITY_EVENT_LIMIT = 50
 
 # States an operator can still act on from the console review queue.
 _PENDING_STATES = (TradeIdeaState.PROPOSED, TradeIdeaState.NEEDS_CHANGES)
@@ -64,6 +71,21 @@ def _format_rate(value: float | None) -> str:
     if value is None:
         return "—"
     return f"{value * 100:.0f}%"
+
+
+def _format_money(value: Decimal | str | None) -> str:
+    if value is None:
+        return "—"
+    amount = Decimal(str(value))
+    sign = "-" if amount < 0 else ""
+    return f"{sign}${abs(amount):,.2f}"
+
+
+def _format_percent(value: Decimal | str | None) -> str:
+    if value is None:
+        return "—"
+    amount = Decimal(str(value))
+    return f"{amount.quantize(Decimal('0.01')):f}%"
 
 
 def _pretty_json(value: object) -> str:
@@ -125,12 +147,19 @@ def create_app(
     """Build the console app over one TradeIdeaService and one operator identity."""
     resolved_service = service or create_trade_idea_service(ideas_root)
     resolved_actor = resolve_trade_idea_actor_id(actor_id)
+    # The cycle manifest lives beside the trade-idea stores; the CLI runner
+    # writes it under <ideas_root>/cycle (gpt-trader ideas cycle). Derive it
+    # from the service's own root so an injected service and the feed can
+    # never point at different ideas roots.
+    cycle_manifest_path = resolved_service.root / "cycle" / "manifest.jsonl"
 
     app = FastAPI(title="GPT-Trader operator console", docs_url=None, redoc_url=None)
     templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
     templates.env.filters["duration"] = _format_duration
     templates.env.filters["timestamp"] = _format_timestamp
     templates.env.filters["rate"] = _format_rate
+    templates.env.filters["money"] = _format_money
+    templates.env.filters["percent"] = _format_percent
     templates.env.filters["pretty_json"] = _pretty_json
 
     def _render_queue(request: Request, status_code: int = 200) -> HTMLResponse:
@@ -190,6 +219,49 @@ def create_app(
     @app.get("/", response_class=HTMLResponse)
     def queue(request: Request) -> HTMLResponse:
         return _render_queue(request)
+
+    @app.get("/accountant", response_class=HTMLResponse)
+    def accountant(request: Request) -> HTMLResponse:
+        # Closeouts fold at their resolution time so a delayed attribution
+        # cannot re-apply P&L an intervening attestation already includes.
+        # Only non-FILLED terminal events are mapped: a FILLED audit event is
+        # the entry fill, not the later market close, so filled trades keep
+        # their attribution timestamp (the closest available evidence).
+        terminal_times = {
+            event.event_id: event.timestamp
+            for event in resolved_service.list_audit_events().items
+            if event.action is not AuditAction.FILLED
+        }
+        summary = compute_paper_accounting(
+            resolved_service.budget_log.history(),
+            resolved_service.query_closeout_records().items,
+            terminal_times=terminal_times,
+        )
+        return templates.TemplateResponse(
+            request=request,
+            name="accountant.html",
+            context={
+                "actor_id": resolved_actor,
+                "summary": summary,
+                "budget": resolved_service.peek_budget(),
+                "headroom": resolved_service.budget_headroom(),
+                "open_approved_count": resolved_service.open_approved_count(),
+            },
+        )
+
+    @app.get("/activity", response_class=HTMLResponse)
+    def activity(request: Request) -> HTMLResponse:
+        audit_events = resolved_service.list_audit_events().items
+        return templates.TemplateResponse(
+            request=request,
+            name="activity.html",
+            context={
+                "actor_id": resolved_actor,
+                "feed": load_cycle_feed(cycle_manifest_path),
+                "manifest_path": str(cycle_manifest_path),
+                "events": tuple(reversed(audit_events[-_ACTIVITY_EVENT_LIMIT:])),
+            },
+        )
 
     @app.get("/ideas/{decision_id}", response_class=HTMLResponse)
     def idea_detail(request: Request, decision_id: str) -> HTMLResponse:
