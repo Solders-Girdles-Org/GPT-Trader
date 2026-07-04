@@ -119,8 +119,13 @@ from gpt_trader.features.trade_ideas.report import (
 )
 from gpt_trader.features.trade_ideas.service import (
     ACTOR_ENV_VAR,
+    AUTO_APPROVAL_ACTOR_ID,
+    AUTO_APPROVAL_ENV_VAR,
+    AUTO_APPROVAL_REASON_PREFIX,
     DEFAULT_IDEAS_ROOT,
     IDEAS_ROOT_ENV_VAR,
+    AutoApprovalSkip,
+    AutoApprovalSweepResult,
     DuplicateTradeIdeaError,
     PreApprovalBrokerTicketError,
     TradeIdeaListQuery,
@@ -133,6 +138,7 @@ from gpt_trader.features.trade_ideas.service import (
     TradeIdeaView,
     UnknownTradeIdeaError,
     create_trade_idea_service,
+    resolve_auto_approval_enabled,
     resolve_ideas_root,
     resolve_trade_idea_actor_id,
 )
@@ -162,6 +168,9 @@ from gpt_trader.features.trade_ideas.workflow import (
 __all__ = [
     "ALLOWED_TRANSITIONS",
     "ACTOR_ENV_VAR",
+    "AUTO_APPROVAL_ACTOR_ID",
+    "AUTO_APPROVAL_ENV_VAR",
+    "AUTO_APPROVAL_REASON_PREFIX",
     "DEFAULT_AUTONOMY_MODE",
     "DEFAULT_RISK_BUDGET",
     "DEFAULT_IDEAS_ROOT",
@@ -185,6 +194,8 @@ __all__ = [
     "AutonomyResolution",
     "AutonomyStateEntry",
     "AutonomyStateLog",
+    "AutoApprovalSkip",
+    "AutoApprovalSweepResult",
     "BaselineProposer",
     "BaselineProposerConfig",
     "BrokerTicketExportRequest",
@@ -273,6 +284,7 @@ __all__ = [
     "optimize_replay_min_history",
     "paper_fill_events_from_store_events",
     "replay_optimize_baseline_candidates",
+    "resolve_auto_approval_enabled",
     "resolve_autonomy",
     "resolve_ideas_root",
     "resolve_trade_idea_actor_id",

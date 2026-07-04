@@ -109,6 +109,30 @@ def test_current_state_tracks_latest_event(
     assert audit_log.current_state(trade_idea.decision_id) is TradeIdeaState.APPROVED
 
 
+def test_auto_approval_skip_is_audited_without_leaving_proposed(
+    audit_log: TradeIdeaAuditLog, trade_idea: TradeIdea
+) -> None:
+    propose(audit_log, trade_idea)
+
+    audit_log.append(
+        build_event(
+            trade_idea,
+            action=AuditAction.AUTO_APPROVAL_SKIPPED,
+            before_state=TradeIdeaState.PROPOSED,
+            after_state=TradeIdeaState.PROPOSED,
+            actor_type=ActorType.SYSTEM,
+            minute=1,
+        )
+    )
+
+    events = audit_log.verify()
+    assert [event.action for event in events] == [
+        AuditAction.PROPOSED,
+        AuditAction.AUTO_APPROVAL_SKIPPED,
+    ]
+    assert audit_log.current_state(trade_idea.decision_id) is TradeIdeaState.PROPOSED
+
+
 def test_append_rejects_stale_before_state(
     audit_log: TradeIdeaAuditLog, trade_idea: TradeIdea
 ) -> None:

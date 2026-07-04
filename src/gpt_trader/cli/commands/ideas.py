@@ -39,6 +39,7 @@ from gpt_trader.cli.response import CliError, CliErrorCode, CliResponse, RawCliO
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.brokerages.mock import DeterministicBroker
 from gpt_trader.features.idea_execution import (
+    AUTO_EXECUTION_ENV_VAR,
     DEFAULT_PAPER_EXECUTION_ACTOR_ID,
     PaperCycleRunner,
     PaperIdeaExecutor,
@@ -890,8 +891,22 @@ def register(subparsers: Any) -> None:
     approve = ideas_subparsers.add_parser("approve", help="Approve a proposed trade idea")
     _add_common_options(approve)
     _add_actor_options(approve)
-    approve.add_argument("decision_id", help="Trade idea decision identifier")
-    approve.add_argument("--reason", required=True, help="Human approval reason")
+    approve.add_argument(
+        "decision_id",
+        nargs="?",
+        default=None,
+        help="Trade idea decision identifier (omit with --auto-sweep)",
+    )
+    approve.add_argument("--reason", help="Human approval reason (required unless --auto-sweep)")
+    approve.add_argument(
+        "--auto-sweep",
+        action="store_true",
+        help=(
+            "Auto-approve every violation-free proposed idea inside the budget "
+            "envelope; requires GPT_TRADER_IDEAS_AUTO_APPROVAL=1 and audited "
+            "bounded_autonomy mode (docs/decisions/stage2-auto-approval-workflow.md)"
+        ),
+    )
     approve.set_defaults(handler=_handle_approve, subcommand="approve")
 
     reject = ideas_subparsers.add_parser("reject", help="Reject a proposed trade idea")
@@ -1017,11 +1032,13 @@ def register(subparsers: Any) -> None:
         "execute-paper",
         help="Execute an APPROVED idea against the offline deterministic paper broker",
         description=(
-            "Machine leg of the Stage 1 paper lane: place a simulated market order "
-            "for an approved idea (client_order_id = decision id) and record the "
-            "submission and fill through TradeIdeaService. Only the deterministic "
-            "paper broker is reachable from this command; it never contacts a live "
-            "broker or account."
+            "Machine leg of the paper lane: place a simulated market order for a "
+            "human-approved idea, or for an auto-sweep system-approved idea only "
+            f"when {AUTO_EXECUTION_ENV_VAR} is enabled and the audited autonomy mode "
+            "is bounded_autonomy (client_order_id = decision id), then record the submission and "
+            "fill through TradeIdeaService. Only the deterministic paper broker is "
+            "reachable from this command; it never contacts a live broker or "
+            "account."
         ),
     )
     _add_common_options(execute_paper)
@@ -1046,10 +1063,12 @@ def register(subparsers: Any) -> None:
         description=(
             "One scheduled turn of the Stage 1 paper loop: sweep expired ideas, run "
             "the selected proposers over one market snapshot, paper-execute ideas a "
-            "human already approved (priced from the same snapshot), and append one "
-            "manifest row of evidence. Recurrence comes from an external scheduler "
-            "(launchd/cron); this command never decides a cadence, never approves "
-            "ideas, and never contacts a live broker or account."
+            "human already approved, plus gated auto-sweep system approvals when "
+            "the Stage 2 paper-execution gate passes (priced from the same "
+            "snapshot), and append one manifest row of evidence. Recurrence comes "
+            "from an external scheduler (launchd/cron); this command never decides "
+            "a cadence, never approves ideas, and never contacts a live broker or "
+            "account."
         ),
     )
     _add_common_options(cycle)
@@ -2496,6 +2515,16 @@ def _handle_closeout_export(args: Namespace) -> CliResponse:
 
 def _handle_approve(args: Namespace) -> CliResponse:
     command = "ideas approve"
+    if args.auto_sweep:
+        return _handle_approve_auto_sweep(command, args)
+    if args.decision_id is None:
+        return _failure(
+            command,
+            args,
+            CliErrorCode.MISSING_ARGUMENT,
+            "decision_id is required unless --auto-sweep is set",
+            details={"field": "decision_id"},
+        )
     reason_error = _reason_error(command, args)
     if reason_error is not None:
         return reason_error
@@ -2509,6 +2538,53 @@ def _handle_approve(args: Namespace) -> CliResponse:
     except Exception as error:
         return _mapped_error(command, args, error)
     return _state_change_success(command, args, view)
+
+
+def _handle_approve_auto_sweep(command: str, args: Namespace) -> CliResponse:
+    if args.decision_id is not None or (args.reason and args.reason.strip()):
+        return _failure(
+            command,
+            args,
+            CliErrorCode.INVALID_ARGUMENT,
+            "--auto-sweep takes no decision_id or --reason; the sweep records "
+            "its own audited reasons per idea",
+            details={"field": "auto_sweep"},
+        )
+    try:
+        result = _service(args).auto_approve_sweep()
+    except Exception as error:
+        return _mapped_error(command, args, error)
+    payload = {
+        "evaluated_at": result.evaluated_at.isoformat(),
+        "autonomy_mode": result.autonomy_mode,
+        "autonomy_version": result.autonomy_version,
+        "counts": {
+            "approved": result.approved_count,
+            "skipped": result.skipped_count,
+        },
+        "approved": [_view_summary(view) for view in result.approved],
+        "skipped": [skip.to_dict() for skip in result.skipped],
+    }
+    lines = [
+        _status_line(
+            command,
+            "OK",
+            f"auto-sweep approved={result.approved_count}, skipped={result.skipped_count}",
+        )
+    ]
+    for view in result.approved:
+        lines.append(f"approved: {view.idea.decision_id}")
+    for skip in result.skipped:
+        lines.append(f"skipped: {skip.decision_id}")
+        for violation in skip.violations:
+            lines.append(f"  - {violation}")
+    return _success(
+        command,
+        args,
+        payload,
+        "\n".join(lines),
+        was_noop=not (result.approved or result.skipped),
+    )
 
 
 def _handle_reject(args: Namespace) -> CliResponse:

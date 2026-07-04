@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Accountant — GPT-Trader console{% endblock %}
+{% block content %}
+<h1>Accountant</h1>
+
+<div class="cards">
+  <div class="card">
+    <div class="label">Paper equity</div>
+    <div class="value">{{ summary.current_equity | money }}</div>
+    {% if summary.attestation %}
+    <div class="muted">attested {{ summary.attestation.equity | money }} by {{ summary.attestation.actor_id }} · {{ summary.attestation.timestamp | timestamp }}</div>
+    {% else %}
+    <div class="muted">no attested equity yet</div>
+    {% endif %}
+  </div>
+  <div class="card">
+    <div class="label">High-water mark</div>
+    <div class="value">{{ summary.high_water_mark | money }}</div>
+    <div class="muted">
+      {% if summary.drawdown_amount is not none %}
+      drawdown {{ summary.drawdown_amount | money }} ({{ summary.drawdown_percent | percent }})
+      {% else %}—{% endif %}
+    </div>
+  </div>
+  <div class="card">
+    <div class="label">Realized P&amp;L since attestation</div>
+    {% if summary.realized_profit_loss_since_attestation is not none %}
+    <div class="value {{ 'ok' if summary.realized_profit_loss_since_attestation >= 0 else 'bad' }}">{{ summary.realized_profit_loss_since_attestation | money }}</div>
+    {% else %}
+    <div class="value">—</div>
+    {% endif %}
+    <div class="muted">{{ summary.realized_profit_loss_total | money }} all time</div>
+  </div>
+  <div class="card">
+    <div class="label">Closeouts recorded</div>
+    <div class="value">{{ summary.closeout_count }}</div>
+    <div class="muted">
+      {% if summary.closeout_amount_unavailable_count %}
+      <span class="warn">{{ summary.closeout_amount_unavailable_count }} without a P&amp;L amount</span>
+      {% else %}all with P&amp;L amounts{% endif %}
+    </div>
+  </div>
+</div>
+
+<h2>Budget levers vs usage</h2>
+<table>
+  <tr><th>Lever</th><th>Budget</th><th>In use</th><th>Headroom</th></tr>
+  {% set daily_loss_unavailable = headroom.same_day_realized_loss_unavailable_count + headroom.open_at_risk_unavailable_count %}
+  <tr>
+    <td>Daily loss</td>
+    <td>{{ budget.max_daily_loss_pct | percent }}</td>
+    <td>
+      {{ headroom.daily_loss_used_pct | percent }}
+      {% if daily_loss_unavailable %}<div class="warn">incomplete: {{ daily_loss_unavailable }} record{{ "s" if daily_loss_unavailable != 1 }} without loss evidence</div>{% endif %}
+    </td>
+    <td>{{ headroom.daily_loss_headroom_pct | percent }}</td>
+  </tr>
+  <tr>
+    <td>Open notional</td>
+    <td>{{ budget.max_open_notional_pct | percent }}</td>
+    <td>
+      {{ headroom.open_notional_pct | percent }} <span class="muted">({{ headroom.open_notional | money }})</span>
+      {% if headroom.open_notional_unavailable_count %}<div class="warn">incomplete: {{ headroom.open_notional_unavailable_count }} idea{{ "s" if headroom.open_notional_unavailable_count != 1 }} without a notional</div>{% endif %}
+    </td>
+    <td>{{ headroom.open_notional_headroom_pct | percent }} <span class="muted">({{ headroom.open_notional_headroom | money }})</span></td>
+  </tr>
+  <tr>
+    <td>Concurrent approved tickets</td>
+    <td>{{ budget.max_concurrent_approved_tickets }}</td>
+    <td>{{ open_approved_count }}</td>
+    <td>{{ budget.max_concurrent_approved_tickets - open_approved_count }}</td>
+  </tr>
+  <tr>
+    <td>Max loss per idea</td>
+    <td>{{ budget.max_loss_per_idea_pct | percent }}</td>
+    <td class="muted" colspan="2">enforced per idea at approval</td>
+  </tr>
+</table>
+
+<h2>Budget provenance</h2>
+<table>
+  <tr><th>Version</th><th>Attested equity</th><th>Gain retention floor</th><th>Futures leverage</th><th>Naked shorts</th><th>Sizing capped</th></tr>
+  <tr>
+    <td>v{{ budget.version }}</td>
+    <td>{{ budget.account_equity | money }}</td>
+    <td>{{ budget.gain_retention_floor_pct | percent }}</td>
+    <td>{{ "allowed" if budget.allow_futures_leverage else "blocked" }}</td>
+    <td>{{ "allowed" if budget.allow_naked_shorts else "blocked" }}</td>
+    <td>{{ "yes" if budget.sizing_capped_by_budget else "no" }}</td>
+  </tr>
+</table>
+<p class="muted">{{ budget.reason }}</p>
+{% endblock %}

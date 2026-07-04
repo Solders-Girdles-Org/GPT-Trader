@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Agent activity — GPT-Trader console{% endblock %}
+{% block content %}
+<h1>Agent activity</h1>
+
+<div class="cards">
+  <div class="card">
+    <div class="label">Last turn</div>
+    {% if feed.turns %}
+    <div class="value {{ 'ok' if feed.turns[0].outcome == 'completed' else 'bad' }}">{{ feed.turns[0].outcome }}</div>
+    <div class="muted">{{ feed.turns[0].started_at | timestamp }}</div>
+    {% else %}
+    <div class="value">—</div>
+    <div class="muted">no turns recorded</div>
+    {% endif %}
+  </div>
+  <div class="card">
+    <div class="label">Turns recorded</div>
+    <div class="value">{{ feed.turn_count }}</div>
+    <div class="muted">{{ feed.completed_count }} completed · {{ feed.failed_count }} failed</div>
+  </div>
+  {% if feed.manifest_error %}
+  <div class="card">
+    <div class="label">Manifest health</div>
+    <div class="value bad">unreadable</div>
+    <div class="muted">{{ feed.manifest_error }}</div>
+  </div>
+  {% elif feed.unreadable_line_count %}
+  <div class="card">
+    <div class="label">Manifest health</div>
+    <div class="value warn">{{ feed.unreadable_line_count }}</div>
+    <div class="muted">unreadable manifest line{{ "s" if feed.unreadable_line_count != 1 }}</div>
+  </div>
+  {% endif %}
+</div>
+
+<h2>Cycle turns</h2>
+{% if feed.turns %}
+<table>
+  <tr>
+    <th>Turn</th><th>Started</th><th>Duration</th><th>Outcome</th>
+    <th>Snapshot</th><th>Proposals</th><th>Executed</th><th>Queue after</th>
+  </tr>
+  {% for turn in feed.turns %}
+  <tr>
+    <td>{{ turn.run_id }}</td>
+    <td>{{ turn.started_at | timestamp }}</td>
+    <td>{{ turn.duration_seconds | duration }}</td>
+    <td>
+      <span class="pill {{ 'ok' if turn.outcome == 'completed' else 'bad' }}">{{ turn.outcome }}</span>
+      {% if turn.error %}<div class="bad">{{ turn.error }}</div>{% endif %}
+    </td>
+    <td>
+      {% if turn.snapshot_source %}{{ turn.snapshot_source }}{% else %}<span class="muted">—</span>{% endif %}
+      {% if turn.snapshot_symbols %}<div class="muted">{{ turn.snapshot_symbols | join(", ") }}</div>{% endif %}
+    </td>
+    <td>
+      {{ turn.proposal_count }}
+      {% if turn.proposers %}
+      <ul class="muted">
+        {% for proposer in turn.proposers %}
+        <li>{{ proposer.proposer_id }}: {{ proposer.proposal_count }}{% if proposer.skipped_count %} ({{ proposer.skipped_count }} skipped){% endif %}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </td>
+    <td>
+      {% if turn.execution_enabled %}
+      {{ turn.executed_count }}{% if turn.execution_skipped_count %} <span class="muted">({{ turn.execution_skipped_count }} skipped)</span>{% endif %}
+      {% else %}<span class="muted">off</span>{% endif %}
+    </td>
+    <td>{{ turn.queue_pending_total if turn.queue_pending_total is not none else "—" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">No cycle turns recorded yet ({{ manifest_path }}).</p>
+{% endif %}
+
+<h2>Recent audit events</h2>
+{% if events %}
+<table>
+  <tr><th>Time</th><th>Action</th><th>Idea</th><th>Actor</th><th>Reason</th></tr>
+  {% for event in events %}
+  <tr>
+    <td>{{ event.timestamp | timestamp }}</td>
+    <td><span class="pill">{{ event.action.value }}</span></td>
+    <td><a href="/ideas/{{ event.decision_id }}">{{ event.decision_id }}</a></td>
+    <td>{{ event.actor_id }} <span class="muted">({{ event.actor_type.value }})</span></td>
+    <td>{{ event.reason }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">No audit events recorded yet.</p>
+{% endif %}
+{% endblock %}

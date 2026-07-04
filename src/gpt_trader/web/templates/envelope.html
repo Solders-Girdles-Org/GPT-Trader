@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Envelope — GPT-Trader console{% endblock %}
+{% block content %}
+<h1>Envelope</h1>
+
+{% if autonomy_fail_closed %}
+<div class="banner">Autonomy state failed closed to {{ autonomy.mode.value }}: {{ autonomy.error }}</div>
+{% endif %}
+{% if error %}
+<div class="banner">{{ error }}</div>
+{% endif %}
+
+<div class="cards">
+  <div class="card">
+    <div class="label">Autonomy</div>
+    <div class="value">{{ autonomy.mode.value }}</div>
+    <div class="muted">v{{ autonomy.version if autonomy.version is not none else "—" }} · {{ autonomy.source }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Risk budget</div>
+    <div class="value">v{{ budget.version }}</div>
+    <div class="muted">{{ budget_rows | length }} audited version{{ "s" if budget_rows | length != 1 }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Stage 2 auto-approval</div>
+    <div class="value {{ 'ok' if stage2_active else 'muted' }}">{{ "active" if stage2_active else "inactive" }}</div>
+    <div class="muted">flag {{ "on" if auto_approval_enabled else "off" }} · mode {{ autonomy.mode.value }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Exceptions pending</div>
+    <div class="value {{ 'warn' if exceptions else 'ok' }}">{{ exceptions | length }}</div>
+    <div class="muted">{{ inside_envelope | length }} inside envelope · {{ awaiting_resubmission | length }} awaiting resubmission</div>
+  </div>
+</div>
+
+<h2>Exception queue</h2>
+<p class="muted">
+  Ideas inside the envelope clear every approval-policy check and are what the
+  Stage 2 sweep auto-approves; exceptions are the ones that need your judgment.
+</p>
+{% if exceptions %}
+<table>
+  <tr><th>Idea</th><th>Instrument</th><th>Direction</th><th>Max loss</th><th>Expires in</th><th>Why it needs you</th></tr>
+  {% for row in exceptions %}
+  <tr>
+    <td><a href="/ideas/{{ row.idea.decision_id }}">{{ row.idea.decision_id }}</a></td>
+    <td>{{ row.idea.instrument }}</td>
+    <td>{{ row.idea.direction.value }}</td>
+    <td>
+      {% if row.idea.max_loss.percent_of_account is not none %}{{ row.idea.max_loss.percent_of_account }}%{% endif %}
+      {% if row.idea.max_loss.amount is not none %}<span class="muted">(${{ row.idea.max_loss.amount }})</span>{% endif %}
+    </td>
+    <td>{% if row.expires_in %}<span class="warn">{{ row.expires_in }}</span>{% else %}<span class="muted">&gt; warning window</span>{% endif %}</td>
+    <td><ul class="muted">{% for violation in row.violations %}<li>{{ violation }}</li>{% endfor %}</ul></td>
+  </tr>
+  {% endfor %}
+</table>
+{% elif inside_envelope or awaiting_resubmission %}
+<p class="ok">No exceptions — every reviewable idea is inside the envelope.</p>
+{% else %}
+<p class="muted">Nothing pending.</p>
+{% endif %}
+{% if inside_envelope %}
+<p class="muted">
+  Inside the envelope:
+  {% for row in inside_envelope %}<a href="/ideas/{{ row.idea.decision_id }}">{{ row.idea.decision_id }}</a>{{ ", " if not loop.last }}{% endfor %}
+</p>
+{% endif %}
+
+<h2>Budget levers</h2>
+<form class="levers" method="post" action="/envelope/budget">
+  <input type="hidden" name="base_version" value="{{ budget.version }}">
+  <div class="lever-grid">
+    <label>Max loss per idea (%)
+      <input type="text" name="max_loss_per_idea_pct" value="{{ form.max_loss_per_idea_pct }}">
+    </label>
+    <label>Max daily loss (%)
+      <input type="text" name="max_daily_loss_pct" value="{{ form.max_daily_loss_pct }}">
+    </label>
+    <label>Max open notional (%)
+      <input type="text" name="max_open_notional_pct" value="{{ form.max_open_notional_pct }}">
+    </label>
+    <label>Gain retention floor (%)
+      <input type="text" name="gain_retention_floor_pct" value="{{ form.gain_retention_floor_pct }}">
+    </label>
+    <label>Max concurrent approved tickets
+      <input type="text" name="max_concurrent_approved_tickets" value="{{ form.max_concurrent_approved_tickets }}">
+    </label>
+    <label>Max review latency (hours)
+      <input type="text" name="max_review_latency_hours" value="{{ form.max_review_latency_hours }}">
+    </label>
+    <label>Attested account equity ($, blank = unverified)
+      <input type="text" name="account_equity" value="{{ form.account_equity }}">
+    </label>
+    <label class="check"><input type="checkbox" name="sizing_capped_by_budget" {{ "checked" if form.sizing_capped_by_budget }}> Sizing capped by budget</label>
+    <label class="check"><input type="checkbox" name="allow_futures_leverage" {{ "checked" if form.allow_futures_leverage }}> Allow futures leverage</label>
+    <label class="check"><input type="checkbox" name="allow_naked_shorts" {{ "checked" if form.allow_naked_shorts }}> Allow naked shorts</label>
+  </div>
+  <label>Reason (required, audited)
+    <input type="text" name="reason" placeholder="Why this budget version">
+  </label>
+  <button type="submit">Enact budget v{{ budget.version + 1 }}</button>
+</form>
+
+<h2>Budget history</h2>
+{% if budget_rows %}
+<table>
+  <tr><th>Version</th><th>When</th><th>Actor</th><th>Changes</th><th>Reason</th></tr>
+  {% for row in budget_rows %}
+  <tr>
+    <td>v{{ row.entry.budget.version }}</td>
+    <td>{{ row.entry.timestamp | timestamp }}</td>
+    <td>{{ row.entry.actor_type.value }}:{{ row.entry.actor_id }}</td>
+    <td>
+      {% if row.changes %}
+      <ul>{% for change in row.changes %}<li>{{ change }}</li>{% endfor %}</ul>
+      {% elif loop.last %}<span class="muted">initial version</span>
+      {% else %}<span class="muted">no lever changes</span>{% endif %}
+    </td>
+    <td class="muted">{{ row.entry.budget.reason }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">No budget versions enacted yet — the seeded defaults apply.</p>
+{% endif %}
+
+<h2>Autonomy &amp; ratchet history</h2>
+{% if autonomy_error %}
+<div class="banner">Autonomy state log is unreadable: {{ autonomy_error }}</div>
+{% endif %}
+{% if autonomy_rows %}
+<table>
+  <tr><th>Version</th><th>When</th><th>Mode</th><th>Actor</th><th>Reason &amp; evidence</th></tr>
+  {% for entry in autonomy_rows %}
+  <tr>
+    <td>v{{ entry.version }}</td>
+    <td>{{ entry.timestamp | timestamp }}</td>
+    <td>
+      {{ entry.mode.value }}
+      {% if entry.actor_id == ratchet_actor_id %}<span class="pill bad">ratchet</span>{% endif %}
+    </td>
+    <td>{{ entry.actor_type.value }}:{{ entry.actor_id }}</td>
+    <td>
+      {{ entry.reason }}
+      {% if entry.evidence %}<ul class="muted">{% for item in entry.evidence %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% elif not autonomy_error %}
+<p class="muted">No autonomy-level changes recorded — the seeded default applies.</p>
+{% endif %}
+{% endblock %}

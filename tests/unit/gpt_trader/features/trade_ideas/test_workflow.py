@@ -28,6 +28,7 @@ def test_creation_in_any_other_state_is_rejected(state: TradeIdeaState) -> None:
     ("before", "after"),
     [
         (TradeIdeaState.PROPOSED, TradeIdeaState.APPROVED),
+        (TradeIdeaState.PROPOSED, TradeIdeaState.PROPOSED),
         (TradeIdeaState.PROPOSED, TradeIdeaState.NEEDS_CHANGES),
         (TradeIdeaState.PROPOSED, TradeIdeaState.REJECTED),
         (TradeIdeaState.PROPOSED, TradeIdeaState.EXPIRED),

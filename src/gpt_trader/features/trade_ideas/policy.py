@@ -2,10 +2,13 @@
 
 This module is the seam where autonomy is handed over. Moving up the ladder
 (human approval -> bounded autonomy) means changing policy data and rules
-here — never the service plumbing or the audit trail. In the current accepted
+here — never the service plumbing or the audit trail. In the seeded default
 mode (``human_approved_execution``), only a human actor can move an idea to
 ``approved``, and approvals must clear the eligibility gate and the current
-risk budget.
+risk budget. In ``bounded_autonomy``, a system actor may approve too — the
+Stage 2 exception scoped by
+docs/decisions/stage2-auto-approval-workflow.md — subject to the identical
+checks; AI and venue actors are always refused.
 """
 
 from __future__ import annotations
@@ -34,10 +37,11 @@ class PolicyViolationError(ValidationError):
         self.violations = violations or []
 
 
-BOUNDED_AUTONOMY_NON_HUMAN_APPROVAL_VIOLATION = (
-    "Autonomy mode 'bounded_autonomy' does not permit non-human approvals until a "
-    "strategy envelope, kill-switch evidence, and audit evidence are modeled "
-    "or a later decision packet scopes a narrower exception"
+BOUNDED_AUTONOMY_APPROVAL_ACTORS = frozenset({ActorType.HUMAN, ActorType.SYSTEM})
+BOUNDED_AUTONOMY_ACTOR_APPROVAL_VIOLATION = (
+    "Autonomy mode 'bounded_autonomy' permits only human or system approvals "
+    "inside the budget envelope "
+    "(docs/decisions/stage2-auto-approval-workflow.md)"
 )
 BOUNDED_AUTONOMY_NON_HUMAN_BUDGET_CHANGE_VIOLATION = (
     "Autonomy mode 'bounded_autonomy' does not permit non-human budget changes "
@@ -102,11 +106,10 @@ class ApprovalPolicy:
                 )
         elif (
             self._autonomy_mode is AutonomyMode.BOUNDED_AUTONOMY
-            and actor_type is not ActorType.HUMAN
+            and actor_type not in BOUNDED_AUTONOMY_APPROVAL_ACTORS
         ):
             violations.append(
-                BOUNDED_AUTONOMY_NON_HUMAN_APPROVAL_VIOLATION
-                + f"; got actor_type '{actor_type.value}'"
+                BOUNDED_AUTONOMY_ACTOR_APPROVAL_VIOLATION + f"; got actor_type '{actor_type.value}'"
             )
 
         violations.extend(evaluate_eligibility(idea))

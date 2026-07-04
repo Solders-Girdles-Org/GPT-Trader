@@ -27,6 +27,7 @@ class TradeIdeaState(str, Enum):
 ALLOWED_TRANSITIONS: dict[TradeIdeaState, frozenset[TradeIdeaState]] = {
     TradeIdeaState.PROPOSED: frozenset(
         {
+            TradeIdeaState.PROPOSED,
             TradeIdeaState.NEEDS_CHANGES,
             TradeIdeaState.APPROVED,
             TradeIdeaState.REJECTED,

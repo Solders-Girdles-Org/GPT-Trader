@@ -1,10 +1,10 @@
 """One turn of the Stage-1 paper cycle (issue #1150).
 
-A turn strings the existing rails together with no new authority: sweep
+A turn strings the existing rails together with no live authority: sweep
 expired ideas, run the configured proposers over one market snapshot, paper-
-execute any human-APPROVED ideas priced by that same snapshot, and leave
-evidence. Recurrence is supplied by an external scheduler (launchd/cron);
-nothing in this module knows or decides a cadence.
+execute approved ideas priced by that same snapshot, and leave evidence.
+Recurrence is supplied by an external scheduler (launchd/cron); nothing in this
+module knows or decides a cadence.
 
 Evidence contract: every turn — including failed ones — appends exactly one
 JSON line to ``<cycle_root>/manifest.jsonl`` and writes its artifacts under
@@ -14,9 +14,10 @@ from the manifest alone.
 The turn acquires a lock for its whole duration so overlapping scheduler
 ticks cannot interleave; a second invocation is refused with
 ``PaperCycleLockError`` and leaves no manifest row (a refused start is not a
-turn). Approval remains a human event: the proposer leg only queues ideas,
-and the execution leg touches only ideas a human already approved, through
-the paper-only lane in this slice.
+turn). Approval remains a separate event: the proposer leg only queues ideas,
+and the execution leg touches only human-approved ideas or system approvals
+that pass the Stage 2 paper-execution gate, through the paper-only lane in this
+slice.
 """
 
 from __future__ import annotations
@@ -38,13 +39,17 @@ from gpt_trader.features.idea_execution.executor import (
     IdeaNotExecutableError,
     PaperExecutionError,
     PaperIdeaExecutor,
+    paper_auto_execution_gate_evidence,
 )
 from gpt_trader.features.trade_ideas import (
     ActorType,
+    AuditAction,
+    AuditEvent,
     MarketSnapshot,
     Proposer,
     TradeIdeaService,
     TradeIdeaState,
+    TradeIdeaView,
     market_snapshot_to_payload,
 )
 from gpt_trader.features.trade_ideas.report import build_trade_idea_track_record_report
@@ -75,6 +80,13 @@ paper-only.
 
 def _instrument_key(instrument: str) -> str:
     return instrument.casefold()
+
+
+def _latest_approval_event(view: TradeIdeaView) -> AuditEvent | None:
+    for event in reversed(view.events):
+        if event.action is AuditAction.APPROVED:
+            return event
+    return None
 
 
 class PaperCycleLockError(ValidationError):
@@ -402,6 +414,26 @@ class PaperCycleRunner:
                     }
                 )
                 continue
+            approval_event = _latest_approval_event(view)
+            approval_actor_type = approval_event.actor_type if approval_event else None
+            if approval_actor_type is not ActorType.HUMAN:
+                gate_evidence = paper_auto_execution_gate_evidence(
+                    self._service,
+                    approval_event,
+                    now=self._now_factory(),
+                )
+                if gate_evidence is None:
+                    actor = approval_actor_type.value if approval_actor_type else "none"
+                    skipped.append(
+                        {
+                            "decision_id": decision_id,
+                            "reason": (
+                                "approval actor_type "
+                                f"'{actor}' is not executable by the Stage-1 paper cycle"
+                            ),
+                        }
+                    )
+                    continue
             mark = marks.get(_instrument_key(view.idea.instrument))
             if mark is None:
                 skipped.append(

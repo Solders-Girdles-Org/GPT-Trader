@@ -76,6 +76,8 @@ from gpt_trader.features.trade_ideas.policy import (
     PolicyViolationError,
 )
 from gpt_trader.features.trade_ideas.service_models import (
+    AutoApprovalSkip,
+    AutoApprovalSweepResult,
     DuplicateTradeIdeaError,
     PreApprovalBrokerTicketError,
     TradeIdeaListQuery,
@@ -99,6 +101,10 @@ from gpt_trader.features.trade_ideas.workflow import (
 DEFAULT_IDEAS_ROOT = Path("var/data/trade_ideas")
 IDEAS_ROOT_ENV_VAR = "GPT_TRADER_IDEAS_ROOT"
 ACTOR_ENV_VAR = "GPT_TRADER_ACTOR"
+AUTO_APPROVAL_ENV_VAR = "GPT_TRADER_IDEAS_AUTO_APPROVAL"
+AUTO_APPROVAL_ACTOR_ID = "auto-approval-sweep"
+AUTO_APPROVAL_REASON_PREFIX = "auto-approval: "
+_AUTO_APPROVAL_ENABLED_VALUES = frozenset({"1", "true", "yes", "on"})
 EXPIRABLE_STATES = frozenset(
     {
         TradeIdeaState.PROPOSED,
@@ -252,6 +258,17 @@ def resolve_trade_idea_actor_id(actor_id: str | None = None) -> str:
     return getpass.getuser()
 
 
+def resolve_auto_approval_enabled() -> bool:
+    """True only when the operator explicitly enabled auto-approval (default off).
+
+    Deliberately environment-only, with no argument override: enabling the
+    Stage 2 sweep is an operator configuration act, never something a caller
+    can pass in (docs/decisions/stage2-auto-approval-workflow.md).
+    """
+    configured = os.environ.get(AUTO_APPROVAL_ENV_VAR, "").strip().casefold()
+    return configured in _AUTO_APPROVAL_ENABLED_VALUES
+
+
 class TradeIdeaService:
     def __init__(
         self,
@@ -259,6 +276,7 @@ class TradeIdeaService:
         *,
         now_factory: Callable[[], datetime] = _utc_now,
     ) -> None:
+        self._root = root
         self._store = TradeIdeaStore(root / "records")
         self._audit = TradeIdeaAuditLog(root / "audit.jsonl")
         self._closeouts = CloseoutAttributionLog(root / "closeout_attributions.jsonl")
@@ -267,12 +285,21 @@ class TradeIdeaService:
         self._now = now_factory
 
     @property
+    def root(self) -> Path:
+        """Storage root all of this service's durable artifacts live under."""
+        return self._root
+
+    @property
     def audit_log(self) -> TradeIdeaAuditLog:
         return self._audit
 
     @property
     def closeout_log(self) -> CloseoutAttributionLog:
         return self._closeouts
+
+    @property
+    def budget_log(self) -> RiskBudgetLog:
+        return self._budget_log
 
     # -- budget ----------------------------------------------------------
 
@@ -421,6 +448,10 @@ class TradeIdeaService:
             source=AUTONOMY_SOURCE_LOG,
         )
 
+    def resolve_execution_autonomy(self, *, now: datetime | None = None) -> AutonomyResolution:
+        """Resolve autonomy at an execution decision boundary, applying the ratchet."""
+        return self._decision_autonomy(now=now or self._now())
+
     @staticmethod
     def _autonomy_resolution_violations(resolution: AutonomyResolution) -> list[str]:
         if resolution.source != AUTONOMY_SOURCE_FAIL_CLOSED:
@@ -436,15 +467,47 @@ class TradeIdeaService:
         *,
         actor_type: ActorType = ActorType.HUMAN,
     ) -> list[str]:
-        """Return every current-policy reason an idea could not be approved."""
-        resolution = self.current_autonomy()
+        """Return every current-policy reason an idea could not be approved.
+
+        Decision-path variant: seeds the budget and autonomy logs on first
+        use. Render-only paths must use ``peek_approval_violations``.
+        """
+        return self._approval_violations(
+            idea,
+            actor_type=actor_type,
+            resolution=self.current_autonomy(),
+            budget=self.current_budget(),
+        )
+
+    def peek_approval_violations(
+        self,
+        idea: TradeIdea,
+        *,
+        actor_type: ActorType = ActorType.HUMAN,
+    ) -> list[str]:
+        """Return approval violations without seeding any log (read-only paths)."""
+        return self._approval_violations(
+            idea,
+            actor_type=actor_type,
+            resolution=self.peek_autonomy(),
+            budget=self.peek_budget(),
+        )
+
+    def _approval_violations(
+        self,
+        idea: TradeIdea,
+        *,
+        actor_type: ActorType,
+        resolution: AutonomyResolution,
+        budget: RiskBudget,
+    ) -> list[str]:
         policy = ApprovalPolicy(resolution.mode)
         return [
             *self._autonomy_resolution_violations(resolution),
             *policy.approval_violations(
                 idea,
                 actor_type=actor_type,
-                budget=self.current_budget(),
+                budget=budget,
                 open_approved_count=self.open_approved_count(),
                 now=self._now(),
                 review_started_at=self._review_started_at(idea.decision_id),
@@ -530,7 +593,9 @@ class TradeIdeaService:
     def budget_headroom(self, *, now: datetime | None = None) -> dict[str, object]:
         """Return read-only aggregate budget headroom for operators and agents."""
         evaluation_time = now or self._now()
-        budget = self.current_budget()
+        # Non-mutating read: rendering headroom (console pages, budget show)
+        # must not seed risk_budget.jsonl; decision paths seed on first use.
+        budget = self.peek_budget()
         context = self.approval_budget_context(now=evaluation_time)
         account_equity = context.account_equity_snapshot
         daily_loss_used_pct = context.same_day_realized_loss_pct + context.open_approved_at_risk_pct
@@ -767,6 +832,136 @@ class TradeIdeaService:
         )
         return self.get(decision_id)
 
+    def auto_approve_sweep(
+        self,
+        *,
+        actor_id: str = AUTO_APPROVAL_ACTOR_ID,
+    ) -> AutoApprovalSweepResult:
+        """Auto-approve every violation-free proposed idea inside the budget envelope.
+
+        The Stage 2 exception scoped by
+        docs/decisions/stage2-auto-approval-workflow.md: the sweep refuses
+        loudly unless the operator enabled the default-off feature flag and
+        the audited autonomy log resolves to ``bounded_autonomy``. The mode is
+        re-resolved before each decision so the daily-loss ratchet can halt a
+        sweep mid-pass. Ideas with any violation stay ``proposed`` for human
+        review and are returned with their reasons — never silently dropped.
+        """
+        gate_violations: list[str] = []
+        if not resolve_auto_approval_enabled():
+            gate_violations.append(
+                f"auto-approval feature flag is off (default); set "
+                f"{AUTO_APPROVAL_ENV_VAR}=1 to enable the Stage 2 sweep"
+            )
+            raise PolicyViolationError(
+                "Auto-approval sweep refused: " + "; ".join(gate_violations),
+                gate_violations,
+            )
+        now = self._now()
+        resolution = self._decision_autonomy(now=now)
+        gate_violations.extend(self._autonomy_resolution_violations(resolution))
+        if resolution.mode is not AutonomyMode.BOUNDED_AUTONOMY:
+            gate_violations.append(
+                "auto-approval requires audited autonomy mode "
+                f"'{AutonomyMode.BOUNDED_AUTONOMY.value}'; resolved "
+                f"'{resolution.mode.value}' (source={resolution.source})"
+            )
+        if gate_violations:
+            raise PolicyViolationError(
+                "Auto-approval sweep refused: " + "; ".join(gate_violations),
+                gate_violations,
+            )
+
+        candidates = sorted(
+            self.list_views(TradeIdeaState.PROPOSED),
+            key=lambda view: (view.events[-1].timestamp, view.idea.decision_id),
+        )
+        approved: list[TradeIdeaView] = []
+        skipped: list[AutoApprovalSkip] = []
+        for candidate in candidates:
+            idea = candidate.idea
+            decision_time = self._now()
+            budget = self.current_budget()
+            budget_context = self.approval_budget_context(
+                exclude_decision_id=idea.decision_id,
+                now=decision_time,
+            )
+            decision_resolution = self._decision_autonomy(
+                now=decision_time,
+                budget=budget,
+                budget_context=budget_context,
+            )
+            policy = ApprovalPolicy(decision_resolution.mode)
+            violations = [
+                *self._autonomy_resolution_violations(decision_resolution),
+                *policy.approval_violations(
+                    idea,
+                    actor_type=ActorType.SYSTEM,
+                    budget=budget,
+                    open_approved_count=self.open_approved_count(),
+                    now=decision_time,
+                    review_started_at=self._review_started_at(idea.decision_id),
+                    budget_context=budget_context,
+                ),
+            ]
+            if violations:
+                self._append(
+                    idea,
+                    action=AuditAction.AUTO_APPROVAL_SKIPPED,
+                    after_state=TradeIdeaState.PROPOSED,
+                    actor_type=ActorType.SYSTEM,
+                    actor_id=actor_id,
+                    reason=(
+                        f"{AUTO_APPROVAL_REASON_PREFIX}skipped because "
+                        "approval-policy violations remain"
+                    ),
+                    evidence=(
+                        f"autonomy_state version {decision_resolution.version} "
+                        f"mode={decision_resolution.mode.value} "
+                        f"(source={decision_resolution.source})",
+                        f"risk budget version {budget.version}: "
+                        f"approval_violations={len(violations)}",
+                        *(f"violation: {violation}" for violation in violations),
+                    ),
+                )
+                skipped.append(
+                    AutoApprovalSkip(
+                        decision_id=idea.decision_id,
+                        violations=tuple(violations),
+                    )
+                )
+                continue
+            self._append(
+                idea,
+                action=AuditAction.APPROVED,
+                after_state=TradeIdeaState.APPROVED,
+                actor_type=ActorType.SYSTEM,
+                actor_id=actor_id,
+                reason=(
+                    f"{AUTO_APPROVAL_REASON_PREFIX}zero approval-policy violations "
+                    f"inside the budget envelope of risk budget version {budget.version}"
+                ),
+                evidence=(
+                    f"autonomy_state version {decision_resolution.version} "
+                    f"mode={decision_resolution.mode.value} "
+                    f"(source={decision_resolution.source})",
+                    f"risk budget version {budget.version}: approval_violations=0",
+                    "budget envelope: "
+                    f"same_day_realized_loss_pct={budget_context.same_day_realized_loss_pct} "
+                    f"open_approved_at_risk_pct={budget_context.open_approved_at_risk_pct} "
+                    f"candidate_max_loss_pct={idea.max_loss.percent_of_account} "
+                    f"max_daily_loss_pct={budget.max_daily_loss_pct}",
+                ),
+            )
+            approved.append(self.get(idea.decision_id))
+        return AutoApprovalSweepResult(
+            evaluated_at=now,
+            autonomy_mode=resolution.mode.value,
+            autonomy_version=resolution.version,
+            approved=tuple(approved),
+            skipped=tuple(skipped),
+        )
+
     def reject(
         self,
         decision_id: str,
@@ -864,6 +1059,7 @@ class TradeIdeaService:
         external_order_id: str = "",
         reason: str = "Approved ticket submitted",
         actor_type: ActorType = ActorType.SYSTEM,
+        evidence: tuple[str, ...] = (),
     ) -> TradeIdeaView:
         venue = _validate_audit_venue(venue)
         idea = self._require_idea(decision_id)
@@ -874,6 +1070,7 @@ class TradeIdeaService:
             actor_type=actor_type,
             actor_id=actor_id,
             reason=reason,
+            evidence=evidence,
             venue=venue,
             external_order_id=external_order_id,
         )

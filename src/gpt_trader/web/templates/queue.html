@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Review queue — GPT-Trader console{% endblock %}
+{% block content %}
+<h1>Review queue</h1>
+
+<div class="cards">
+  <div class="card">
+    <div class="label">Pending review</div>
+    <div class="value">{{ queue_status.pending_total }}</div>
+    <div class="muted">{{ queue_status.proposed_count }} proposed · {{ queue_status.needs_changes_count }} needs changes</div>
+  </div>
+  <div class="card">
+    <div class="label">Autonomy</div>
+    <div class="value">{{ autonomy.mode.value }}</div>
+    <div class="muted">v{{ autonomy.version if autonomy.version is not none else "—" }} · {{ autonomy.source }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Daily-loss headroom</div>
+    <div class="value">{{ headroom.daily_loss_headroom_pct }}%</div>
+    <div class="muted">{{ headroom.daily_loss_used_pct }}% used</div>
+  </div>
+  <div class="card">
+    <div class="label">Open-notional headroom</div>
+    <div class="value">{{ headroom.open_notional_headroom_pct if headroom.open_notional_headroom_pct is not none else "—" }}{% if headroom.open_notional_headroom_pct is not none %}%{% endif %}</div>
+    <div class="muted">${{ headroom.open_notional }} open{% if headroom.account_equity_snapshot %} of ${{ headroom.account_equity_snapshot }} equity{% endif %}</div>
+  </div>
+</div>
+
+<h2>Pending ideas</h2>
+{% if rows %}
+<table>
+  <tr>
+    <th>Idea</th><th>State</th><th>Instrument</th><th>Direction</th>
+    <th>Confidence</th><th>Max loss</th><th>Expires in</th><th>Eligibility</th>
+  </tr>
+  {% for row in rows %}
+  <tr>
+    <td><a href="/ideas/{{ row.idea.decision_id }}">{{ row.idea.decision_id }}</a></td>
+    <td><span class="pill">{{ row.state.value }}</span></td>
+    <td>{{ row.idea.instrument }}</td>
+    <td>{{ row.idea.direction.value }}</td>
+    <td>{{ row.idea.confidence.label.value }}</td>
+    <td>
+      {% if row.idea.max_loss.percent_of_account is not none %}{{ row.idea.max_loss.percent_of_account }}%{% endif %}
+      {% if row.idea.max_loss.amount is not none %}<span class="muted">(${{ row.idea.max_loss.amount }})</span>{% endif %}
+    </td>
+    <td>{% if row.expires_in %}<span class="warn">{{ row.expires_in }}</span>{% else %}<span class="muted">&gt; warning window</span>{% endif %}</td>
+    <td>
+      {% if row.state.value == "needs_changes" %}
+      <span class="warn">awaiting resubmission</span>
+      {% elif row.violations %}
+      <span class="bad">{{ row.violations | length }} violation{{ "s" if row.violations | length != 1 }}</span>
+      <ul class="muted">{% for violation in row.violations %}<li>{{ violation }}</li>{% endfor %}</ul>
+      {% else %}<span class="ok">eligible</span>{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">Nothing waiting for review.</p>
+{% endif %}
+
+<h2>Review instrumentation</h2>
+<div class="cards">
+  <div class="card">
+    <div class="label">Agreement rate</div>
+    <div class="value">{{ instrumentation.overall.agreement_rate | rate }}</div>
+    <div class="muted">{{ instrumentation.overall.human_decided_count }} human decisions</div>
+  </div>
+  <div class="card">
+    <div class="label">Median approval latency</div>
+    <div class="value">{{ instrumentation.overall.latency_median_seconds | duration }}</div>
+    <div class="muted">mean {{ instrumentation.overall.latency_mean_seconds | duration }} · n={{ instrumentation.overall.latency_count }}</div>
+  </div>
+  <div class="card">
+    <div class="label">Auto-approved</div>
+    <div class="value">{{ instrumentation.overall.auto_approved_count }}</div>
+    <div class="muted">of {{ instrumentation.overall.proposed_count }} review cycles</div>
+  </div>
+</div>
+{% if instrumentation.per_proposer %}
+<table>
+  <tr>
+    <th>Proposer</th><th>Cycles</th><th>Approved</th><th>Auto</th><th>Rejected</th>
+    <th>Changes</th><th>Expired</th><th>Pending</th><th>Agreement</th><th>Median latency</th>
+  </tr>
+  {% for proposer in instrumentation.per_proposer %}
+  <tr>
+    <td>{{ proposer.proposer_id }}</td>
+    <td>{{ proposer.stats.proposed_count }}</td>
+    <td>{{ proposer.stats.approved_count }}</td>
+    <td>{{ proposer.stats.auto_approved_count }}</td>
+    <td>{{ proposer.stats.rejected_count }}</td>
+    <td>{{ proposer.stats.changes_requested_count }}</td>
+    <td>{{ proposer.stats.expired_count }}</td>
+    <td>{{ proposer.stats.pending_count }}</td>
+    <td>{{ proposer.stats.agreement_rate | rate }}</td>
+    <td>{{ proposer.stats.latency_median_seconds | duration }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}

@@ -56,18 +56,18 @@ def test_research_only_mode_blocks_all_approvals(trade_idea: TradeIdea) -> None:
     assert any("research_only" in violation for violation in found)
 
 
-def test_bounded_autonomy_non_human_approval_fails_closed_until_envelopes_exist(
+def test_bounded_autonomy_refuses_ai_and_venue_approvals(
     trade_idea: TradeIdea,
 ) -> None:
     policy = ApprovalPolicy(AutonomyMode.BOUNDED_AUTONOMY)
 
-    for actor_type in (ActorType.AI, ActorType.SYSTEM, ActorType.VENUE):
+    for actor_type in (ActorType.AI, ActorType.VENUE):
         found = violations(trade_idea, policy=policy, actor_type=actor_type)
 
         assert found == [
-            "Autonomy mode 'bounded_autonomy' does not permit non-human approvals "
-            "until a strategy envelope, kill-switch evidence, and audit evidence "
-            "are modeled or a later decision packet scopes a narrower exception; "
+            "Autonomy mode 'bounded_autonomy' permits only human or system "
+            "approvals inside the budget envelope "
+            "(docs/decisions/stage2-auto-approval-workflow.md); "
             f"got actor_type '{actor_type.value}'"
         ]
 
@@ -78,6 +78,29 @@ def test_bounded_autonomy_human_approval_still_uses_existing_gates(
     policy = ApprovalPolicy(AutonomyMode.BOUNDED_AUTONOMY)
 
     assert violations(trade_idea, policy=policy, actor_type=ActorType.HUMAN) == []
+
+
+def test_bounded_autonomy_system_approval_passes_the_same_gates(
+    trade_idea: TradeIdea,
+) -> None:
+    """The Stage 2 exception: system approvals clear, subject to every check."""
+    policy = ApprovalPolicy(AutonomyMode.BOUNDED_AUTONOMY)
+
+    assert violations(trade_idea, policy=policy, actor_type=ActorType.SYSTEM) == []
+
+    over_budget = build_trade_idea(
+        max_loss=MaxLoss(amount=Decimal("900"), percent_of_account=Decimal("9"))
+    )
+    found = violations(over_budget, policy=policy, actor_type=ActorType.SYSTEM)
+    assert any("exceeds budget cap" in violation for violation in found)
+
+
+def test_system_approval_outside_bounded_autonomy_is_still_refused(
+    trade_idea: TradeIdea,
+) -> None:
+    found = violations(trade_idea, actor_type=ActorType.SYSTEM)
+
+    assert any("requires a human approver" in violation for violation in found)
 
 
 def test_ineligible_idea_cannot_be_approved() -> None:
