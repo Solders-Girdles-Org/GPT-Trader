@@ -20,12 +20,19 @@ from fastapi.templating import Jinja2Templates
 
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.trade_ideas.accounting import compute_paper_accounting
-from gpt_trader.features.trade_ideas.audit import AuditAction
-from gpt_trader.features.trade_ideas.models import TradeIdea
+from gpt_trader.features.trade_ideas.audit import ActorType, AuditAction
+from gpt_trader.features.trade_ideas.autonomy import (
+    AUTONOMY_SOURCE_FAIL_CLOSED,
+    RATCHET_ACTOR_ID,
+    AutonomyIntegrityError,
+)
+from gpt_trader.features.trade_ideas.budget import RiskBudget
+from gpt_trader.features.trade_ideas.models import AutonomyMode, TradeIdea
 from gpt_trader.features.trade_ideas.review_metrics import compute_review_instrumentation
 from gpt_trader.features.trade_ideas.service import (
     TradeIdeaService,
     create_trade_idea_service,
+    resolve_auto_approval_enabled,
     resolve_trade_idea_actor_id,
 )
 from gpt_trader.features.trade_ideas.service_models import (
@@ -138,6 +145,97 @@ def _record_versions(service: TradeIdeaService, view: TradeIdeaView) -> list[dic
     return versions
 
 
+# Budget fields an operator can move through the envelope form; version and
+# reason are handled separately (sequenced / required per submission).
+_BUDGET_LEVER_FIELDS = (
+    "max_loss_per_idea_pct",
+    "max_daily_loss_pct",
+    "max_open_notional_pct",
+    "max_concurrent_approved_tickets",
+    "max_review_latency_hours",
+    "sizing_capped_by_budget",
+    "gain_retention_floor_pct",
+    "allow_futures_leverage",
+    "allow_naked_shorts",
+    "account_equity",
+)
+
+
+def _budget_changes(previous: RiskBudget, current: RiskBudget) -> list[str]:
+    """Human-readable lever diffs between two consecutive budget versions."""
+    changes: list[str] = []
+    for field in _BUDGET_LEVER_FIELDS:
+        before = getattr(previous, field)
+        after = getattr(current, field)
+        if before != after:
+            changes.append(f"{field}: {before} → {after}")
+    return changes
+
+
+def _budget_form_values(budget: RiskBudget) -> dict[str, str | bool]:
+    """Form-ready values for the lever inputs, prefilled from a budget version."""
+    values: dict[str, str | bool] = {}
+    for field in _BUDGET_LEVER_FIELDS:
+        value = getattr(budget, field)
+        if isinstance(value, bool):
+            values[field] = value
+        else:
+            values[field] = "" if value is None else str(value)
+    return values
+
+
+def _budget_from_form(
+    *,
+    base_version: int,
+    reason: str,
+    values: dict[str, str | bool],
+) -> RiskBudget:
+    """Build the candidate next budget version from submitted form values.
+
+    Conversion failures and ``RiskBudget`` invariant violations surface as
+    ``ValueError`` with a field-named message so the caller can re-render the
+    form instead of returning a bare 500.
+    """
+
+    def _decimal(field: str) -> Decimal:
+        raw = str(values[field]).strip()
+        try:
+            return Decimal(raw)
+        except ArithmeticError as error:
+            raise ValueError(f"{field} must be a decimal number, got {raw!r}") from error
+
+    def _int(field: str) -> int:
+        raw = str(values[field]).strip()
+        try:
+            return int(raw)
+        except ValueError as error:
+            raise ValueError(f"{field} must be a whole number, got {raw!r}") from error
+
+    equity_raw = str(values["account_equity"]).strip()
+    account_equity: Decimal | None = None
+    if equity_raw:
+        try:
+            account_equity = Decimal(equity_raw)
+        except ArithmeticError as error:
+            raise ValueError(
+                f"account_equity must be a decimal number or blank, got {equity_raw!r}"
+            ) from error
+    return RiskBudget(
+        version=base_version + 1,
+        max_loss_per_idea_pct=_decimal("max_loss_per_idea_pct"),
+        max_daily_loss_pct=_decimal("max_daily_loss_pct"),
+        max_open_notional_pct=_decimal("max_open_notional_pct"),
+        max_concurrent_approved_tickets=_int("max_concurrent_approved_tickets"),
+        max_review_latency_hours=_int("max_review_latency_hours"),
+        sizing_capped_by_budget=bool(values["sizing_capped_by_budget"]),
+        gain_retention_floor_pct=_decimal("gain_retention_floor_pct"),
+        allow_futures_leverage=bool(values["allow_futures_leverage"]),
+        allow_naked_shorts=bool(values["allow_naked_shorts"]),
+        reason=reason,
+        account_equity=account_equity,
+    )
+
+
 def create_app(
     *,
     ideas_root: Path | None = None,
@@ -216,9 +314,139 @@ def create_app(
             status_code=status_code,
         )
 
+    def _render_envelope(
+        request: Request,
+        *,
+        error: str | None = None,
+        form_values: dict[str, str | bool] | None = None,
+        status_code: int = 200,
+    ) -> HTMLResponse:
+        budget = resolved_service.peek_budget()
+        autonomy = resolved_service.peek_autonomy()
+        budget_history = resolved_service.budget_log.history()
+        budget_rows: list[dict[str, Any]] = []
+        for index, entry in enumerate(budget_history):
+            previous = budget_history[index - 1].budget if index else None
+            budget_rows.append(
+                {
+                    "entry": entry,
+                    "changes": (_budget_changes(previous, entry.budget) if previous else []),
+                }
+            )
+        budget_rows.reverse()
+        autonomy_error: str | None = None
+        try:
+            autonomy_rows = list(reversed(resolved_service.autonomy_history()))
+        except AutonomyIntegrityError as exc:
+            autonomy_rows = []
+            autonomy_error = str(exc)
+        # Exception-queue framing: proposed ideas that clear the envelope are
+        # what Stage 2 auto-approval would sweep; everything else needs a human.
+        inside_envelope: list[dict[str, Any]] = []
+        exceptions: list[dict[str, Any]] = []
+        awaiting_resubmission: list[dict[str, Any]] = []
+        for row in _queue_rows(resolved_service):
+            if row["state"] is TradeIdeaState.NEEDS_CHANGES:
+                awaiting_resubmission.append(row)
+            elif row["violations"]:
+                exceptions.append(row)
+            else:
+                inside_envelope.append(row)
+        auto_approval_enabled = resolve_auto_approval_enabled()
+        return templates.TemplateResponse(
+            request=request,
+            name="envelope.html",
+            context={
+                "actor_id": resolved_actor,
+                "budget": budget,
+                "autonomy": autonomy,
+                "autonomy_fail_closed": autonomy.source == AUTONOMY_SOURCE_FAIL_CLOSED,
+                "ratchet_actor_id": RATCHET_ACTOR_ID,
+                "budget_rows": budget_rows,
+                "autonomy_rows": autonomy_rows,
+                "autonomy_error": autonomy_error,
+                "inside_envelope": inside_envelope,
+                "exceptions": exceptions,
+                "awaiting_resubmission": awaiting_resubmission,
+                "auto_approval_enabled": auto_approval_enabled,
+                "stage2_active": (
+                    auto_approval_enabled and autonomy.mode is AutonomyMode.BOUNDED_AUTONOMY
+                ),
+                "form": form_values or _budget_form_values(budget),
+                "error": error,
+            },
+            status_code=status_code,
+        )
+
     @app.get("/", response_class=HTMLResponse)
     def queue(request: Request) -> HTMLResponse:
         return _render_queue(request)
+
+    @app.get("/envelope", response_class=HTMLResponse)
+    def envelope(request: Request) -> HTMLResponse:
+        return _render_envelope(request)
+
+    @app.post("/envelope/budget", response_model=None)
+    def enact_budget(
+        request: Request,
+        base_version: int = Form(...),
+        reason: str = Form(""),
+        max_loss_per_idea_pct: str = Form(""),
+        max_daily_loss_pct: str = Form(""),
+        max_open_notional_pct: str = Form(""),
+        max_concurrent_approved_tickets: str = Form(""),
+        max_review_latency_hours: str = Form(""),
+        sizing_capped_by_budget: bool = Form(False),
+        gain_retention_floor_pct: str = Form(""),
+        allow_futures_leverage: bool = Form(False),
+        allow_naked_shorts: bool = Form(False),
+        account_equity: str = Form(""),
+    ) -> HTMLResponse | RedirectResponse:
+        form_values: dict[str, str | bool] = {
+            "max_loss_per_idea_pct": max_loss_per_idea_pct,
+            "max_daily_loss_pct": max_daily_loss_pct,
+            "max_open_notional_pct": max_open_notional_pct,
+            "max_concurrent_approved_tickets": max_concurrent_approved_tickets,
+            "max_review_latency_hours": max_review_latency_hours,
+            "sizing_capped_by_budget": sizing_capped_by_budget,
+            "gain_retention_floor_pct": gain_retention_floor_pct,
+            "allow_futures_leverage": allow_futures_leverage,
+            "allow_naked_shorts": allow_naked_shorts,
+            "account_equity": account_equity,
+        }
+
+        def _form_error(message: str) -> HTMLResponse:
+            return _render_envelope(
+                request, error=message, form_values=form_values, status_code=400
+            )
+
+        cleaned_reason = reason.strip()
+        if not cleaned_reason:
+            return _form_error("A reason is required for every budget version.")
+        current_version = resolved_service.peek_budget().version
+        if base_version != current_version:
+            # Optimistic-concurrency guard: the form was rendered against a
+            # version that is no longer current (another operator, the CLI, or
+            # an agent enacted a change since). The append-side sequencing
+            # check in RiskBudgetLog remains the authority for races past this
+            # point; this just turns the common case into a clear message.
+            return _form_error(
+                f"The budget moved to v{current_version} after this form was "
+                f"loaded (v{base_version}). Review the current levers and reapply."
+            )
+        try:
+            candidate = _budget_from_form(
+                base_version=base_version,
+                reason=cleaned_reason,
+                values=form_values,
+            )
+        except ValueError as exc:
+            return _form_error(str(exc))
+        try:
+            resolved_service.update_budget(candidate, ActorType.HUMAN, resolved_actor)
+        except ValidationError as exc:
+            return _form_error(str(exc))
+        return RedirectResponse(url="/envelope", status_code=303)
 
     @app.get("/accountant", response_class=HTMLResponse)
     def accountant(request: Request) -> HTMLResponse:

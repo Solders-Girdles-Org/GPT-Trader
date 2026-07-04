@@ -50,6 +50,17 @@
       color: var(--bad); border-radius: 6px; padding: 0.6rem 0.9rem; margin: 0 0 1rem;
     }
     form.decision { display: flex; gap: 0.5rem; align-items: center; margin: 0.4rem 0; flex-wrap: wrap; }
+    form.levers {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+      padding: 0.9rem; display: flex; flex-direction: column; gap: 0.7rem;
+    }
+    form.levers .lever-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 0.7rem;
+    }
+    form.levers label { display: flex; flex-direction: column; gap: 0.2rem; color: var(--muted); font-size: 0.8rem; }
+    form.levers label.check { flex-direction: row; align-items: center; gap: 0.4rem; }
+    form.levers input[type="text"] { min-width: 0; }
+    form.levers button { align-self: flex-start; border-color: var(--accent); color: var(--accent); }
     input[type="text"] {
       background: var(--bg); border: 1px solid var(--line); color: var(--text);
       border-radius: 4px; padding: 0.35rem 0.55rem; min-width: 22rem;
@@ -74,6 +85,7 @@
       <a href="/">GPT-Trader operator console</a>
       <nav>
         <a href="/">Queue</a>
+        <a href="/envelope">Envelope</a>
         <a href="/accountant">Accountant</a>
         <a href="/activity">Activity</a>
       </nav>
