@@ -9,8 +9,8 @@
     "source_test_map": "source_test_map.json"
   },
   "summary": {
-    "total_tests": 5995,
-    "total_files": 710,
+    "total_tests": 6009,
+    "total_files": 712,
     "markers_used": 14
   },
   "quick_commands": {
