@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import tarfile
 from pathlib import Path
@@ -180,6 +181,54 @@ def test_validate_agent_artifacts_allows_missing_optional_generated_file(
 
     assert report.errors == []
     assert "testing/test_inventory.json" in summary["indexed_files"]
+
+
+def test_validate_agent_artifacts_allows_optional_only_resource_with_absent_directory(
+    tmp_path: Path,
+) -> None:
+    """A fully optional_files resource (e.g. testing) is valid on a fresh checkout."""
+    source = _create_valid_agent_artifacts(tmp_path)
+    root_index_path = source / "index.json"
+    root_index = json.loads(root_index_path.read_text(encoding="utf-8"))
+    testing_resource = root_index["resources"]["testing"]
+    testing_resource["files"] = []
+    testing_resource["optional_files"] = [
+        "index.json",
+        "markers.json",
+        "test_inventory.json",
+    ]
+    _write_json(root_index_path, root_index)
+    shutil.rmtree(source / "testing")
+
+    report, summary = agent_artifacts.validate_agent_artifacts(source, quiet=True)
+
+    assert report.errors == []
+    assert "testing/markers.json" in summary["indexed_files"]
+
+
+def test_validate_agent_artifacts_validates_testing_index_when_present(
+    tmp_path: Path,
+) -> None:
+    source = _create_valid_agent_artifacts(tmp_path)
+    _write_json(source / "testing" / "index.json", {"summary": {}})
+
+    report, _ = agent_artifacts.validate_agent_artifacts(source, quiet=True)
+
+    assert any("positive total_tests" in error for error in report.errors)
+
+
+def test_validate_agent_artifacts_reports_resource_without_any_files(
+    tmp_path: Path,
+) -> None:
+    source = _create_valid_agent_artifacts(tmp_path)
+    root_index_path = source / "index.json"
+    root_index = json.loads(root_index_path.read_text(encoding="utf-8"))
+    root_index["resources"]["broker"]["files"] = []
+    _write_json(root_index_path, root_index)
+
+    report, _ = agent_artifacts.validate_agent_artifacts(source, quiet=True)
+
+    assert any("'broker' must list generated files" in error for error in report.errors)
 
 
 def test_validate_agent_artifacts_allows_missing_optional_reasoning_machine_file(

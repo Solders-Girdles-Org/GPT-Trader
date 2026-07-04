@@ -20,8 +20,9 @@ Use this folder for AI-focused navigation aids and generated inventories.
 - [Metrics catalog](../../var/agents/observability/metrics_catalog.md)
 - [Naming patterns config](../../config/agents/naming_patterns.yaml)
 - [Naming scan tool](../../scripts/agents/naming_inventory.py)
-- Source → test map: `source_test_map.json` under `var/agents/testing/`
-  (gitignored; regenerate with `uv run agent-regenerate --only testing`)
+- Testing inventories: `index.json`, `markers.json`, `test_inventory.json`,
+  `source_test_map.json` (all gitignored; regenerate with
+  `uv run agent-regenerate --only testing`)
 
 ## Tooling
 
