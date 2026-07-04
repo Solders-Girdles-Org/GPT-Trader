@@ -68,6 +68,7 @@ markers. Regenerating cannot drift from the files.
 <!-- BEGIN GENERATED DECISION INDEX -->
 | Date | Decision | Status |
 |------|----------|--------|
+| 2026-07-04 | [Adopt an event-driven execution topology — rails as kernel, not workflow](adopt-event-driven-execution-topology.md) | proposed |
 | 2026-07-04 | [Venue-neutrality posture — adapters at the edges, no speculative abstraction](venue-neutrality-posture.md) | accepted |
 | 2026-07-03 | [MIT license for the public repository](adopt-mit-license.md) | accepted |
 | 2026-07-03 | [Persistent audited autonomy-level state](persistent-autonomy-state.md) | accepted |
