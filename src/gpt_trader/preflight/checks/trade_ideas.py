@@ -146,6 +146,12 @@ def check_trade_ideas_readiness(checker: PreflightCheck) -> bool:
     for append_error in (
         _existing_log_append_error(audit_path, label="audit log"),
         _existing_log_append_error(budget_path, label="risk budget log"),
+        # Every budget append acquires this sidecar lock, so an unusable
+        # lock path fails seeding/renegotiation even when the log is fine.
+        _existing_log_append_error(
+            budget_path.with_name(budget_path.name + ".lock"),
+            label="risk budget lock",
+        ),
     ):
         if append_error is not None:
             checker.log_error(append_error, details=details)
