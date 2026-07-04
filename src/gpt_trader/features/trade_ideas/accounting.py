@@ -14,12 +14,15 @@ The equity ledger folds two kinds of events in timestamp order:
   carries the same equity forward is not an attestation and does not reset
   the ledger.
 - A closeout with a realized profit/loss amount adjusts the level. It folds at
-  its *terminal event* time (when the trade actually ended, resolved through
-  ``terminal_event_id`` by the caller), not at the time the attribution was
-  entered: an attestation made after a trade closed already includes that
-  trade's P&L, so a later-entered attribution must sort before it rather than
-  double-count. Closeouts whose amount is unavailable are counted but cannot
-  move the ledger, and closeouts that ended before the first attestation
+  the time the trade actually resolved, as best the artifacts can say: the
+  caller maps ``terminal_event_id`` to the audit timestamp for terminal events
+  that *are* the resolution (expiry / cancellation / rejection), so a
+  late-entered attribution sorts before an attestation that already reflects
+  it. A ``FILLED`` audit event is the entry fill, not the later market close,
+  so filled trades deliberately keep their attribution timestamp — record
+  attributions promptly, and before re-attesting equity, to keep the ledger
+  exact. Closeouts whose amount is unavailable are counted but cannot move
+  the ledger, and closeouts that resolved before the first attestation
   contribute to the realized total only — there is no level for them to
   adjust yet.
 

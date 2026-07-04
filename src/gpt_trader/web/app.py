@@ -20,6 +20,7 @@ from fastapi.templating import Jinja2Templates
 
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.trade_ideas.accounting import compute_paper_accounting
+from gpt_trader.features.trade_ideas.audit import AuditAction
 from gpt_trader.features.trade_ideas.models import TradeIdea
 from gpt_trader.features.trade_ideas.review_metrics import compute_review_instrumentation
 from gpt_trader.features.trade_ideas.service import (
@@ -221,11 +222,15 @@ def create_app(
 
     @app.get("/accountant", response_class=HTMLResponse)
     def accountant(request: Request) -> HTMLResponse:
-        # Closeouts fold at their terminal event's audit time, not the time
-        # the attribution was entered — a delayed attribution must not
-        # re-apply P&L an intervening attestation already includes.
+        # Closeouts fold at their resolution time so a delayed attribution
+        # cannot re-apply P&L an intervening attestation already includes.
+        # Only non-FILLED terminal events are mapped: a FILLED audit event is
+        # the entry fill, not the later market close, so filled trades keep
+        # their attribution timestamp (the closest available evidence).
         terminal_times = {
-            event.event_id: event.timestamp for event in resolved_service.list_audit_events().items
+            event.event_id: event.timestamp
+            for event in resolved_service.list_audit_events().items
+            if event.action is not AuditAction.FILLED
         }
         summary = compute_paper_accounting(
             resolved_service.budget_log.history(),

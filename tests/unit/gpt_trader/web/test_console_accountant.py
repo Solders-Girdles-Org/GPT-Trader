@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
+from gpt_trader.features.trade_ideas.audit import ActorType
 from gpt_trader.features.trade_ideas.closeout import CloseoutResolution
 from gpt_trader.features.trade_ideas.service import TradeIdeaService
 from gpt_trader.web import create_app
@@ -86,6 +88,47 @@ def test_accountant_renders_without_any_attestation(client: TestClient) -> None:
     assert response.status_code == 200
     assert "no attested equity yet" in response.text
     assert "incomplete:" not in response.text
+
+
+def test_filled_trade_spanning_a_reattestation_keeps_its_realized_pnl(tmp_path: Path) -> None:
+    # Fill at T1, re-attest while the position is still open at T2, close and
+    # attribute at T3: the FILLED audit event is the entry fill, not the
+    # close, so the closeout must fold at attribution time (after the
+    # re-attestation), never get sorted before it and dropped.
+    clock = {"now": _NOW}
+    service = TradeIdeaService(tmp_path, now_factory=lambda: clock["now"])
+    client = TestClient(create_app(service=service, actor_id="rj"))
+
+    attest_account_equity(service, equity=Decimal("20000"))
+    service.propose(build_trade_idea(), actor_id="idea-generator-v1")
+    service.approve(_DECISION_ID, actor_id="rj", reason="Risk verified")
+    clock["now"] = _NOW + timedelta(hours=1)
+    service.record_submission(_DECISION_ID, actor_id="paper-cycle", venue="paper")
+    service.record_fill(_DECISION_ID, actor_id="paper-broker", venue="paper")
+    clock["now"] = _NOW + timedelta(hours=2)
+    current = service.current_budget()
+    service.update_budget(
+        replace(
+            current,
+            version=current.version + 1,
+            account_equity=Decimal("19000"),
+            reason="Re-attested while position open",
+        ),
+        ActorType.HUMAN,
+        "rj",
+    )
+    clock["now"] = _NOW + timedelta(hours=3)
+    service.record_closeout_attribution(
+        _DECISION_ID,
+        actor_id="rj",
+        resolution=CloseoutResolution.THESIS_TARGET,
+        realized_profit_loss_amount=Decimal("500"),
+    )
+
+    response = client.get("/accountant")
+
+    assert response.status_code == 200
+    assert "$19,500.00" in response.text  # 19000 re-attested + 500 realized after
 
 
 def test_accountant_marks_daily_loss_usage_incomplete_when_evidence_is_missing(
