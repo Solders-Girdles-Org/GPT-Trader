@@ -291,6 +291,10 @@ class TradeIdeaService:
     def closeout_log(self) -> CloseoutAttributionLog:
         return self._closeouts
 
+    @property
+    def budget_log(self) -> RiskBudgetLog:
+        return self._budget_log
+
     # -- budget ----------------------------------------------------------
 
     def peek_budget(self) -> RiskBudget:

@@ -1,0 +1,87 @@
+"""Accountant page: paper equity ledger and budget levers vs usage."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from decimal import Decimal
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from gpt_trader.features.trade_ideas.closeout import CloseoutResolution
+from gpt_trader.features.trade_ideas.service import TradeIdeaService
+from gpt_trader.web import create_app
+from tests.unit.gpt_trader.features.trade_ideas.conftest import (
+    attest_account_equity,
+    build_trade_idea,
+)
+
+_NOW = datetime(2026, 6, 12, 10, 0, tzinfo=UTC)
+_DECISION_ID = "trade-20260612-001"
+
+
+@pytest.fixture
+def service(tmp_path: Path) -> TradeIdeaService:
+    return TradeIdeaService(tmp_path, now_factory=lambda: _NOW)
+
+
+@pytest.fixture
+def client(service: TradeIdeaService, tmp_path: Path) -> TestClient:
+    return TestClient(create_app(service=service, ideas_root=tmp_path, actor_id="rj"))
+
+
+def _record_closed_trade(service: TradeIdeaService, amount: Decimal) -> None:
+    attest_account_equity(service, equity=Decimal("20000"))
+    service.propose(build_trade_idea(), actor_id="idea-generator-v1")
+    service.approve(_DECISION_ID, actor_id="rj", reason="Risk verified")
+    service.record_submission(_DECISION_ID, actor_id="paper-cycle", venue="paper")
+    service.record_fill(_DECISION_ID, actor_id="paper-broker", venue="paper")
+    service.record_closeout_attribution(
+        _DECISION_ID,
+        actor_id="rj",
+        resolution=CloseoutResolution.THESIS_TARGET,
+        realized_profit_loss_amount=amount,
+    )
+
+
+def test_accountant_renders_equity_ledger_from_closeouts(
+    service: TradeIdeaService, client: TestClient
+) -> None:
+    _record_closed_trade(service, Decimal("150"))
+
+    response = client.get("/accountant")
+
+    assert response.status_code == 200
+    assert "$20,150.00" in response.text  # attested 20000 + realized 150
+    assert "attested $20,000.00 by rj" in response.text
+    assert "High-water mark" in response.text
+
+
+def test_accountant_shows_drawdown_from_peak(service: TradeIdeaService, client: TestClient) -> None:
+    _record_closed_trade(service, Decimal("-400"))
+
+    response = client.get("/accountant")
+
+    assert response.status_code == 200
+    assert "$19,600.00" in response.text
+    assert "drawdown $400.00 (2.00%)" in response.text
+    assert "-$400.00" in response.text  # realized P&L since attestation
+
+
+def test_accountant_renders_levers_vs_usage(service: TradeIdeaService, client: TestClient) -> None:
+    attest_account_equity(service, equity=Decimal("20000"))
+
+    response = client.get("/accountant")
+
+    assert response.status_code == 200
+    assert "Budget levers vs usage" in response.text
+    assert "Daily loss" in response.text
+    assert "Concurrent approved tickets" in response.text
+
+
+def test_accountant_renders_without_any_attestation(client: TestClient) -> None:
+    response = client.get("/accountant")
+
+    assert response.status_code == 200
+    assert "no attested equity yet" in response.text
