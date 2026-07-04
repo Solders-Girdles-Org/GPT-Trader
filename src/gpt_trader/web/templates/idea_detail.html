@@ -36,20 +36,29 @@
 <ul>{% for violation in violations %}<li class="bad">{{ violation }}</li>{% endfor %}</ul>
 {% endif %}
 
-{% if actionable %}
+{% if can_approve or can_request_changes or can_reject %}
 <h2>Decide</h2>
+{% if can_approve %}
 <form class="decision" method="post" action="/ideas/{{ idea.decision_id }}/approve">
   <input type="text" name="reason" placeholder="Reason (required, audited)" required>
   <button class="approve" type="submit">Approve</button>
 </form>
+{% endif %}
+{% if can_request_changes %}
 <form class="decision" method="post" action="/ideas/{{ idea.decision_id }}/request-changes">
   <input type="text" name="reason" placeholder="What must change (required, audited)" required>
   <button class="changes" type="submit">Request changes</button>
 </form>
+{% endif %}
+{% if can_reject %}
 <form class="decision" method="post" action="/ideas/{{ idea.decision_id }}/reject">
   <input type="text" name="reason" placeholder="Reason (required, audited)" required>
   <button class="reject" type="submit">Reject</button>
 </form>
+{% endif %}
+{% if view.state.value == "needs_changes" %}
+<p class="muted">Awaiting resubmission by the proposer before it can be approved.</p>
+{% endif %}
 {% endif %}
 
 <h2>Thesis</h2>

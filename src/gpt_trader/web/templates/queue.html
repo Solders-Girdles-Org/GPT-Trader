@@ -46,7 +46,9 @@
     </td>
     <td>{% if row.expires_in %}<span class="warn">{{ row.expires_in }}</span>{% else %}<span class="muted">&gt; warning window</span>{% endif %}</td>
     <td>
-      {% if row.violations %}
+      {% if row.state.value == "needs_changes" %}
+      <span class="warn">awaiting resubmission</span>
+      {% elif row.violations %}
       <span class="bad">{{ row.violations | length }} violation{{ "s" if row.violations | length != 1 }}</span>
       <ul class="muted">{% for violation in row.violations %}<li>{{ violation }}</li>{% endfor %}</ul>
       {% else %}<span class="ok">eligible</span>{% endif %}

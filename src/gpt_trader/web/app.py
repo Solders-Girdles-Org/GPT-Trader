@@ -29,7 +29,7 @@ from gpt_trader.features.trade_ideas.service_models import (
     TradeIdeaView,
     UnknownTradeIdeaError,
 )
-from gpt_trader.features.trade_ideas.workflow import TradeIdeaState
+from gpt_trader.features.trade_ideas.workflow import ALLOWED_TRANSITIONS, TradeIdeaState
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 
@@ -165,6 +165,10 @@ def create_app(
                 context={"decision_id": decision_id, "actor_id": resolved_actor},
                 status_code=404,
             )
+        # Offer only the decisions the workflow permits from this state:
+        # e.g. a needs-changes idea can be rejected, but must be resubmitted
+        # by its proposer before it can be approved again.
+        allowed_targets = ALLOWED_TRANSITIONS.get(view.state, frozenset())
         return templates.TemplateResponse(
             request=request,
             name="idea_detail.html",
@@ -173,7 +177,9 @@ def create_app(
                 "view": view,
                 "idea": view.idea,
                 "record": view.idea.to_dict(),
-                "actionable": view.state in _PENDING_STATES,
+                "can_approve": TradeIdeaState.APPROVED in allowed_targets,
+                "can_request_changes": TradeIdeaState.NEEDS_CHANGES in allowed_targets,
+                "can_reject": TradeIdeaState.REJECTED in allowed_targets,
                 "violations": resolved_service.approval_violations(view.idea),
                 "versions": _record_versions(resolved_service, view),
                 "error": error,
