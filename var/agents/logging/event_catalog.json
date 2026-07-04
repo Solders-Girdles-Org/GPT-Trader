@@ -41,6 +41,7 @@
       "bot_bootstrap",
       "checksum_verify",
       "collateral_update",
+      "console",
       "cycle",
       "daily_tracking",
       "data_quality_check",
@@ -326,6 +327,18 @@
       "source_files": [
         "monitoring/configuration_guardian/detector.py",
         "monitoring/configuration_guardian/guardian.py"
+      ],
+      "statuses": null
+    },
+    "console": {
+      "common_fields": [],
+      "components": null,
+      "levels": [
+        "ERROR"
+      ],
+      "occurrence_count": 1,
+      "source_files": [
+        "cli/commands/console.py"
       ],
       "statuses": null
     },
@@ -2363,10 +2376,10 @@
   "level_distribution": {
     "CRITICAL": 1,
     "DEBUG": 37,
-    "ERROR": 113,
+    "ERROR": 114,
     "INFO": 85,
     "WARNING": 101
   },
-  "total_event_types": 126,
+  "total_event_types": 127,
   "version": "1.0"
 }

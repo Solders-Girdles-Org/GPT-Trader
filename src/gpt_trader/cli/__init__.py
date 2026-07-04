@@ -27,6 +27,7 @@ from gpt_trader.cli.commands import (  # noqa: E402
     account,
     broker_connectivity,
     coinbase,
+    console,
     controls,
     ideas,
     optimize,
@@ -47,6 +48,7 @@ COMMAND_NAMES = {
     "account",
     "broker-check",
     "coinbase",
+    "console",
     "controls",
     "ideas",
     "orders",
@@ -195,6 +197,7 @@ def _build_parser() -> argparse.ArgumentParser:
     record.register(subparsers)
     account.register(subparsers)
     coinbase.register(subparsers)
+    console.register(subparsers)
     controls.register(subparsers)
     ideas.register(subparsers)
     orders.register(subparsers)
