@@ -119,6 +119,14 @@ def test_malformed_decimal_raises_integrity_error(budget_log: RiskBudgetLog) -> 
         budget_log.history()
 
 
+def test_invalid_utf8_raises_integrity_error(budget_log: RiskBudgetLog) -> None:
+    budget_log.path.parent.mkdir(parents=True, exist_ok=True)
+    budget_log.path.write_bytes(b"\xff\xfe\x00")
+
+    with pytest.raises(BudgetIntegrityError, match="unreadable"):
+        budget_log.history()
+
+
 def test_version_gap_in_file_raises_integrity_error(budget_log: RiskBudgetLog) -> None:
     budget_log.append(build_entry(DEFAULT_RISK_BUDGET))
     skipped = RiskBudget.from_dict({**DEFAULT_RISK_BUDGET.to_dict(), "version": 5})

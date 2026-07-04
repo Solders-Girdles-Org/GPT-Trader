@@ -274,7 +274,7 @@ class RiskBudgetLog:
                             value=entry.budget.version,
                         )
                     entries.append(entry)
-        except OSError as error:
+        except (OSError, UnicodeDecodeError) as error:
             raise BudgetIntegrityError(
                 f"Budget log is unreadable: {error}",
                 field="path",
