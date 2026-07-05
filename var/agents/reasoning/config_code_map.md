@@ -22,6 +22,7 @@ Scan root: `src/gpt_trader`
 | dry_run | 0 | — |
 | enable_order_preview | 0 | — |
 | environment | 0 | — |
+| event_driven_paper_lane_enabled | 0 | — |
 | event_store_root_override | 0 | — |
 | interval | 0 | — |
 | log_level | 0 | — |
