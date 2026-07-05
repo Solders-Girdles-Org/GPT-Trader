@@ -777,7 +777,7 @@
       ],
       "code_references": [
         {
-          "line": 256,
+          "line": 260,
           "path": "src/gpt_trader/features/trade_ideas/service.py",
           "reader": "os.environ.get"
         }
@@ -1189,7 +1189,7 @@
       ],
       "code_references": [
         {
-          "line": 269,
+          "line": 273,
           "path": "src/gpt_trader/features/trade_ideas/service.py",
           "reader": "os.environ.get"
         }
@@ -1205,7 +1205,7 @@
       ],
       "code_references": [
         {
-          "line": 127,
+          "line": 126,
           "path": "src/gpt_trader/features/idea_execution/executor.py",
           "reader": "os.environ.get"
         }
@@ -1221,7 +1221,7 @@
       ],
       "code_references": [
         {
-          "line": 246,
+          "line": 250,
           "path": "src/gpt_trader/features/trade_ideas/service.py",
           "reader": "os.environ.get"
         }
