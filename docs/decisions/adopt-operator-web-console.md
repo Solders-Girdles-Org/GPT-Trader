@@ -84,7 +84,7 @@ Stage-2 graduation evidence.
 
 Accepted: Option A — a local, server-rendered web console as a thin adapter
 over `TradeIdeaService`, built in three phases tracked in issue
-[#1152](https://github.com/Solders-Girdles/GPT-Trader/issues/1152): review
+[#1152](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1152): review
 queue + idea detail first, accountant + agent activity second, the envelope
 console third. Queue self-instrumentation (approval latency, agreement rate)
 ships in phase 1, not later — it is the evidence a Stage-2 promotion case
@@ -112,7 +112,7 @@ console's agreement-rate instrumentation.
   ideas; the envelope console becomes the primary operator seat. This is a
   re-weighting of existing screens, not a rebuild.
 - Follow-up work is tracked in
-  [#1152](https://github.com/Solders-Girdles/GPT-Trader/issues/1152), phased
+  [#1152](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1152), phased
   as separate reviewed PRs.
 
 ## Safety boundary

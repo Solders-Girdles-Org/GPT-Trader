@@ -57,7 +57,7 @@ command is transparency infrastructure.
 ## Consequences
 
 The spec issue is filed:
-[#1121](https://github.com/Solders-Girdles/GPT-Trader/issues/1121) (provider
+[#1121](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1121) (provider
 protocol, container wiring, CLI adaptation, unit tests over the real service
 with a boundary-double broker), and the "not available" fallback is dropped
 once wired.
