@@ -81,6 +81,10 @@
       "type": "boolean",
       "default": false
     },
+    "event_driven_paper_lane_enabled": {
+      "type": "boolean",
+      "default": false
+    },
     "risk_budget_runtime_seed_enabled": {
       "type": "boolean",
       "default": true

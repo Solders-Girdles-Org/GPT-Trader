@@ -75,6 +75,10 @@ class ExecutionConfig:
     # Stage 1 human-approved loop (default OFF): route live strategy decisions
     # into the approval-gated trade-idea workflow instead of submitting orders.
     strategy_signal_proposals: bool = False
+    # Event-driven paper lane (default OFF): carry each proposed idea through
+    # the risk kernel to paper execution in-process, per event (#1191).
+    # Implies proposal routing; the engine never submits live orders.
+    event_driven_paper_lane: bool = False
     # Stage 2 derivation seam (default ON): seed runtime risk limits from the
     # active RiskBudget version at engine startup (#1120).
     risk_budget_runtime_seed: bool = True
@@ -195,6 +199,7 @@ class ProfileSchema:
             use_limit_orders=execution_data.get("use_limit_orders", False),
             market_order_fallback=execution_data.get("market_order_fallback", True),
             strategy_signal_proposals=execution_data.get("strategy_signal_proposals", False),
+            event_driven_paper_lane=execution_data.get("event_driven_paper_lane", False),
             risk_budget_runtime_seed=execution_data.get("risk_budget_runtime_seed", True),
         )
 

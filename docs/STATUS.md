@@ -71,6 +71,18 @@ enabled and the autonomy log still resolves to `bounded_autonomy` at execution
 time. The execution gate reuses the daily-loss ratchet, so a breach lowers the
 mode before remaining system-approved ideas can execute.
 
+**The in-process event-driven lane now exists behind a default-off gate**
+(`event_driven_paper_lane_enabled`, #1191). When the operator enables it, the
+live engine carries each proposed idea through the risk kernel — system
+approval, then an execution-time autonomy re-check — into paper execution in
+the same engine cycle (`features/idea_execution/event_lane.py`), honoring the
+same two env gates and the audited autonomy mode per decision. Kernel denials
+land on the idea audit trail (`auto_approval_skipped` /
+`auto_execution_skipped`), so a ratchet-down or kill-switch takes effect on
+the next event, not the next hourly turn. The hourly batch cycle continues
+unchanged as the evidence harness
+([adopt-event-driven-execution-topology](decisions/adopt-event-driven-execution-topology.md)).
+
 This is mechanism state, not a promotion claim. Live order submission remains
 out of scope, and operationally flipping either flag remains an operator act
 gated by the measured-outcome rubric.
@@ -82,8 +94,9 @@ The live TA bot (`features/live_trade/`) and the trade-idea workflow
 lives in `features/strategy_tools/trade_idea_adapter.py` as an explicit,
 default-off bridge. The live engine now *can* drive that bridge — routing
 decisions into the approval-gated rails through `TradeIdeaService.propose()` —
-but only when `strategy_signal_proposals_enabled` is set; with the gate off (the
-default) the trading intelligence still flows straight to direct execution.
+but only when `strategy_signal_proposals_enabled` (or the lane gate
+`event_driven_paper_lane_enabled`, which implies it) is set; with both gates off
+(the default) the trading intelligence still flows straight to direct execution.
 
 ## How to keep this doc honest
 

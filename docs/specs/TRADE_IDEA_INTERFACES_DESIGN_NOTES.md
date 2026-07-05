@@ -93,6 +93,20 @@ through the existing `gpt-trader ideas` CLI — `ideas list --state proposed`,
 mark/as-of source (`live-strategy:decision:...`), action, and confidence as
 evidence on the audit trail.
 
+**Event-driven paper lane (#1191, default-off).** Setting
+`execution.event_driven_paper_lane: true` (config field
+`BotConfig.event_driven_paper_lane_enabled`) implies the proposal routing above
+and additionally carries each proposed idea through the risk kernel in the same
+engine cycle: system approval, an execution-time autonomy re-check, then paper
+execution against a lane-owned paper broker
+(`features/idea_execution/event_lane.py`). The lane honors the same operator
+env gates as the batch Stage 2 mechanisms — without
+`GPT_TRADER_IDEAS_AUTO_APPROVAL` ideas stay `proposed` for review, and without
+`GPT_TRADER_IDEAS_AUTO_EXECUTION` approved ideas await the batch executor.
+Kernel denials are audited on the idea trail (`auto_approval_skipped` /
+`auto_execution_skipped`). Paper only: live order submission stays gated by
+[docs/DIRECTION.md](../DIRECTION.md).
+
 ## Design Principles
 
 1. **Thin adapters only.** Interfaces parse input, resolve actor identity,

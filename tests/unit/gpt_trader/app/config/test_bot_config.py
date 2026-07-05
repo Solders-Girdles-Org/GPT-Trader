@@ -159,6 +159,20 @@ class TestFromDictLegacyProfileMapping:
 
         assert config.strategy_signal_proposals_enabled is True
 
+    def test_profile_style_maps_event_driven_paper_lane_gate(self) -> None:
+        with pytest.warns(DeprecationWarning, match=r"Legacy profile-style YAML mapping"):
+            config = BotConfig.from_dict(
+                {
+                    "profile_name": "event-lane-profile",
+                    "execution": {"event_driven_paper_lane": True},
+                }
+            )
+
+        assert config.event_driven_paper_lane_enabled is True
+
+    def test_event_driven_paper_lane_gate_defaults_off(self) -> None:
+        assert BotConfig().event_driven_paper_lane_enabled is False
+
     def test_profile_style_maps_risk_budget_runtime_seed_gate(self) -> None:
         with pytest.warns(DeprecationWarning, match=r"Legacy profile-style YAML mapping"):
             config = BotConfig.from_dict(

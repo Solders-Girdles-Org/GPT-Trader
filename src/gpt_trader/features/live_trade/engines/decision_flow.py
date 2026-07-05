@@ -383,6 +383,38 @@ def _propose_strategy_decision(
         stage="proposed",
     )
 
+    lane = getattr(engine, "_event_idea_lane", None)
+    if lane is None:
+        return
+
+    # Event-driven lane (#1191): carry the freshly proposed idea through the
+    # risk kernel to in-process paper execution. Denials are audited by the
+    # kernel; failures here are logged and swallowed like proposal failures —
+    # a broken lane never falls through to direct execution.
+    try:
+        outcome = lane.process(view, mark=price)
+    except Exception as exc:
+        logger.error(
+            "Event-driven lane failed",
+            symbol=symbol,
+            decision_id=view.idea.decision_id,
+            error_type=type(exc).__name__,
+            error_message=str(exc),
+            operation="event_idea_lane",
+            stage="failed",
+        )
+        return
+
+    logger.info(
+        "Event-driven lane outcome",
+        symbol=symbol,
+        decision_id=outcome.decision_id,
+        detail=outcome.detail,
+        violations=list(outcome.violations),
+        operation="event_idea_lane",
+        stage=outcome.stage.value,
+    )
+
 
 def _proposal_strategy_name(engine: Any) -> str:
     """Best-effort human-readable strategy name recorded on proposed ideas."""

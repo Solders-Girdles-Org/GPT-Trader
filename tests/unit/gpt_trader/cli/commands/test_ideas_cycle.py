@@ -25,7 +25,11 @@ from gpt_trader.features.trade_ideas import (
 )
 from tests.unit.gpt_trader.cli.commands.conftest import attest_ideas_root
 
-_AS_OF = datetime(2026, 7, 3, 12, 0, tzinfo=UTC)
+# Relative to the wall clock: the ``ideas cycle``/``ideas approve`` CLI runs
+# on real time, and the baseline proposer derives idea expiry from the
+# snapshot ``as_of`` (+48h) — a pinned date rots and trips the expiry
+# invariant at approval once the calendar catches up.
+_AS_OF = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
 
 
 def _crossover_snapshot_payload() -> dict[str, Any]:

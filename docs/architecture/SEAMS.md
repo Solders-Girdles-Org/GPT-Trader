@@ -42,6 +42,15 @@ The strategy seam is where market state becomes a **decision** (buy/sell/hold, s
   no order submission. When unset (the default), decisions flow to direct
   execution exactly as before. Operator guide:
   [Trade-Idea Interface Design Notes](../specs/TRADE_IDEA_INTERFACES_DESIGN_NOTES.md#live-strategy-signal-routing-default-off).
+- The event-driven paper lane (#1191) extends that bridge behind the
+  default-off `event_driven_paper_lane_enabled` gate, which implies proposal
+  routing: after proposing, the engine hands each idea to
+  `EventDrivenIdeaLane` (`src/gpt_trader/features/idea_execution/event_lane.py`),
+  which consults the risk kernel per decision — system approval, then an
+  execution-time autonomy re-check — and paper-executes in-process against a
+  lane-owned paper broker
+  ([adopt-event-driven-execution-topology](../decisions/adopt-event-driven-execution-topology.md)).
+  Paper only: the engine still never submits live orders while the gate is on.
 
 ## 2) Execution seam
 

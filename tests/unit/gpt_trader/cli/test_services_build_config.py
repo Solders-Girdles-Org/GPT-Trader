@@ -119,6 +119,14 @@ def test_apply_profile_kwargs_maps_strategy_signal_proposals_gate() -> None:
     assert config.strategy_signal_proposals_enabled is True
 
 
+def test_apply_profile_kwargs_maps_event_driven_paper_lane_gate() -> None:
+    config = BotConfig(event_driven_paper_lane_enabled=False)
+
+    services._apply_profile_kwargs(config, {"event_driven_paper_lane_enabled": True})
+
+    assert config.event_driven_paper_lane_enabled is True
+
+
 def test_apply_profile_kwargs_maps_risk_budget_runtime_seed_gate() -> None:
     config = BotConfig(risk_budget_runtime_seed_enabled=False)
 

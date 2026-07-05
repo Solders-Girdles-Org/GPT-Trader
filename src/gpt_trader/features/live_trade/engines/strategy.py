@@ -29,6 +29,8 @@ from gpt_trader.app.runtime.fingerprint import (
 )
 from gpt_trader.config.constants import HEALTH_CHECK_INTERVAL_SECONDS
 from gpt_trader.core import OrderSide, OrderType, Position, Product
+from gpt_trader.features.brokerages.mock import DeterministicBroker
+from gpt_trader.features.idea_execution import EventDrivenIdeaLane
 from gpt_trader.features.live_trade.degradation import DegradationState
 from gpt_trader.features.live_trade.engines.base import (
     BaseEngine,
@@ -125,7 +127,11 @@ from gpt_trader.features.strategy_tools import (
     StrategySignalToTradeIdeaAdapter,
     StrategySignalToTradeIdeaAdapterConfig,
 )
-from gpt_trader.features.trade_ideas import TradeIdeaService, create_trade_idea_service
+from gpt_trader.features.trade_ideas import (
+    TradeIdeaPositionSizingBridge,
+    TradeIdeaService,
+    create_trade_idea_service,
+)
 from gpt_trader.monitoring.alert_types import AlertSeverity
 from gpt_trader.monitoring.feature_seeds import build_feature_seed, summarize_seed_reason
 from gpt_trader.monitoring.health_checks import HealthCheckRunner
@@ -299,6 +305,7 @@ class TradingEngine(BaseEngine):
         # zero overhead and no filesystem side effects.
         self._trade_idea_service: TradeIdeaService | None = None
         self._strategy_proposal_adapter: StrategySignalToTradeIdeaAdapter | None = None
+        self._event_idea_lane: EventDrivenIdeaLane | None = None
         self._init_strategy_proposal_bridge()
 
     def _init_strategy_proposal_bridge(self) -> None:
@@ -306,15 +313,41 @@ class TradingEngine(BaseEngine):
 
         When ``strategy_signal_proposals_enabled`` is set, live decisions are
         proposed for human review through ``TradeIdeaService.propose()`` and the
-        engine never submits orders (proposal-only mode). When unset, both
-        collaborators stay ``None`` and execution behaves exactly as before.
+        engine never submits orders (proposal-only mode).
+
+        When ``event_driven_paper_lane_enabled`` is set (#1191), proposal
+        routing is implied and each proposed idea continues in-process through
+        the risk kernel into paper execution: the adapter carries executable
+        sizing and ``EventDrivenIdeaLane`` runs per decision against a
+        lane-owned paper broker. Live order submission stays off either way.
+
+        When both gates are unset, all collaborators stay ``None`` and
+        execution behaves exactly as before.
         """
-        if not getattr(self.context.config, "strategy_signal_proposals_enabled", False):
+        lane_enabled = getattr(self.context.config, "event_driven_paper_lane_enabled", False)
+        proposals_enabled = getattr(self.context.config, "strategy_signal_proposals_enabled", False)
+        if not (lane_enabled or proposals_enabled):
             return
         self._trade_idea_service = create_trade_idea_service()
         self._strategy_proposal_adapter = StrategySignalToTradeIdeaAdapter(
-            StrategySignalToTradeIdeaAdapterConfig(enabled=True)
+            StrategySignalToTradeIdeaAdapterConfig(enabled=True),
+            # The lane executes ideas, so they must carry executable sizing
+            # (positive quantity/notional) instead of advisory-only sizing.
+            sizing_bridge=TradeIdeaPositionSizingBridge() if lane_enabled else None,
         )
+        if lane_enabled:
+            self._event_idea_lane = EventDrivenIdeaLane(
+                self._trade_idea_service,
+                DeterministicBroker(),
+            )
+            logger.warning(
+                "Event-driven paper lane ENABLED: live decisions route through the "
+                "risk kernel to in-process paper execution; the engine will not "
+                "submit live orders",
+                operation="event_idea_lane",
+                stage="enabled",
+            )
+            return
         logger.warning(
             "Strategy-signal proposal mode ENABLED: live decisions route to the "
             "approval-gated trade-idea workflow; the engine will not submit orders",

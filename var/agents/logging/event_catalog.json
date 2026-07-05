@@ -51,6 +51,7 @@
       "disable_rule",
       "enable_rule",
       "ensure_mark_is_fresh",
+      "event_idea_lane",
       "event_store",
       "extract_mark",
       "flatten_and_stop",
@@ -531,6 +532,29 @@
       "occurrence_count": 1,
       "source_files": [
         "features/live_trade/execution/validation.py"
+      ],
+      "statuses": null
+    },
+    "event_idea_lane": {
+      "common_fields": [
+        "decision_id",
+        "detail",
+        "error_message",
+        "error_type",
+        "stage",
+        "symbol",
+        "violations"
+      ],
+      "components": null,
+      "levels": [
+        "ERROR",
+        "INFO",
+        "WARNING"
+      ],
+      "occurrence_count": 3,
+      "source_files": [
+        "features/live_trade/engines/decision_flow.py",
+        "features/live_trade/engines/strategy.py"
       ],
       "statuses": null
     },
@@ -2350,8 +2374,8 @@
     "details": 5,
     "environment": 12,
     "error": 57,
-    "error_message": 86,
-    "error_type": 86,
+    "error_message": 87,
+    "error_type": 87,
     "event_type": 7,
     "flatten_operation_id": 9,
     "granularity": 6,
@@ -2369,17 +2393,17 @@
     "secret_ref": 6,
     "service": 9,
     "side": 25,
-    "stage": 132,
-    "symbol": 81,
+    "stage": 135,
+    "symbol": 83,
     "timestamp": 4
   },
   "level_distribution": {
     "CRITICAL": 1,
     "DEBUG": 37,
-    "ERROR": 114,
-    "INFO": 85,
-    "WARNING": 101
+    "ERROR": 115,
+    "INFO": 86,
+    "WARNING": 102
   },
-  "total_event_types": 127,
+  "total_event_types": 128,
   "version": "1.0"
 }

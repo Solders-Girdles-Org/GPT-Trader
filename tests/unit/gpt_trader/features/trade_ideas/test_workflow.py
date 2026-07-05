@@ -33,6 +33,7 @@ def test_creation_in_any_other_state_is_rejected(state: TradeIdeaState) -> None:
         (TradeIdeaState.PROPOSED, TradeIdeaState.REJECTED),
         (TradeIdeaState.PROPOSED, TradeIdeaState.EXPIRED),
         (TradeIdeaState.NEEDS_CHANGES, TradeIdeaState.PROPOSED),
+        (TradeIdeaState.APPROVED, TradeIdeaState.APPROVED),
         (TradeIdeaState.APPROVED, TradeIdeaState.SUBMITTED),
         (TradeIdeaState.APPROVED, TradeIdeaState.CANCELLED),
         (TradeIdeaState.APPROVED, TradeIdeaState.EXPIRED),

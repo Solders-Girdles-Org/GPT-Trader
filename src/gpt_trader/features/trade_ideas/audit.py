@@ -38,6 +38,7 @@ class AuditAction(str, Enum):
     PROPOSED = "proposed"
     CHANGED = "changed"
     AUTO_APPROVAL_SKIPPED = "auto_approval_skipped"
+    AUTO_EXECUTION_SKIPPED = "auto_execution_skipped"
     APPROVED = "approved"
     REJECTED = "rejected"
     SUBMITTED = "submitted"
@@ -54,6 +55,7 @@ _ACTION_AFTER_STATES: dict[AuditAction, TradeIdeaState] = {
     AuditAction.PROPOSED: TradeIdeaState.PROPOSED,
     AuditAction.CHANGED: TradeIdeaState.NEEDS_CHANGES,
     AuditAction.AUTO_APPROVAL_SKIPPED: TradeIdeaState.PROPOSED,
+    AuditAction.AUTO_EXECUTION_SKIPPED: TradeIdeaState.APPROVED,
     AuditAction.APPROVED: TradeIdeaState.APPROVED,
     AuditAction.REJECTED: TradeIdeaState.REJECTED,
     AuditAction.SUBMITTED: TradeIdeaState.SUBMITTED,

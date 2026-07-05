@@ -49,6 +49,14 @@ PaperBroker = DeterministicBroker | HybridPaperBroker
 
 PAPER_EXECUTION_VENUE = TicketVenue.PAPER.value
 DEFAULT_PAPER_EXECUTION_ACTOR_ID = "paper-idea-executor"
+# Actor id stamped on the event-driven lane's kernel approvals/executions
+# (#1191). Defined here rather than in event_lane.py so the admission gate
+# below can recognize it without a circular import.
+EVENT_LANE_ACTOR_ID = "event-idea-lane"
+# System approvals the Stage 2 execution gate recognizes: the batch
+# auto-approval sweep and the in-process event-driven lane. Any other
+# non-human approval is refused.
+SYSTEM_APPROVAL_ACTOR_IDS = frozenset({AUTO_APPROVAL_ACTOR_ID, EVENT_LANE_ACTOR_ID})
 AUTO_EXECUTION_ENV_VAR = "GPT_TRADER_IDEAS_AUTO_EXECUTION"
 _AUTO_EXECUTION_ENABLED_VALUES = frozenset({"1", "true", "yes", "on"})
 
@@ -166,14 +174,15 @@ def paper_auto_execution_gate_evidence(
     """Return submission evidence when a system approval passes the Stage 2 gate.
 
     The autonomy re-check is the risk kernel's execution gate; this lane adds
-    only its own admission preconditions (a sweep-issued system approval and
-    the operator-set auto-execution flag) and the env-specific evidence line.
+    only its own admission preconditions (a system approval from a recognized
+    actor — the batch sweep or the event-driven lane — and the operator-set
+    auto-execution flag) and the env-specific evidence line.
     """
     if approval_event is None:
         return None
     if approval_event.actor_type is not ActorType.SYSTEM:
         return None
-    if approval_event.actor_id != AUTO_APPROVAL_ACTOR_ID:
+    if approval_event.actor_id not in SYSTEM_APPROVAL_ACTOR_IDS:
         return None
     if not resolve_auto_execution_enabled():
         return None
