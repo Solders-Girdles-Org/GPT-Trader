@@ -33,6 +33,7 @@ from gpt_trader.utilities.logging_patterns import get_logger
 
 if TYPE_CHECKING:
     from gpt_trader.app.config.profile_loader import ProfileLoader
+    from gpt_trader.app.risk_budget_seed import RiskBudgetRuntimeSeed
     from gpt_trader.features.live_trade.bot import TradingBot
     from gpt_trader.features.live_trade.execution.validation import ValidationFailureTracker
     from gpt_trader.features.live_trade.risk.manager import LiveRiskManager
@@ -58,6 +59,25 @@ class ApplicationContainer:
 
     def __init__(self, config: BotConfig):
         self.config = config
+        # Stage 2 derivation seam (default ON): resolve the active RiskBudget
+        # version once at startup so the shorts gate and the runtime risk
+        # limits are seeded from the same version, before the settings
+        # snapshot/fingerprint capture the effective config. See
+        # docs/decisions/canonical-risk-limit-vocabulary.md (#1120).
+        self._risk_budget_seed: RiskBudgetRuntimeSeed | None = None
+        if config.risk_budget_runtime_seed_enabled:
+            from gpt_trader.app.risk_budget_seed import (
+                apply_shorts_permission,
+                resolve_risk_budget_runtime_seed,
+            )
+
+            self._risk_budget_seed = resolve_risk_budget_runtime_seed()
+            apply_shorts_permission(config, self._risk_budget_seed)
+            logger.info(
+                "Runtime risk limits seeded from risk budget",
+                budget_version=self._risk_budget_seed.budget_version,
+                budget_source=self._risk_budget_seed.budget_source,
+            )
         self._runtime_settings_snapshot = create_runtime_settings_snapshot(config)
         self._startup_config_fingerprint = compute_startup_config_fingerprint(
             self._runtime_settings_snapshot
@@ -79,6 +99,7 @@ class ApplicationContainer:
         self._risk_validation = RiskValidationContainer(
             config=config,
             event_store_provider=lambda: self.event_store,
+            risk_budget_seed=self._risk_budget_seed,
         )
 
     @property

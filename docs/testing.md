@@ -38,7 +38,7 @@ make test-real-api
 uv run pytest tests/unit/gpt_trader/config/test_bot_config.py
 
 # Run specific test class or function
-uv run pytest tests/unit/gpt_trader/config/test_bot_config.py::TestBotConfigEnvAliasing::test_risk_max_leverage_with_prefix
+uv run pytest tests/unit/gpt_trader/config/test_bot_config.py::TestBotConfigEnvAliasing::test_risk_position_fraction_from_pct_per_symbol
 
 # Run tests matching a pattern
 uv run pytest -k "test_error"

@@ -53,9 +53,29 @@ class LocalCIProfile:
     readiness_skip_reason: str | None
     agent_artifacts_enabled: bool
     agent_artifacts_skip_reason: str | None
+    # Property/contract/integration lanes are required GitHub pull_request
+    # checks, so the default pr profile (and strict) runs them; quick skips
+    # them for a fast development loop.
+    required_suites_enabled: bool
+    required_suites_skip_reason: str | None
 
 
 LOCAL_CI_PROFILES: dict[str, LocalCIProfile] = {
+    "pr": LocalCIProfile(
+        canonical_name="pr",
+        description=(
+            "PR profile (default) matches the GitHub pull_request required-check "
+            "surface: lint/format, docs audits, type check, test guardrails, unit, "
+            "property, contract, and integration tests, with agent artifacts "
+            "freshness as an advisory warning."
+        ),
+        readiness_enabled=False,
+        readiness_skip_reason="The canary readiness gate is local/live evidence beyond GitHub pull_request CI; use the strict profile when you need it.",
+        agent_artifacts_enabled=True,
+        agent_artifacts_skip_reason=None,
+        required_suites_enabled=True,
+        required_suites_skip_reason=None,
+    ),
     "strict": LocalCIProfile(
         canonical_name="strict",
         description=(
@@ -66,18 +86,23 @@ LOCAL_CI_PROFILES: dict[str, LocalCIProfile] = {
         readiness_skip_reason=None,
         agent_artifacts_enabled=True,
         agent_artifacts_skip_reason=None,
+        required_suites_enabled=True,
+        required_suites_skip_reason=None,
     ),
     "quick": LocalCIProfile(
         canonical_name="quick",
-        description="Quick/dev profile skips the readiness gate and agent artifacts freshness so you can run local CI without generating readiness reports or regenerating agent artifacts.",
+        description="Quick/dev profile skips the readiness gate, agent artifacts freshness, and the property/contract/integration suites for a fast development loop.",
         readiness_enabled=False,
         readiness_skip_reason="Use the strict profile when you need the readiness gate; quick/dev skips it because readiness data may be missing in short-lived loops.",
         agent_artifacts_enabled=False,
         agent_artifacts_skip_reason="Agent artifacts freshness is disabled in quick/dev to avoid regenerating var/agents; run strict before merging if you need that check.",
+        required_suites_enabled=False,
+        required_suites_skip_reason="Property/contract/integration suites are skipped in quick/dev; the default pr profile runs the full GitHub pull_request surface.",
     ),
 }
 
 PROFILE_ALIASES: dict[str, str] = {
+    "pr": "pr",
     "strict": "strict",
     "full": "strict",
     "quick": "quick",
@@ -104,8 +129,9 @@ def find_repo_root(start_path: Path) -> Path:
 def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Run GPT-Trader local validation. The strict profile includes local/live "
-            "readiness evidence beyond GitHub pull_request CI."
+            "Run GPT-Trader local validation. The default pr profile matches the "
+            "GitHub pull_request required-check surface; strict adds local/live "
+            "readiness evidence beyond it."
         )
     )
     parser.add_argument(
@@ -119,6 +145,11 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Include contract tests (CI: contract-tests).",
     )
     parser.add_argument(
+        "--include-integration-tests",
+        action="store_true",
+        help="Include integration tests (CI: integration-tests).",
+    )
+    parser.add_argument(
         "--include-agent-health",
         action="store_true",
         help="Include agent-health fast checks (CI: agent-health).",
@@ -128,8 +159,12 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "-p",
         type=str.lower,
         choices=sorted(PROFILE_ALIASES.keys()),
-        default="strict",
-        help="Select a local CI profile (strict/full vs quick/dev).",
+        default="pr",
+        help=(
+            "Select a local CI profile: pr (default, matches the GitHub "
+            "pull_request required-check surface), strict/full (pr plus the "
+            "readiness gate), or quick/dev (fast loop)."
+        ),
     )
     return parser.parse_args(argv)
 
@@ -160,6 +195,10 @@ def print_profile_banner(selection: str, profile: LocalCIProfile) -> None:
     )
     print(
         f"  - {_format_check_status('Agent artifacts freshness', profile.agent_artifacts_enabled, profile.agent_artifacts_skip_reason)}",
+        flush=True,
+    )
+    print(
+        f"  - {_format_check_status('Property/contract/integration suites', profile.required_suites_enabled, profile.required_suites_skip_reason)}",
         flush=True,
     )
 
@@ -295,15 +334,32 @@ def build_steps(profile: LocalCIProfile, args: argparse.Namespace) -> list[Plann
             label="Property tests",
             command=["uv", "run", "pytest", "tests/property", "-v"],
             env=test_env,
-            enabled=args.include_property_tests,
-            skip_reason="use --include-property-tests",
+            enabled=profile.required_suites_enabled or args.include_property_tests,
+            skip_reason=profile.required_suites_skip_reason or "use --include-property-tests",
         ),
         PlannedStep(
             label="Contract tests",
             command=["uv", "run", "pytest", "tests/contract", "-v"],
             env=test_env,
-            enabled=args.include_contract_tests,
-            skip_reason="use --include-contract-tests",
+            enabled=profile.required_suites_enabled or args.include_contract_tests,
+            skip_reason=profile.required_suites_skip_reason or "use --include-contract-tests",
+        ),
+        PlannedStep(
+            label="Integration tests",
+            command=[
+                "uv",
+                "run",
+                "pytest",
+                "-o",
+                "addopts=",
+                "-m",
+                "integration and not slow and not real_api",
+                "tests/integration",
+                "-q",
+            ],
+            env=test_env,
+            enabled=profile.required_suites_enabled or args.include_integration_tests,
+            skip_reason=profile.required_suites_skip_reason or "use --include-integration-tests",
         ),
     ]
     return steps

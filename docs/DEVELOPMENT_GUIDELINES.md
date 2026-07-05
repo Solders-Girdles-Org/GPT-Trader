@@ -17,7 +17,7 @@ need to review historical practices.
   `docs/DI_POLICY.md` for detailed guidance on when to use container vs
   singletons.
 - **Public surfaces**: Prefer importing across slices/tests via surface modules
-  (e.g., `gpt_trader.security.validate`, `gpt_trader.features.intelligence.contracts`)
+  (e.g., `gpt_trader.security.validate`, `gpt_trader.features.intelligence.regime`)
   instead of deep/internal modules. Add new exports to the surface when needed.
 - **Configuration-first**: Extend `BotConfig` when new runtime options are
   required; expose overrides through the CLI when appropriate.
@@ -105,8 +105,9 @@ bypass guards:
 This section is the compact contributor-facing CI contract. The executable
 source of truth remains `.github/workflows/*.yml` plus GitHub branch protection.
 Current `main` branch protection requires only the named `CI` contexts listed in
-the first row below, with strict up-to-date checks and conversation resolution
-enabled. Selected context-specific lanes self-skip by changed path while keeping
+the first row below, with conversation resolution enabled and a required merge
+queue (#1127; strict up-to-date is off — the queue validates entries against the
+latest `main` via `merge_group` runs). Selected context-specific lanes self-skip by changed path while keeping
 those check names stable. The expected protection settings are machine-checked:
 `uv run python scripts/ci/check_branch_protection.py` (also surfaced as an
 `agent-pr-ready` advisory) fails when live GitHub settings drift from the
@@ -130,76 +131,39 @@ output inputs, and `Dependency Review` runs for dependency manifest changes.
 
 ### Local CI Command
 
-For a fail-fast entrypoint that matches the local PR-readiness command set, run:
-
-```bash
-make ci-required
-```
-
-It runs lint/format, docs audits, mypy, agent artifacts freshness, test
-guardrails, core unit tests, and the Stage 1 rails end-to-end smoke
-(`scripts/ops/stage1_rails_smoke.py`, also `make stage1-smoke`), stopping on
-the first failure. Use
-it when you want the local PR-readiness surface without optional suites or local
-readiness evidence. Agent artifacts freshness is advisory here: stale artifacts
-warn without stopping the run, while non-PR GitHub CI remains the blocking
-enforcement point.
-
-Run the local CI command when you want the same local PR-readiness set plus
-the repository's optional local profile controls:
+There is one canonical local validation command:
 
 ```bash
 uv run local-ci
 ```
 
-This covers the same core validation categories used around PRs: lint + format,
-docs audits, mypy, agent artifacts freshness, test guardrails, and core unit
-tests. Profile-specific local checks can still differ from GitHub pull_request
-enforcement, especially around readiness evidence.
+The default `pr` profile matches the GitHub `pull_request` required-check
+surface: lint/format, docs audits, type check, test guardrails, core unit
+tests plus the Stage 1 rails smoke, and the property/contract/integration
+suites. Agent artifacts freshness runs as an advisory warning (stale artifacts
+warn without failing, matching the non-blocking PR lane). Two other profiles
+exist: `strict` (alias `full`) adds the canary readiness gate
+(`scripts/ci/check_readiness_gate.py --profile canary --strict`) as local/live
+evidence beyond the PR surface, and `quick` (alias `dev`) skips the readiness
+gate, artifacts freshness, and the property/contract/integration suites for a
+fast development loop (re-enable a single suite with
+`--include-property-tests`, `--include-contract-tests`, or
+`--include-integration-tests`; `--include-agent-health` adds the agent-health
+fast checks to any profile). The CLI banner prints the active profile and the
+status of each toggled check before executing.
 
-The command accepts `--profile`/`-p` to select either the default strict/full
-profile or the quick/dev profile. Strict (the default and the `full` alias) runs
-the local PR-readiness validation set, keeps agent artifacts freshness enabled as
-an advisory warning, and adds the canary readiness gate as local/live readiness
-evidence. GitHub pull_request CI and `make ci-required` do not enforce that
-canary readiness gate.
-The CLI prints the active profile plus the status of the readiness gate and
-agent-artifacts checks before executing any steps. Quick (aliased as `dev`)
-intentionally disables those two checks so you can run local CI without needing
-readiness reports or regenerating `var/agents`; the output still documents which
-checks were skipped and why.
-
-| Command | Intended use | Agent artifacts freshness | Readiness gate |
-| --- | --- | --- | --- |
-| `make ci-required` | Local PR-readiness validation surface | Advisory, non-blocking | Not run |
-| GitHub `pull_request` CI | GitHub PR validation in Actions | Path-conditional; non-blocking if stale when run | Not run |
-| `uv run local-ci` / strict/full | Local PR-readiness validation plus local/live readiness evidence | Advisory, non-blocking | Runs `scripts/ci/check_readiness_gate.py --profile canary --strict` |
-| `uv run local-ci --profile quick` | Fast development loop | Skipped with an explicit banner reason | Skipped with an explicit banner reason |
-
-Optional suites:
-
-```bash
-uv run local-ci --include-property-tests
-uv run local-ci --include-contract-tests
-uv run local-ci --include-agent-health
-```
-
-For quick loops you can explicitly request the dev profile:
-
-```bash
-uv run local-ci --profile quick
-uv run local-ci --profile dev
-```
+`make ci-required` survives as a thin alias that runs `uv run local-ci`
+verbatim.
 
 Need help diagnosing `uv run local-ci` failures? See the [Local CI troubleshooting](#local-ci-troubleshooting) steps below.
 
 ### Local CI troubleshooting
 
-Local CI (`make ci-required` / `uv run local-ci`) can report issues before the
-unit tests run. Stale agent artifacts are advisory in local runs and should be
-regenerated before merge; readiness gate inputs can still fail strict/full
-`uv run local-ci`. The readiness gate applies to strict/full `uv run local-ci`
-and direct readiness checks, not to `make ci-required` or GitHub pull_request CI.
+Local CI (`uv run local-ci`) can report issues before the unit tests run.
+Stale agent artifacts are advisory in local runs and should be regenerated
+before merge; readiness gate inputs can still fail the strict/full profile.
+The readiness gate applies only to the strict/full profile and direct
+readiness checks, not to the default `pr` profile or GitHub pull_request CI.
 When you hit one of these findings, follow the sequence below before re-running
 the command.
 
@@ -218,6 +182,16 @@ the command.
 4. Rerun `uv run python scripts/ci/check_readiness_gate.py --profile <profile>` or `uv run local-ci` to confirm the gate now sees the refreshed data.
 5. The gate also reads `runtime_data/<profile>/events.db` for liveness and `var/data/status.json` (or your configured status file), so ensure those files exist alongside the report directory before rerunning local CI.
 6. For more background on the required files, freshness windows, and how stale data is interpreted, see [Readiness gate inputs & stale-data interpretation](READINESS.md#readiness-gate-inputs--stale-data-interpretation).
+
+#### 3. Common CI failures and fixes
+
+| Failure | Cause | Fix |
+|---------|-------|-----|
+| `black --check` | Formatting | Run `uv run black .` |
+| `ruff check` | Linting violations | Run `uv run ruff check --fix .` |
+| `mypy` errors | Type issues | Fix type annotations (pre-existing shim errors can be ignored) |
+| Import error | Wrong module path | Use canonical paths (see [DEPRECATIONS.md](DEPRECATIONS.md)) |
+| Test using deprecated path | Patch targets shim | Update to patch canonical module directly |
 
 ### Agent Artifacts Freshness
 
@@ -311,12 +285,7 @@ git diff --check
 
 ## Submitting Changes
 
-1. Create a descriptive branch.
-2. Implement code + tests + docs.
-3. Run `uv run pytest -q` and any targeted integration scripts.
-4. Open a pull request summarising risk impact, telemetry changes, and rollout
-   steps.
-
-Legacy contribution guides were removed from the tree; if you need to review
-them, pull from repository history. Do not base new development on those
-documents.
+The contribution workflow (environment setup, branching, PR checklist, and PR
+expectations) is owned by [CONTRIBUTING.md](../CONTRIBUTING.md). Legacy
+contribution guides were removed from the tree; if you need to review them,
+pull from repository history.

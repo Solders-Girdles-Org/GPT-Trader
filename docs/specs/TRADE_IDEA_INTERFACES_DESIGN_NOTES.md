@@ -105,9 +105,12 @@ evidence on the audit trail.
 2. **Every action is identity-stamped.** No anonymous mutations. Each
    mutating command requires an `actor_id` and an `actor_type`; review
    actions from interactive interfaces are always `ActorType.HUMAN`.
-3. **No execution lane.** Nothing in these workstreams places, modifies, or
-   cancels broker orders. `mark-submitted` / `mark-filled` are audit
-   bookkeeping for manually executed tickets, not order routing.
+3. **No live execution lane.** Nothing in these workstreams places, modifies,
+   or cancels live broker orders. `mark-submitted` / `mark-filled` are audit
+   bookkeeping for manually executed tickets, not order routing. The only
+   machine execution surface is the paper-only `execute-paper` /
+   `ideas cycle` lane; system-approved ideas reach it only through
+   [stage2-execution-gate](../decisions/stage2-execution-gate.md).
 4. **Policy refusals are first-class UX.** `PolicyViolationError.violations`
    is a list of every reason an approval was refused. Interfaces must show
    the full list, never just the first reason or a generic failure.
@@ -166,6 +169,7 @@ log. `actor_type` rules:
 | `mark-submitted` | `system` (default per service) or `human` |
 | `mark-filled` | `venue` (default per service) |
 | budget `set` | `human` (policy refuses non-human in current mode) |
+| `execute-paper`, `ideas cycle` fills | `system` submission under `paper`; fill from `venue` |
 
 ### Error mapping
 

@@ -21,6 +21,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any
 
+from gpt_trader.core.risk_units import trading_day
 from gpt_trader.features.live_trade.risk.manager.models import (
     ExposureState,
     RiskWarning,
@@ -103,7 +104,7 @@ class LiveRiskManager:
                 raise ValueError("Risk state payload is not an object")
 
             saved_date = state.get("date")
-            current_date = self._now_provider().strftime("%Y-%m-%d")
+            current_date = trading_day(self._now_provider()).isoformat()
 
             if saved_date != current_date:
                 self._state_load_error = None
@@ -140,7 +141,7 @@ class LiveRiskManager:
             Path(self.state_file).parent.mkdir(parents=True, exist_ok=True)
 
             state = {
-                "date": self._now_provider().strftime("%Y-%m-%d"),
+                "date": trading_day(self._now_provider()).isoformat(),
                 "start_of_day_equity": (
                     str(self._start_of_day_equity) if self._start_of_day_equity else None
                 ),

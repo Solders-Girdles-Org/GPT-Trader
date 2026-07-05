@@ -3,6 +3,7 @@ name = "gpt-trader"
 version = "0.1.0"
 description = "Coinbase Advanced Trade trading system with DI container, live spot/CFM futures support, and strategy tooling."
 readme = "README.md"
+license = "MIT"
 authors = [{name = "RJ + GPT-5"}]
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -25,6 +26,13 @@ dependencies = [
 monitoring = ["psutil>=6.0.0,<7.0.0"]
 live-trade = ["websocket-client>=1.8.0,<2.0.0", "aiohttp>=3.12.15,<4.0.0"]
 optimize = ["optuna>=4.0.0,<5.0.0"]
+# Operator web console (docs/decisions/adopt-operator-web-console.md)
+web = [
+    "fastapi>=0.115.0,<1.0.0",
+    "uvicorn>=0.30.0,<1.0.0",
+    "jinja2>=3.1.4,<4.0.0",
+    "python-multipart>=0.0.9,<1.0.0",
+]
 
 # Observability (OpenTelemetry tracing)
 observability = [
@@ -49,7 +57,7 @@ agent-dedupe = "gpt_trader.agents.cli:dedupe"
 agent-pr-ready = "gpt_trader.agents.cli:pr_ready"
 
 [build-system]
-requires = ["setuptools>=69", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
@@ -57,6 +65,9 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"gpt_trader.web" = ["templates/*.html"]
 
 [dependency-groups]
 dev = [
@@ -77,6 +88,7 @@ dev = [
     "freezegun>=1.2.0,<2.0.0",
     "hypothesis>=6.144.0,<7.0.0",
     "coverage>=7.0.0,<8.0.0",
+    "httpx>=0.27.0,<1.0.0",  # ASGI test client for the operator web console
     # Security scanning
     "pip-audit>=2.9.0,<3.0.0",
     "bandit>=1.7.9,<2.0.0",

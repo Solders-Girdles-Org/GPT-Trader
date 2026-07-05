@@ -48,10 +48,11 @@ src/gpt_trader/features/
 ├── brokerages/          # Exchange integrations
 ├── data/                # Data acquisition helpers
 ├── idea_execution/      # Paper-only execution lane for APPROVED trade ideas
-├── intelligence/        # Strategy intelligence (sizing, regime, ensemble)
+├── intelligence/        # Strategy intelligence (sizing, regime)
 │   └── sizing/          # Kelly criterion position sizing
 ├── live_trade/          # Production trading engine
 ├── optimize/            # Parameter optimisation experiments
+├── recorder/            # Market-data recording (price ticks; five-role recorder arm)
 ├── strategy_dev/        # Strategy config profiles, registry, and config-diff helpers
 ├── strategy_tools/      # Shared helpers for strategy slices
 └── trade_ideas/         # Broker-neutral trade-idea records, workflow, audit log
@@ -71,18 +72,23 @@ src/gpt_trader/
 ├── preflight/           # Production preflight verification and startup checks
 ├── security/            # Security primitives: input sanitization, secrets management
 ├── utilities/           # Shared helpers (async, datetime, quantization, logging facade)
-└── validation/          # Declarative validators and decorators
+├── validation/          # Declarative validators and decorators
+└── web/                 # Operator web console: local-only thin adapter over TradeIdeaService
 ```
 
 Import boundaries are enforced in CI (Test Guardrails, required) by
-`scripts/ci/check_import_boundaries.py`, which checks three rule families:
+`scripts/ci/check_import_boundaries.py`, which checks four rule families:
 lower layers must never import the entrypoint layers (CLI/preflight) or the
 DI container; `gpt_trader.monitoring` must not import feature slices at
 runtime (TYPE_CHECKING-only imports allowed; the existing debt edges are
-frozen in an allowlist); and slice-to-slice imports inside
+frozen in an allowlist); slice-to-slice imports inside
 `gpt_trader.features` — including the frozen dependency set of
 `features/trade_ideas` (core + errors only) — are ratcheted to an explicit
-allowlist (`CROSS_SLICE_ALLOWED_EDGES`) that records today's actual topology.
+allowlist (`CROSS_SLICE_ALLOWED_EDGES`) that records today's actual topology;
+and `gpt_trader.web` (the operator console,
+[adopt-operator-web-console.md](decisions/adopt-operator-web-console.md)) may
+import only `features/trade_ideas`, core, and errors — structurally excluding
+`live_trade` and every order-constructing layer.
 New edges require an architecture rationale; shrinking the allowlists is
 always welcome.
 
@@ -487,10 +493,13 @@ universe: [BTC, ETH, SOL, XRP, LTC, ADA, DOGE, BCH, AVAX, LINK]
 profile: canary
 broker: coinbase
 positions: 0.01 BTC max
-daily_loss_limit_pct: 1%
 trading_window: 14:00-15:00 UTC
 circuit_breakers: multiple
 ```
+
+> Risk appetite (daily loss limit, exposure cap) is not a profile setting: it
+> derives from the active RiskBudget at engine startup
+> (`docs/decisions/canonical-risk-limit-vocabulary.md`).
 
 ### Production Profile
 ```yaml

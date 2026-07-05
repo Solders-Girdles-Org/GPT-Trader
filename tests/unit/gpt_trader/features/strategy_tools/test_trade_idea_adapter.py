@@ -21,6 +21,7 @@ from gpt_trader.features.trade_ideas import (
     ActorType,
     ProductType,
     TradeDirection,
+    TradeIdeaPositionSizingBridge,
     TradeIdeaService,
     TradeIdeaState,
     evaluate_eligibility,
@@ -175,3 +176,37 @@ def test_non_spot_context_is_rejected_before_proposal(tmp_path: Path) -> None:
         adapter.propose_decision(_buy_decision(), context, service)
 
     assert service.list_views() == []
+
+
+def test_sizing_bridge_makes_mapped_ideas_executable() -> None:
+    adapter = StrategySignalToTradeIdeaAdapter(
+        StrategySignalToTradeIdeaAdapterConfig(enabled=True),
+        sizing_bridge=TradeIdeaPositionSizingBridge(),
+    )
+
+    idea = adapter.map_decision(_buy_decision(), _context())
+
+    assert idea is not None
+    assert idea.sizing_recommendation.quantity is not None
+    assert idea.sizing_recommendation.quantity > 0
+    assert idea.sizing_recommendation.notional is not None
+    assert idea.sizing_recommendation.notional > 0
+    assert idea.max_loss.amount is not None
+    assert idea.max_loss.amount > 0
+    assert idea.max_loss.percent_of_account is not None
+    assert any("engine=position-sizer-bridge-v1" in item for item in idea.data_used)
+    assert any("Sized at the worst permitted entry" in item for item in idea.max_loss.assumptions)
+    assert evaluate_eligibility(idea) == []
+
+
+def test_default_adapter_sizing_stays_advisory() -> None:
+    idea = _enabled_adapter().map_decision(_buy_decision(), _context())
+
+    assert idea is not None
+    assert idea.sizing_recommendation.quantity is None
+    assert idea.sizing_recommendation.notional is None
+    assert idea.max_loss.amount is None
+    assert any(
+        "Sizing remains advisory until a human approves the idea" in item
+        for item in idea.max_loss.assumptions
+    )

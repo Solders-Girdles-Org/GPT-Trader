@@ -76,8 +76,9 @@ _DEFAULT_BASE_BRANCH = "main"
 _BLOCKING_MERGE_STATES = {
     "BEHIND": (
         "Branch is behind the base; run `gh pr update-branch <pr>` (or rebase onto the "
-        "base) and let CI re-run. Strict up-to-date serializes batch merges, so this is "
-        "expected after every merge to the base."
+        "base) and let CI re-run. With the merge queue active (strict up-to-date off, "
+        "#1127) this should be rare: the queue validates entries against the latest "
+        "base itself."
     ),
     "DIRTY": "Branch has merge conflicts with the base.",
     "BLOCKED": "Branch protection is blocking the merge (see findings below).",
@@ -292,6 +293,7 @@ def assess_readiness(
     state: PullRequestState,
     *,
     require_current_head_review_signal: bool = False,
+    merge_queue_active: bool = False,
 ) -> ReadinessReport:
     """Reconcile checks + protection + threads into a non-blocking verdict."""
     findings: list[Finding] = []
@@ -340,7 +342,19 @@ def assess_readiness(
         if state.merge_state_status == "BLOCKED":
             has_specific_blocker = any(finding.severity == "blocker" for finding in findings)
             if not has_specific_blocker:
-                findings.append(Finding("blocker", guidance))
+                if merge_queue_active:
+                    # With a required merge queue, GitHub reports BLOCKED for
+                    # direct merges even when the PR is ready to enqueue.
+                    findings.append(
+                        Finding(
+                            "info",
+                            "Merge queue is active on the base branch; BLOCKED here "
+                            "means direct merge is disallowed, not that the PR is "
+                            "unready. Enqueue with `gh pr merge --squash --auto`.",
+                        )
+                    )
+                else:
+                    findings.append(Finding("blocker", guidance))
         else:
             findings.append(Finding("blocker", guidance))
 
@@ -752,6 +766,39 @@ def fetch_branch_protection(repo: str, branch: str = "main") -> dict[str, Any] |
 def _is_missing_branch_protection(error: RuntimeError) -> bool:
     message = str(error).lower()
     return "http 404" in message or "branch not protected" in message
+
+
+def fetch_merge_queue_active(repo: str, branch: str) -> bool:
+    """True when a merge queue is configured for ``branch`` (advisory; False on error)."""
+    if repo.count("/") != 1:
+        return False
+    owner, name = repo.split("/", 1)
+    query = """
+query($owner: String!, $name: String!, $branch: String!) {
+  repository(owner: $owner, name: $name) {
+    mergeQueue(branch: $branch) { id }
+  }
+}
+"""
+    try:
+        data = _gh_json(
+            [
+                "api",
+                "graphql",
+                "-f",
+                f"query={query}",
+                "-F",
+                f"owner={owner}",
+                "-F",
+                f"name={name}",
+                "-F",
+                f"branch={branch}",
+            ]
+        )
+    except (RuntimeError, json.JSONDecodeError):
+        return False
+    repository = (data.get("data") or {}).get("repository") or {}
+    return repository.get("mergeQueue") is not None
 
 
 def fetch_pr_payload(repo: str, pr: int) -> dict[str, Any]:
@@ -1283,6 +1330,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         protection_raw = fetch_branch_protection(repo, base_ref_name)
         protection = parse_branch_protection(protection_raw)
+        merge_queue_active = fetch_merge_queue_active(repo, base_ref_name)
         head_committed_at, head_pushed_at = fetch_head_commit_timestamps(repo, pr)
         state = parse_pr_state(
             pr_payload,
@@ -1301,6 +1349,7 @@ def main(argv: list[str] | None = None) -> int:
     report = assess_readiness(
         state,
         require_current_head_review_signal=args.require_current_head_review_signal,
+        merge_queue_active=merge_queue_active,
     )
     apply_artifact_freshness(report, freshness)
     apply_protection_drift(report, protection_raw, base_ref_name)

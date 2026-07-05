@@ -115,7 +115,7 @@ gpt-trader ideas
 │   ├── export       same filters as list [--format json|csv] [--output PATH]
 │   │                [--output-dir DIR]
 │   └── show         DECISION_ID
-├── approve          DECISION_ID --reason TEXT
+├── approve          DECISION_ID --reason TEXT | --auto-sweep
 ├── reject           DECISION_ID --reason TEXT
 ├── request-changes  DECISION_ID --reason TEXT
 ├── cancel           DECISION_ID --reason TEXT
@@ -125,6 +125,11 @@ gpt-trader ideas
 ├── budget
 │   ├── show
 │   └── set          --reason TEXT [one flag per RiskBudget field]
+├── autonomy
+│   ├── show
+│   ├── history
+│   └── set          --mode {research_only,human_approved_execution,bounded_autonomy}
+│                    --reason TEXT
 └── audit
     ├── list         [--decision-id ID] [--actor ID]
     │                [--actor-type {ai,human,system,venue}]
@@ -403,7 +408,11 @@ already exist (`IDEA_NOT_FOUND` otherwise). Service/audit layer enforces the
     failure mode, and do-not-trade conditions.
   - `policy_budget_snapshot` with the current persisted/default risk budget and
     approval-policy violations evaluated at the export/evaluation timestamp
-    recorded as `policy_budget_snapshot.evaluated_at`.
+    recorded as `policy_budget_snapshot.evaluated_at`. Its `autonomy_mode` (and
+    `autonomy_mode_source`) is the resolved active level the violations were
+    evaluated against, which can differ from the mode the idea claimed at
+    proposal time (`decision_metadata.autonomy_mode` preserves the record
+    field).
   - `broker_ticket.source_record` copied from the immutable `TradeIdea` plus a
     derived broker-neutral export ticket.
   - `venue_request`, `venue_payload`, and sanitized provenance for created,
@@ -539,6 +548,48 @@ uv run gpt-trader ideas export-ticket \
     - Idea expired at 2026-06-11T20:00:00+00:00; approve nothing stale
   ```
 
+### `ideas approve --auto-sweep`
+
+Stage 2 auto-approval inside the budget envelope
+(`docs/decisions/stage2-auto-approval-workflow.md`) over
+`service.auto_approve_sweep()`.
+
+- Doubly gated, both refusals loud (`POLICY_VIOLATION`, never a silent no-op):
+  the `GPT_TRADER_IDEAS_AUTO_APPROVAL` feature flag must be explicitly enabled
+  (default off; environment-only, no argument override), and the audited
+  autonomy log must resolve to `bounded_autonomy`.
+- Sweeps `proposed` ideas oldest-review-first; each idea is re-checked against
+  the full approval policy with `actor_type=SYSTEM` and the mode is re-resolved
+  per decision so the daily-loss ratchet can halt a sweep mid-pass.
+- Zero violations → audited `approved` event with system actor
+  (`auto-approval-sweep`), an `auto-approval:` prefix plus a following space,
+  and budget-envelope evidence (autonomy version, budget version, exposure
+  numbers). Any violation → the idea stays `proposed` and is reported under
+  `data["skipped"]` with its violations, with an audited
+  `auto_approval_skipped` event preserving the proposed state.
+- `data` = `evaluated_at`, `autonomy_mode`, `autonomy_version`, `counts`,
+  `approved` (view summaries), `skipped` (decision_id + violations).
+  `was_noop=True` when the proposed queue is empty.
+- DECISION_ID and `--reason` are refused alongside `--auto-sweep`
+  (`INVALID_ARGUMENT`); the sweep records its own audited reasons.
+- Manual trigger only — no scheduler ships with this surface.
+- Paper execution of system approvals is separately gated by
+  `docs/decisions/stage2-execution-gate.md`: the latest approval must be the
+  auto-sweep system actor, `GPT_TRADER_IDEAS_AUTO_EXECUTION` must be enabled,
+  and the audited autonomy log must resolve to `bounded_autonomy` at execution
+  time. Without both gates, `execute-paper` and `ideas cycle` preserve the
+  previous typed refusal / audited skip behavior.
+
+### `ideas execute-paper`
+
+- Executes one approved idea against the offline deterministic paper broker and
+  records the `submitted`/`filled` lifecycle through `PaperIdeaExecutor`.
+- Human-approved ideas execute as before. System-approved ideas execute only
+  under the Stage 2 execution gate (`GPT_TRADER_IDEAS_AUTO_EXECUTION` enabled plus
+  audited `bounded_autonomy`, latest approval actor `auto-approval-sweep`).
+- No live broker/account/API is reachable from this command; the paper broker
+  type allowlist remains the execution boundary.
+
 ### `ideas reject` / `request-changes` / `cancel`
 
 Thin wrappers over `service.reject` / `service.request_changes` /
@@ -581,6 +632,28 @@ Thin wrappers over `service.reject` / `service.request_changes` /
   `service.update_budget(budget, ActorType.HUMAN, actor_id)`.
   At least one field flag is required (`MISSING_ARGUMENT` otherwise).
   `PolicyViolationError` → `POLICY_VIOLATION`.
+
+### `ideas autonomy show` / `ideas autonomy history` / `ideas autonomy set`
+
+Implements the CLI surface from
+`docs/decisions/persistent-autonomy-state.md` over the append-only
+`autonomy_state.jsonl` beside the budget log.
+
+- `show`: `data` = the resolved autonomy level with provenance (`mode`,
+  `version`, `source`, `error`), plus the latest entry's actor, rationale, and
+  evidence when the log has entries. Read-only: it never seeds the log. An
+  absent log reports the seeded default `human_approved_execution`
+  (`source=seeded_default`); an unreadable or integrity-broken log reports
+  `research_only` with `source=fail_closed` and the surfaced error — the
+  command still exits 0 because the resolved state is the truthful answer.
+- `history`: every audited autonomy-level version, oldest first, including
+  the breach evidence carried by automatic ratchet entries.
+  `AutonomyIntegrityError` → `OPERATION_FAILED`.
+- `set`: `service.set_autonomy_mode(mode, actor_type=HUMAN, actor_id, reason)`
+  with required `--mode` and `--reason`. Raising (or re-affirming) the level
+  requires a human actor; lowering is open to any actor so the automatic
+  ratchet can act. `PolicyViolationError` → `POLICY_VIOLATION`; a broken log
+  refuses the change with `OPERATION_FAILED`.
 
 ### `ideas audit list` / `ideas audit export` / `ideas audit tail` / `ideas audit verify`
 

@@ -26,7 +26,7 @@ def clean_env(monkeypatch: pytest.MonkeyPatch):
 
 
 class TestEnableShortsCanonical:
-    """Test enable_shorts derivation from strategy config with sync warning."""
+    """enable_shorts derives from the strategy configs (sole source, #1120)."""
 
     def test_active_enable_shorts_from_baseline_strategy(self) -> None:
         """Baseline strategy type derives enable_shorts from strategy config."""
@@ -34,11 +34,8 @@ class TestEnableShortsCanonical:
             strategy=PerpsStrategyConfig(enable_shorts=True),
             strategy_type="baseline",
         )
-        # Reset warning state for clean test
-        BotConfig._enable_shorts_sync_warned = False
 
-        with pytest.warns(UserWarning, match="differs from strategy config"):
-            assert config.active_enable_shorts is True
+        assert config.active_enable_shorts is True
 
     def test_active_enable_shorts_from_mean_reversion(self) -> None:
         """Mean reversion strategy type derives enable_shorts from mean_reversion config."""
@@ -46,62 +43,35 @@ class TestEnableShortsCanonical:
             mean_reversion=MeanReversionConfig(enable_shorts=False),
             strategy_type="mean_reversion",
         )
-        BotConfig._enable_shorts_sync_warned = False
 
         assert config.active_enable_shorts is False
 
-    def test_sync_warning_on_mismatch(self) -> None:
-        """Warns when BotConfig.enable_shorts differs from strategy config."""
+    def test_set_enable_shorts_routes_to_strategy_configs(self) -> None:
+        """set_enable_shorts writes the intent onto all strategy configs."""
         config = BotConfig(
-            enable_shorts=True,  # Top-level says True
-            strategy=PerpsStrategyConfig(enable_shorts=False),  # Strategy says False
+            strategy=PerpsStrategyConfig(enable_shorts=False),
+            mean_reversion=MeanReversionConfig(enable_shorts=False),
+        )
+
+        config.set_enable_shorts(True)
+
+        assert config.strategy.enable_shorts is True
+        assert config.mean_reversion.enable_shorts is True
+        assert config.active_enable_shorts is True
+
+    def test_active_enable_shorts_does_not_warn(self) -> None:
+        """The retired top-level alias no longer produces mismatch warnings."""
+        config = BotConfig(
+            strategy=PerpsStrategyConfig(enable_shorts=False),
             strategy_type="baseline",
         )
-        BotConfig._enable_shorts_sync_warned = False
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             result = config.active_enable_shorts
 
-        assert result is False  # Strategy config is canonical
-        assert len(w) == 1
-        assert "differs from strategy config" in str(w[0].message)
-
-    def test_no_warning_when_synced(self) -> None:
-        """No warning when BotConfig.enable_shorts matches strategy config."""
-        config = BotConfig(
-            enable_shorts=True,
-            strategy=PerpsStrategyConfig(enable_shorts=True),
-            strategy_type="baseline",
-        )
-        BotConfig._enable_shorts_sync_warned = False
-
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            _ = config.active_enable_shorts
-
+        assert result is False
         assert len(w) == 0
-
-    def test_warning_only_once_per_process(self) -> None:
-        """Sync warning fires only once per process."""
-        config = BotConfig(
-            enable_shorts=True,
-            strategy=PerpsStrategyConfig(enable_shorts=False),
-            strategy_type="baseline",
-        )
-        BotConfig._enable_shorts_sync_warned = False
-
-        # First access triggers warning
-        with warnings.catch_warnings(record=True) as w1:
-            warnings.simplefilter("always")
-            _ = config.active_enable_shorts
-        assert len(w1) == 1
-
-        # Second access does not
-        with warnings.catch_warnings(record=True) as w2:
-            warnings.simplefilter("always")
-            _ = config.active_enable_shorts
-        assert len(w2) == 0
 
 
 class TestMockBrokerEnvParsing:
@@ -188,6 +158,17 @@ class TestFromDictLegacyProfileMapping:
             )
 
         assert config.strategy_signal_proposals_enabled is True
+
+    def test_profile_style_maps_risk_budget_runtime_seed_gate(self) -> None:
+        with pytest.warns(DeprecationWarning, match=r"Legacy profile-style YAML mapping"):
+            config = BotConfig.from_dict(
+                {
+                    "profile_name": "seed-profile",
+                    "execution": {"risk_budget_runtime_seed": True},
+                }
+            )
+
+        assert config.risk_budget_runtime_seed_enabled is True
 
 
 class TestHealthThresholdsConfig:

@@ -16,6 +16,7 @@ from gpt_trader.app.config.profile_loader import (
 )
 from gpt_trader.app.config.validation import ConfigValidationError, validate_config
 from gpt_trader.app.container import (
+    ApplicationContainer,
     create_application_container,
     get_application_container,
     set_application_container,
@@ -60,9 +61,8 @@ def load_profile_config(profile: Profile | str) -> BotConfig:
     profile_enum = _coerce_profile(profile)
     loader = ProfileLoader()
     schema = loader.load(profile_enum)
-    profile_kwargs = loader.to_bot_config_kwargs(schema, profile_enum)
     logger.info("Loaded runtime profile %s from profile loader", profile_enum.value)
-    return BotConfig(**profile_kwargs)
+    return loader.build_bot_config(schema, profile_enum)
 
 
 def build_config_from_args(args: Namespace, **kwargs: Any) -> BotConfig:
@@ -188,9 +188,11 @@ def _apply_profile_kwargs(config: BotConfig, profile_kwargs: dict[str, Any]) -> 
         config.strategy_signal_proposals_enabled = profile_kwargs[
             "strategy_signal_proposals_enabled"
         ]
+    if "risk_budget_runtime_seed_enabled" in profile_kwargs:
+        config.risk_budget_runtime_seed_enabled = profile_kwargs["risk_budget_runtime_seed_enabled"]
 
     if "enable_shorts" in profile_kwargs:
-        config.enable_shorts = profile_kwargs["enable_shorts"]
+        config.set_enable_shorts(profile_kwargs["enable_shorts"])
     if "reduce_only_mode" in profile_kwargs:
         config.reduce_only_mode = profile_kwargs["reduce_only_mode"]
     if "strategy_type" in profile_kwargs:
@@ -207,8 +209,8 @@ def _apply_profile_kwargs(config: BotConfig, profile_kwargs: dict[str, Any]) -> 
         config.environment = profile_kwargs["environment"]
 
 
-def instantiate_bot(config: BotConfig) -> TradingBot:
-    """Instantiate a TradingBot using the ApplicationContainer.
+def instantiate_container(config: BotConfig) -> ApplicationContainer:
+    """Validate config and return the registered ApplicationContainer.
 
     Registers the container globally so services can resolve dependencies
     via get_application_container(). Avoids overriding an existing container
@@ -223,7 +225,7 @@ def instantiate_bot(config: BotConfig) -> TradingBot:
     existing = get_application_container()
     if existing is not None:
         logger.debug("Using existing application container")
-        return existing.create_bot()
+        return existing
 
     # Create and register new container
     container = create_application_container(config)
@@ -233,7 +235,12 @@ def instantiate_bot(config: BotConfig) -> TradingBot:
         logger.warning("Failed to persist startup config fingerprint: %s", exc)
     set_application_container(container)
     logger.debug("Created and registered application container")
-    return container.create_bot()
+    return container
+
+
+def instantiate_bot(config: BotConfig) -> TradingBot:
+    """Instantiate a TradingBot using the ApplicationContainer."""
+    return instantiate_container(config).create_bot()
 
 
 def _validate_startup_config(config: BotConfig) -> list[str]:

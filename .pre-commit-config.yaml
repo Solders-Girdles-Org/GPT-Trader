@@ -43,16 +43,21 @@ repos:
         entry: uv run python scripts/ci/check_legacy_test_triage.py
         language: system
         pass_filenames: false
-        always_run: true
+        # Change-gated: reads only tests/** (markers + tests/_triage manifest).
+        files: ^tests/
     -   id: dedupe-manifest
         name: dedupe-manifest
         entry: uv run python scripts/ci/check_dedupe_manifest.py
         language: system
         pass_filenames: false
+        # Deliberately always-run: validates the committed manifest against the
+        # regenerator, and staleness has no single path trigger (#1134).
         always_run: true
     -   id: naming-check
         name: naming-standards
         entry: uv run python scripts/agents/naming_inventory.py --strict --quiet
         language: system
         pass_filenames: false
-        always_run: true
+        # Change-gated to the configured scan_paths in
+        # config/agents/naming_patterns.yaml (src, tests, scripts, config).
+        files: ^(src/|tests/|scripts/|config/)

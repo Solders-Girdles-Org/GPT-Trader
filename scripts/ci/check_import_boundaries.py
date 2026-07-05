@@ -148,6 +148,32 @@ _TRADE_IDEAS_RULE = ImportRule(
     allowlist_import_prefixes=TRADE_IDEAS_ALLOWED_IMPORT_PREFIXES,
 )
 
+# The operator web console is a thin adapter over TradeIdeaService
+# (docs/decisions/adopt-operator-web-console.md): it renders durable
+# trade-idea artifacts and forwards decisions to identity-stamped service
+# calls. Freezing its dependency set structurally enforces the decision's
+# owner constraint — no live_trade imports, no order-constructing code path.
+WEB_CONSOLE_ALLOWED_IMPORT_PREFIXES: tuple[str, ...] = (
+    "gpt_trader.core",
+    "gpt_trader.errors",
+    "gpt_trader.features.trade_ideas",
+    "gpt_trader.web",
+)
+
+_WEB_CONSOLE_RULE = ImportRule(
+    name="web_console_frozen_dependencies",
+    description=(
+        "gpt_trader.web may only import gpt_trader.core, gpt_trader.errors, "
+        "gpt_trader.features.trade_ideas, and itself — never live_trade or any "
+        "order-constructing layer (docs/decisions/adopt-operator-web-console.md). "
+        "Extend WEB_CONSOLE_ALLOWED_IMPORT_PREFIXES in "
+        "scripts/ci/check_import_boundaries.py only with an architecture rationale."
+    ),
+    source_root=REPO_ROOT / "src" / "gpt_trader" / "web",
+    forbidden_prefixes=("gpt_trader",),
+    allowlist_import_prefixes=WEB_CONSOLE_ALLOWED_IMPORT_PREFIXES,
+)
+
 # Frozen record of today's cross-slice topology (verified by AST scan,
 # 2026-07-01). Every (source_slice, target_slice) import edge between feature
 # slices must appear here; anything else fails CI. This is a ratchet: shrink
@@ -155,12 +181,15 @@ _TRADE_IDEAS_RULE = ImportRule(
 # rationale (see docs/ARCHITECTURE.md, "Import boundaries").
 CROSS_SLICE_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset(
     {
-        # contracts.py + regime/* reuse live_trade strategy types and indicators.
+        # regime/* reuse live_trade stateful indicators.
         ("intelligence", "live_trade"),
         # execution guards/validation depend on broker protocols and coinbase specs.
         ("live_trade", "brokerages"),
         # factory + regime_switcher strategy use regime detection.
         ("live_trade", "intelligence"),
+        # bot.py composition root constructs recorder-owned tick state; the
+        # engine consumes it injected (docs/decisions/adopt-five-role-composition.md).
+        ("live_trade", "recorder"),
         # engines/strategy.py signal -> trade-idea adapter.
         ("live_trade", "strategy_tools"),
         # engines/strategy.py trade-idea proposal workflow service.
@@ -174,6 +203,13 @@ CROSS_SLICE_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset(
         ("trade_ideas", "intelligence"),
         # walk_forward/batch_runner reuse strategy protocol and baseline types.
         ("optimize", "live_trade"),
+        # Recorder owns market-data acquisition over the read-only Coinbase
+        # candle transport (docs/decisions/adopt-five-role-composition.md).
+        ("recorder", "brokerages"),
+        # Recorder produces the MarketSnapshot artifact defined by the
+        # trade-idea contract; the frozen trade_ideas dependency set keeps the
+        # dependency one-way (producer imports contract, never the reverse).
+        ("recorder", "trade_ideas"),
         # trade_idea_adapter builds trade-idea records.
         ("strategy_tools", "trade_ideas"),
     }
@@ -193,6 +229,11 @@ CROSS_SLICE_NARROW_IMPORT_PREFIXES: frozenset[tuple[str, str, str]] = frozenset(
             "idea_execution",
             "brokerages",
             "gpt_trader.features.brokerages.paper",
+        ),
+        (
+            "recorder",
+            "brokerages",
+            "gpt_trader.features.brokerages.coinbase",
         ),
     }
 )
@@ -256,6 +297,7 @@ RULES: tuple[ImportRule, ...] = (
     *(_entrypoint_guard_rule(package, label) for package, label in _ENTRYPOINT_GUARDED_PACKAGES),
     _MONITORING_FEATURES_RULE,
     _TRADE_IDEAS_RULE,
+    _WEB_CONSOLE_RULE,
     *(_cross_slice_rule(slice_name) for slice_name in _discover_feature_slices()),
 )
 

@@ -23,6 +23,16 @@ This document lists the canonical runtime entrypoints and where they are wired.
   - `src/gpt_trader/app/container.py` (`ApplicationContainer.create_bot`)
   - `src/gpt_trader/features/live_trade/bot.py` (`TradingBot.run`)
 
+## Recorder (standalone market-data recording)
+
+- Invoked via: `gpt-trader record [--once]`
+- Handler: `src/gpt_trader/cli/commands/record.py` (`execute`)
+- Recording loop: `src/gpt_trader/features/recorder/market_data_recorder.py`
+  (`MarketDataRecorder`)
+- Read-only: polls tickers and persists `price_tick` events with a
+  `recorder:<profile>` identity; runs while the trading engine is halted
+  (docs/decisions/adopt-five-role-composition.md).
+
 ## Preflight CLI
 
 - Script entrypoint: `python scripts/production_preflight.py`

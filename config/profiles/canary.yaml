@@ -43,12 +43,10 @@ trading:
 # Risk Management - ULTRA STRICT
 risk_management:
   # Daily Limits
-  daily_loss_limit_pct: 0.01  # 1% maximum daily loss
   daily_profit_target: 20.00  # Optional: stop if target hit
 
   # Position Limits
   max_concurrent_positions: 1
-  max_leverage: 1.0  # No leverage
   max_exposure_pct: 0.01  # 1% maximum account exposure
 
   # Drawdown Controls

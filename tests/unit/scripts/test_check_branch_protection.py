@@ -11,7 +11,7 @@ from scripts.ci import check_branch_protection as checker
 def _matching_payload() -> dict[str, Any]:
     return {
         "required_status_checks": {
-            "strict": True,
+            "strict": False,
             "contexts": sorted(checker.EXPECTED_REQUIRED_CHECKS),
         },
         "enforce_admins": {"enabled": True},
@@ -27,7 +27,7 @@ def test_matching_payload_has_no_drift() -> None:
 def test_matching_payload_modern_checks_shape() -> None:
     payload = _matching_payload()
     payload["required_status_checks"] = {
-        "strict": True,
+        "strict": False,
         "checks": [{"context": name} for name in checker.EXPECTED_REQUIRED_CHECKS],
     }
     assert checker.assess_protection_drift(payload) == []
@@ -56,7 +56,7 @@ def test_missing_and_extra_required_checks_are_drift() -> None:
 @pytest.mark.parametrize(
     ("mutation", "expected_fragment"),
     [
-        (lambda p: p["required_status_checks"].update(strict=False), "strict up-to-date is False"),
+        (lambda p: p["required_status_checks"].update(strict=True), "strict up-to-date is True"),
         (lambda p: p.update(enforce_admins={"enabled": False}), "enforce_admins is False"),
         (
             lambda p: p.update(required_conversation_resolution={"enabled": False}),
@@ -91,13 +91,13 @@ def test_main_reports_success(monkeypatch: pytest.MonkeyPatch, capsys) -> None:
 
 def test_main_reports_drift_and_fails(monkeypatch: pytest.MonkeyPatch, capsys) -> None:
     payload = _matching_payload()
-    payload["required_status_checks"]["strict"] = False
+    payload["required_status_checks"]["strict"] = True
     monkeypatch.setattr(checker, "fetch_protection", lambda repo, branch: payload)
 
     exit_code = checker.main([])
 
     assert exit_code == 1
-    assert "✗ Branch protection drift: strict up-to-date is False" in capsys.readouterr().out
+    assert "✗ Branch protection drift: strict up-to-date is True" in capsys.readouterr().out
 
 
 def test_main_reports_fetch_failure(monkeypatch: pytest.MonkeyPatch, capsys) -> None:
@@ -130,7 +130,7 @@ def test_fetch_protection_rejects_non_mapping(monkeypatch: pytest.MonkeyPatch) -
 def test_apply_protection_drift_adds_warnings_on_main() -> None:
     report = ReadinessReport(ready=True)
     payload = _matching_payload()
-    payload["required_status_checks"]["strict"] = False
+    payload["required_status_checks"]["strict"] = True
 
     apply_protection_drift(report, payload, "main")
 

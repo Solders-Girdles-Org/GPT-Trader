@@ -8,28 +8,30 @@
 # Priorities: high | medium | low
 #
 version: 1
-generated_at: '2026-07-02T06:45:12.900671+00:00'
+generated_at: '2026-07-03T12:30:59.632850+00:00'
 summary:
-  total_clusters: 207
+  total_clusters: 208
   by_priority:
-    high: 27
+    high: 26
     medium: 62
-    low: 118
+    low: 120
   by_decision:
     delete: 0
-    merge: 207
+    merge: 208
     modernize: 0
 clusters:
-  453b7344fdd1:
+  d40b6d8b2e3b:
     type: source_fanout
-    description: 48 test files import gpt_trader.features.trade_ideas
+    description: 27 test files import gpt_trader
     files:
     - tests/unit/gpt_trader/cli/commands/test_ideas_approval_preview_integrity.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_audit_ordering.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_budget.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_closeout.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_closeout_evidence_integrity.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_cycle.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_evidence_exports.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_execute_paper.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_export_ticket.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_futures_budget.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_lifecycle.py
@@ -39,61 +41,103 @@ clusters:
     - tests/unit/gpt_trader/cli/commands/test_ideas_propose_baseline.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_propose_integrity.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_queries.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_queue_status.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_regime_aware.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_replay_baseline.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_replay_optimize.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_replay_tournament.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_report.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_report_windows.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_resubmit_integrity.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_review_latency.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_short_budget.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_snapshot_build.py
-    - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_proposals.py
+    source_modules:
+    - gpt_trader
+    decision: merge
+    target_location: tests/unit/gpt_trader/cli/commands/test_gpt_trader.py
+    expected_file_delta: -26
+    priority: high
+    rationale: Consolidate 27 test files into single parametrized file
+    status: pending
+    added: '2026-07-03'
+  97238590c0c2:
+    type: source_fanout
+    description: 24 test files import gpt_trader.cli.response
+    files:
+    - tests/unit/gpt_trader/cli/commands/optimize/test_commands_execution.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_budget.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_closeout.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_export_ticket.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_futures_budget.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_lifecycle.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_max_loss_validation.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_propose_baseline.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_propose_integrity.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_queries.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_regime_aware.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_replay_baseline.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_replay_tournament.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_resubmit_integrity.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_review_latency.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_short_budget.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_snapshot_build.py
+    - tests/unit/gpt_trader/cli/commands/test_strategy_profile_diff.py
+    - tests/unit/gpt_trader/cli/test_commands_orders_history.py
+    - tests/unit/gpt_trader/cli/test_commands_report.py
+    - tests/unit/gpt_trader/cli/test_response_cli_response.py
+    - tests/unit/gpt_trader/cli/test_response_envelope_contract.py
+    - tests/unit/gpt_trader/cli/test_response_error.py
+    - tests/unit/gpt_trader/cli/test_response_format.py
+    source_modules:
+    - gpt_trader.cli.response
+    decision: merge
+    target_location: tests/unit/gpt_trader/cli/commands/optimize/test_response.py
+    expected_file_delta: -23
+    priority: high
+    rationale: Consolidate 24 test files into single parametrized file
+    status: pending
+    added: '2026-07-03'
+  11e0da39b690:
+    type: source_fanout
+    description: 21 test files import gpt_trader.errors
+    files:
+    - tests/unit/gpt_trader/errors/test_base_specific_errors.py
+    - tests/unit/gpt_trader/errors/test_base_trading_and_hierarchy.py
+    - tests/unit/gpt_trader/errors/test_error_patterns_sync.py
+    - tests/unit/gpt_trader/errors/test_handler.py
+    - tests/unit/gpt_trader/features/brokerages/coinbase/rest/test_base_build.py
+    - tests/unit/gpt_trader/features/brokerages/coinbase/rest/test_base_execute_order_payload.py
     - tests/unit/gpt_trader/features/strategy_tools/test_trade_idea_adapter.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_audit.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_baseline_proposer.py
     - tests/unit/gpt_trader/features/trade_ideas/test_broker_payloads.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_budget.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_eligibility.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_models.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_paper_reconciliation.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_paper_reconciliation_conflicts.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_policy.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_replay.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_replay_level_extraction.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_replay_runner.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_service.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_service_audit_integrity.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_service_audit_query.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_service_batch_rollback.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_service_closeout.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_service_closeout_query.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_service_preapproval_broker_ticket.py
     - tests/unit/gpt_trader/features/trade_ideas/test_service_query.py
     - tests/unit/gpt_trader/features/trade_ideas/test_service_venue_boundary.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_snapshot.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_snapshot_builder.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_store.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_workflow.py
+    - tests/unit/gpt_trader/validation/test_base_validator.py
+    - tests/unit/gpt_trader/validation/test_composite_validators.py
+    - tests/unit/gpt_trader/validation/test_config_validators.py
+    - tests/unit/gpt_trader/validation/test_config_validators_edge_cases.py
+    - tests/unit/gpt_trader/validation/test_data_validators.py
+    - tests/unit/gpt_trader/validation/test_data_validators_ohlc.py
+    - tests/unit/gpt_trader/validation/test_decorators.py
+    - tests/unit/gpt_trader/validation/test_numeric_validators.py
+    - tests/unit/gpt_trader/validation/test_pattern_validators.py
+    - tests/unit/gpt_trader/validation/test_temporal_validators.py
+    - tests/unit/gpt_trader/validation/test_type_validators.py
     source_modules:
-    - gpt_trader.features.trade_ideas
+    - gpt_trader.errors
     decision: merge
-    target_location: tests/unit/gpt_trader/cli/commands/test_trade_ideas.py
-    expected_file_delta: -47
+    target_location: tests/unit/gpt_trader/errors/test_errors.py
+    expected_file_delta: -20
     priority: high
-    rationale: Consolidate 48 test files into single parametrized file
+    rationale: Consolidate 21 test files into single parametrized file
     status: pending
-    added: '2026-07-01'
-  865b4f9b2ba2:
+    added: '2026-07-03'
+  3a7802a4dc3a:
     type: source_fanout
-    description: 24 test files import gpt_trader.features.live_trade.strategies.baseline
+    description: 18 test files import gpt_trader.features.live_trade.strategies.baseline
     files:
     - tests/unit/gpt_trader/app/config/test_bot_config.py
     - tests/unit/gpt_trader/app/containers/test_risk_validation_kill_switch.py
     - tests/unit/gpt_trader/config/test_bot_config.py
-    - tests/unit/gpt_trader/features/intelligence/ensemble/test_orchestrator_crisis_mode.py
-    - tests/unit/gpt_trader/features/intelligence/ensemble/test_orchestrator_decision.py
-    - tests/unit/gpt_trader/features/intelligence/ensemble/test_orchestrator_serialization.py
-    - tests/unit/gpt_trader/features/intelligence/ensemble/test_voting_confidence_leader.py
-    - tests/unit/gpt_trader/features/intelligence/ensemble/test_voting_strategy_vote.py
-    - tests/unit/gpt_trader/features/intelligence/ensemble/test_voting_weighted_majority.py
     - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_chaos.py
     - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_health.py
     - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_orders.py
@@ -113,113 +157,11 @@ clusters:
     - gpt_trader.features.live_trade.strategies.baseline
     decision: merge
     target_location: tests/unit/gpt_trader/app/config/test_baseline.py
-    expected_file_delta: -23
+    expected_file_delta: -17
     priority: high
-    rationale: Consolidate 24 test files into single parametrized file
+    rationale: Consolidate 18 test files into single parametrized file
     status: pending
-    added: '2026-07-02'
-  3bfcffa0f4b2:
-    type: source_fanout
-    description: 22 test files import gpt_trader.cli.response
-    files:
-    - tests/unit/gpt_trader/cli/commands/optimize/test_commands_execution.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_budget.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_closeout.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_export_ticket.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_futures_budget.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_lifecycle.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_max_loss_validation.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_propose_baseline.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_propose_integrity.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_queries.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_replay_baseline.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_resubmit_integrity.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_review_latency.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_short_budget.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_snapshot_build.py
-    - tests/unit/gpt_trader/cli/commands/test_strategy_profile_diff.py
-    - tests/unit/gpt_trader/cli/test_commands_orders_history.py
-    - tests/unit/gpt_trader/cli/test_commands_report.py
-    - tests/unit/gpt_trader/cli/test_response_cli_response.py
-    - tests/unit/gpt_trader/cli/test_response_envelope_contract.py
-    - tests/unit/gpt_trader/cli/test_response_error.py
-    - tests/unit/gpt_trader/cli/test_response_format.py
-    source_modules:
-    - gpt_trader.cli.response
-    decision: merge
-    target_location: tests/unit/gpt_trader/cli/commands/optimize/test_response.py
-    expected_file_delta: -21
-    priority: high
-    rationale: Consolidate 22 test files into single parametrized file
-    status: pending
-    added: '2026-07-01'
-  b76d8a75af2e:
-    type: source_fanout
-    description: 21 test files import gpt_trader
-    files:
-    - tests/unit/gpt_trader/cli/commands/test_ideas_approval_preview_integrity.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_audit_ordering.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_budget.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_closeout.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_closeout_evidence_integrity.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_evidence_exports.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_export_ticket.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_futures_budget.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_lifecycle.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_manual_records.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_max_loss_validation.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_paper_reconciliation.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_propose_baseline.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_propose_integrity.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_queries.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_replay_baseline.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_report.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_resubmit_integrity.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_review_latency.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_short_budget.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_snapshot_build.py
-    source_modules:
-    - gpt_trader
-    decision: merge
-    target_location: tests/unit/gpt_trader/cli/commands/test_gpt_trader.py
-    expected_file_delta: -20
-    priority: high
-    rationale: Consolidate 21 test files into single parametrized file
-    status: pending
-    added: '2026-07-01'
-  ff2b1f2abc82:
-    type: source_fanout
-    description: 20 test files import gpt_trader.errors
-    files:
-    - tests/unit/gpt_trader/errors/test_base_specific_errors.py
-    - tests/unit/gpt_trader/errors/test_base_trading_and_hierarchy.py
-    - tests/unit/gpt_trader/errors/test_error_patterns_sync.py
-    - tests/unit/gpt_trader/errors/test_handler.py
-    - tests/unit/gpt_trader/features/brokerages/coinbase/rest/test_base_build.py
-    - tests/unit/gpt_trader/features/brokerages/coinbase/rest/test_base_execute_order_payload.py
-    - tests/unit/gpt_trader/features/strategy_tools/test_trade_idea_adapter.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_broker_payloads.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_service_venue_boundary.py
-    - tests/unit/gpt_trader/validation/test_base_validator.py
-    - tests/unit/gpt_trader/validation/test_composite_validators.py
-    - tests/unit/gpt_trader/validation/test_config_validators.py
-    - tests/unit/gpt_trader/validation/test_config_validators_edge_cases.py
-    - tests/unit/gpt_trader/validation/test_data_validators.py
-    - tests/unit/gpt_trader/validation/test_data_validators_ohlc.py
-    - tests/unit/gpt_trader/validation/test_decorators.py
-    - tests/unit/gpt_trader/validation/test_numeric_validators.py
-    - tests/unit/gpt_trader/validation/test_pattern_validators.py
-    - tests/unit/gpt_trader/validation/test_temporal_validators.py
-    - tests/unit/gpt_trader/validation/test_type_validators.py
-    source_modules:
-    - gpt_trader.errors
-    decision: merge
-    target_location: tests/unit/gpt_trader/errors/test_errors.py
-    expected_file_delta: -19
-    priority: high
-    rationale: Consolidate 20 test files into single parametrized file
-    status: pending
-    added: '2026-07-01'
+    added: '2026-07-03'
   ff3afeb0c471:
     type: source_fanout
     description: 18 test files import gpt_trader.backtesting.types
@@ -278,9 +220,9 @@ clusters:
     rationale: Consolidate 14 test files into single parametrized file
     status: pending
     added: '2026-07-01'
-  8ac1470c0e4c:
+  dc0d3db98fd9:
     type: source_fanout
-    description: 13 test files import gpt_trader.preflight.core
+    description: 14 test files import gpt_trader.preflight.core
     files:
     - tests/unit/gpt_trader/preflight/test_checks_connectivity_api_connectivity.py
     - tests/unit/gpt_trader/preflight/test_checks_connectivity_key_permissions_core.py
@@ -292,6 +234,7 @@ clusters:
     - tests/unit/gpt_trader/preflight/test_checks_simulation.py
     - tests/unit/gpt_trader/preflight/test_checks_startup.py
     - tests/unit/gpt_trader/preflight/test_checks_system.py
+    - tests/unit/gpt_trader/preflight/test_checks_trade_ideas.py
     - tests/unit/gpt_trader/preflight/test_checks_validation.py
     - tests/unit/gpt_trader/preflight/test_core.py
     - tests/unit/gpt_trader/preflight/test_report.py
@@ -299,11 +242,11 @@ clusters:
     - gpt_trader.preflight.core
     decision: merge
     target_location: tests/unit/gpt_trader/preflight/test_core.py
-    expected_file_delta: -12
+    expected_file_delta: -13
     priority: high
-    rationale: Consolidate 13 test files into single parametrized file
+    rationale: Consolidate 14 test files into single parametrized file
     status: pending
-    added: '2026-01-21'
+    added: '2026-07-03'
   a788f486090f:
     type: source_fanout
     description: 13 test files import gpt_trader.features.brokerages.coinbase.errors
@@ -551,28 +494,6 @@ clusters:
     rationale: Consolidate 10 test files into single parametrized file
     status: pending
     added: '2026-07-01'
-  4451dd99fda5:
-    type: source_fanout
-    description: 9 test files import gpt_trader.features.intelligence.regime.models
-    files:
-    - tests/unit/gpt_trader/features/intelligence/backtesting/test_batch_regime.py
-    - tests/unit/gpt_trader/features/intelligence/backtesting/test_batch_regime_history.py
-    - tests/unit/gpt_trader/features/intelligence/ensemble/test_adaptive_strategy_performance.py
-    - tests/unit/gpt_trader/features/intelligence/ensemble/test_adaptive_weight_updater.py
-    - tests/unit/gpt_trader/features/intelligence/ensemble/test_orchestrator_crisis_mode.py
-    - tests/unit/gpt_trader/features/intelligence/ensemble/test_voting_confidence_leader.py
-    - tests/unit/gpt_trader/features/intelligence/ensemble/test_voting_weighted_majority.py
-    - tests/unit/gpt_trader/features/intelligence/ensemble/test_weighting.py
-    - tests/unit/gpt_trader/features/intelligence/sizing/test_position_sizer.py
-    source_modules:
-    - gpt_trader.features.intelligence.regime.models
-    decision: merge
-    target_location: tests/unit/gpt_trader/features/intelligence/backtesting/test_models.py
-    expected_file_delta: -8
-    priority: medium
-    rationale: Consolidate 9 test files into single parametrized file
-    status: pending
-    added: '2026-07-01'
   5a1a677bac42:
     type: source_fanout
     description: 9 test files import gpt_trader.monitoring.metrics_collector
@@ -722,27 +643,27 @@ clusters:
     rationale: Consolidate 8 test files into single parametrized file
     status: pending
     added: '2026-07-01'
-  5e44d0f2947f:
+  72164df1e0c2:
     type: source_fanout
     description: 8 test files import gpt_trader.features.intelligence.regime
     files:
-    - tests/unit/gpt_trader/features/intelligence/ensemble/test_orchestrator_crisis_mode.py
-    - tests/unit/gpt_trader/features/intelligence/ensemble/test_orchestrator_decision.py
     - tests/unit/gpt_trader/features/intelligence/regime/test_detector_crisis_detection.py
     - tests/unit/gpt_trader/features/intelligence/regime/test_detector_edges.py
     - tests/unit/gpt_trader/features/intelligence/regime/test_detector_models.py
     - tests/unit/gpt_trader/features/intelligence/regime/test_detector_persistence.py
     - tests/unit/gpt_trader/features/intelligence/regime/test_detector_regime_classification.py
     - tests/unit/gpt_trader/features/live_trade/strategies/test_regime_switcher.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_baseline_proposer.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_regime_proposer.py
     source_modules:
     - gpt_trader.features.intelligence.regime
     decision: merge
-    target_location: tests/unit/gpt_trader/features/intelligence/ensemble/test_regime.py
+    target_location: tests/unit/gpt_trader/features/intelligence/regime/test_regime.py
     expected_file_delta: -7
     priority: medium
     rationale: Consolidate 8 test files into single parametrized file
     status: pending
-    added: '2026-01-20'
+    added: '2026-07-03'
   77a880e695e9:
     type: source_fanout
     description: 8 test files import gpt_trader.features.live_trade.risk
@@ -764,6 +685,27 @@ clusters:
     rationale: Consolidate 8 test files into single parametrized file
     status: pending
     added: '2026-01-21'
+  a1951f39db8c:
+    type: source_fanout
+    description: 8 test files import gpt_trader.features.trade_ideas.service
+    files:
+    - tests/unit/gpt_trader/cli/commands/test_ideas_audit_ordering.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_closeout_evidence_integrity.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_evidence_exports.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_report_windows.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_batch_rollback.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_budget_gates.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_budget_versions.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_notional_budget.py
+    source_modules:
+    - gpt_trader.features.trade_ideas.service
+    decision: merge
+    target_location: tests/unit/gpt_trader/cli/commands/test_service.py
+    expected_file_delta: -7
+    priority: medium
+    rationale: Consolidate 8 test files into single parametrized file
+    status: pending
+    added: '2026-07-03'
   52a37af1e4a7:
     type: similar_names
     description: 7 test files match pattern test_strategy_engine_* in tests/unit/gpt_trader/features/live_trade/engines
@@ -1169,9 +1111,9 @@ clusters:
     rationale: Consolidate 6 test files into single parametrized file
     status: pending
     added: '2026-07-01'
-  16d513512faf:
+  1819d650bc6c:
     type: source_fanout
-    description: 80 test files import gpt_trader.core
+    description: 85 test files import gpt_trader.core
     files:
     - tests/unit/gpt_trader/backtesting/simulation/test_accounting.py
     - tests/unit/gpt_trader/backtesting/simulation/test_fill_model.py
@@ -1180,12 +1122,12 @@ clusters:
     - tests/unit/gpt_trader/backtesting/simulation/test_simulated_broker.py
     - tests/unit/gpt_trader/backtesting/simulation/test_simulated_broker_market.py
     - tests/unit/gpt_trader/backtesting/simulation/test_simulated_broker_trading.py
-    - tests/unit/gpt_trader/backtesting/test_coinbase_historical_fetcher_edges.py
     - tests/unit/gpt_trader/backtesting/test_guarded_backtest_flow.py
     - tests/unit/gpt_trader/backtesting/test_historical_data.py
     - tests/unit/gpt_trader/backtesting/test_historical_data_manager_quality_edges.py
     - tests/unit/gpt_trader/backtesting/test_simulation_basics.py
     - tests/unit/gpt_trader/backtesting/validation/test_guarded_execution.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_cycle.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_snapshot_build.py
     - tests/unit/gpt_trader/core/test_core_types.py
     - tests/unit/gpt_trader/features/brokerages/coinbase/rest/test_base_build.py
@@ -1202,6 +1144,7 @@ clusters:
     - tests/unit/gpt_trader/features/brokerages/coinbase/test_coinbase_perp_rules_and_quantize.py
     - tests/unit/gpt_trader/features/brokerages/coinbase/test_coinbase_product_catalog.py
     - tests/unit/gpt_trader/features/brokerages/coinbase/test_coinbase_system.py
+    - tests/unit/gpt_trader/features/brokerages/coinbase/test_historical_candles_edges.py
     - tests/unit/gpt_trader/features/brokerages/coinbase/test_http_request_layer.py
     - tests/unit/gpt_trader/features/brokerages/coinbase/test_retry_behaviour.py
     - tests/unit/gpt_trader/features/brokerages/coinbase/test_specs_enforce_perps_rules.py
@@ -1214,6 +1157,7 @@ clusters:
     - tests/unit/gpt_trader/features/data/test_data_coinbase_edges.py
     - tests/unit/gpt_trader/features/data/test_data_coinbase_runtime_edges.py
     - tests/unit/gpt_trader/features/data/test_quality_candles.py
+    - tests/unit/gpt_trader/features/idea_execution/test_executor.py
     - tests/unit/gpt_trader/features/live_trade/engines/test_equity_calculator.py
     - tests/unit/gpt_trader/features/live_trade/engines/test_position_formatting.py
     - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_health.py
@@ -1247,21 +1191,98 @@ clusters:
     - tests/unit/gpt_trader/features/live_trade/test_bot_flatten_and_stop_audit.py
     - tests/unit/gpt_trader/features/live_trade/test_risk.py
     - tests/unit/gpt_trader/features/live_trade/test_risk_time_windows.py
+    - tests/unit/gpt_trader/features/recorder/test_snapshot_builder.py
+    - tests/unit/gpt_trader/features/recorder/test_snapshot_source.py
     - tests/unit/gpt_trader/features/trade_ideas/test_baseline_proposer.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_optimize_bridge.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_regime_proposer.py
     - tests/unit/gpt_trader/features/trade_ideas/test_replay.py
     - tests/unit/gpt_trader/features/trade_ideas/test_replay_level_extraction.py
     - tests/unit/gpt_trader/features/trade_ideas/test_replay_runner.py
     - tests/unit/gpt_trader/features/trade_ideas/test_snapshot.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_snapshot_builder.py
     source_modules:
     - gpt_trader.core
     decision: merge
     target_location: tests/unit/gpt_trader/backtesting/simulation/test_core.py
-    expected_file_delta: -79
+    expected_file_delta: -84
     priority: low
-    rationale: Consolidate 80 test files into single parametrized file
+    rationale: Consolidate 85 test files into single parametrized file
     status: pending
-    added: '2026-07-02'
+    added: '2026-07-03'
+  09c973a62ae5:
+    type: source_fanout
+    description: 61 test files import gpt_trader.features.trade_ideas
+    files:
+    - tests/unit/gpt_trader/cli/commands/test_ideas_approval_preview_integrity.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_audit_ordering.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_budget.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_closeout.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_closeout_evidence_integrity.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_cycle.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_evidence_exports.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_execute_paper.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_export_ticket.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_futures_budget.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_lifecycle.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_manual_records.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_max_loss_validation.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_paper_reconciliation.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_propose_baseline.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_propose_integrity.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_queries.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_queue_status.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_report.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_report_windows.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_resubmit_integrity.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_review_latency.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_short_budget.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_snapshot_build.py
+    - tests/unit/gpt_trader/features/idea_execution/test_cycle.py
+    - tests/unit/gpt_trader/features/idea_execution/test_cycle_evidence.py
+    - tests/unit/gpt_trader/features/idea_execution/test_executor.py
+    - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_proposals.py
+    - tests/unit/gpt_trader/features/recorder/test_snapshot_builder.py
+    - tests/unit/gpt_trader/features/strategy_tools/test_trade_idea_adapter.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_audit.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_baseline_proposer.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_broker_payloads.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_budget.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_eligibility.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_models.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_optimize_bridge.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_paper_reconciliation.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_paper_reconciliation_conflicts.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_policy.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_policy_budget_context.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_regime_proposer.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_replay.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_replay_level_extraction.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_replay_runner.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_audit_integrity.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_audit_query.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_batch_rollback.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_budget_gates.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_budget_versions.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_closeout.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_closeout_query.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_notional_budget.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_preapproval_broker_ticket.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_query.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_venue_boundary.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_snapshot.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_store.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_workflow.py
+    - tests/unit/gpt_trader/preflight/test_checks_trade_ideas.py
+    source_modules:
+    - gpt_trader.features.trade_ideas
+    decision: merge
+    target_location: tests/unit/gpt_trader/cli/commands/test_trade_ideas.py
+    expected_file_delta: -60
+    priority: low
+    rationale: Consolidate 61 test files into single parametrized file
+    status: pending
+    added: '2026-07-03'
   83d5bc54ea89:
     type: source_fanout
     description: 30 test files import gpt_trader.app.config
@@ -1472,7 +1493,7 @@ clusters:
     rationale: Consolidated base build payload coverage into single module
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/344
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/344
     added: '2026-01-20'
   180648193b98:
     type: similar_names
@@ -1489,7 +1510,7 @@ clusters:
     rationale: Consolidated 3 -> 1 file
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/336
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/336
     added: '2026-01-21'
   1aceb62afe0f:
     type: similar_names
@@ -1506,7 +1527,7 @@ clusters:
     rationale: Consolidated payload and preview coverage into shared orders module
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/405
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/405
     added: '2026-01-22'
   1d1e7ae0630a:
     type: similar_names
@@ -1583,6 +1604,21 @@ clusters:
     rationale: Consolidate 3 test files into single parametrized file
     status: pending
     added: '2026-07-01'
+  513b56b80653:
+    type: similar_names
+    description: 3 test files match pattern test_ideas_replay_* in tests/unit/gpt_trader/cli/commands
+    files:
+    - tests/unit/gpt_trader/cli/commands/test_ideas_replay_baseline.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_replay_optimize.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_replay_tournament.py
+    source_modules: []
+    decision: merge
+    target_location: tests/unit/gpt_trader/cli/commands/test_ideas_replay.py
+    expected_file_delta: -2
+    priority: low
+    rationale: Consolidate 3 test files into single parametrized file
+    status: pending
+    added: '2026-07-03'
   65e34284f981:
     type: similar_names
     description: 3 test files match pattern test_commands_orders_* in tests/unit/gpt_trader/cli
@@ -1723,7 +1759,7 @@ clusters:
       into existing suites
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/348
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/348
     added: '2026-01-21'
   033123dabd72:
     type: similar_names
@@ -1742,7 +1778,7 @@ clusters:
       helpers
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/342
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/342
     added: '2026-01-21'
   07116d624c54:
     type: similar_names
@@ -1767,7 +1803,7 @@ clusters:
     rationale: Consolidated 11 → 4 files (<=240 lines each)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/328
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/328
     added: '2026-01-20'
   07ed801b7538:
     type: source_fanout
@@ -1789,7 +1825,7 @@ clusters:
     rationale: Consolidated 11 → 7 files (validation + leverage/exposure tests)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/305
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/305
     added: '2026-01-20'
   089327cc89b0:
     type: source_fanout
@@ -1820,7 +1856,7 @@ clusters:
     rationale: Consolidated 16 -> 8 files (core, flows, snapshots, widgets)
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/335
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/335
     added: '2026-01-20'
   0e3fd1462c0c:
     type: similar_names
@@ -1840,7 +1876,7 @@ clusters:
       helpers
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/341
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/341
     added: '2026-01-21'
   10f0d3fb855f:
     type: similar_names
@@ -1865,7 +1901,7 @@ clusters:
     rationale: Consolidated 11 -> 5 files (core, results, flows, observability, metrics)
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/337
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/337
     added: '2026-01-21'
   12305b4c7689:
     type: similar_names
@@ -1882,7 +1918,7 @@ clusters:
     rationale: Consolidated 3 -> 1 file
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/336
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/336
     added: '2026-01-21'
   12c5eff80c09:
     type: similar_names
@@ -1900,7 +1936,7 @@ clusters:
     rationale: Consolidated 4 -> 1 file
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/336
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/336
     added: '2026-01-20'
   13570f162254:
     type: similar_names
@@ -1919,7 +1955,7 @@ clusters:
     rationale: Consolidated broker executor retry coverage into fewer cohesive modules
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/345
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/345
     added: '2026-01-21'
   14389b2ace72:
     type: similar_names
@@ -1944,7 +1980,7 @@ clusters:
     rationale: Consolidated 17 → 11 files (core + flows + observability)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/305
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/305
     added: '2026-01-20'
   15d57b23ad6f:
     type: similar_names
@@ -1963,7 +1999,7 @@ clusters:
     rationale: Consolidate 6 test files into 5 files (<=240 lines each)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/303
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/303
     added: '2026-01-20'
   17fece0a22bc:
     type: similar_names
@@ -1981,7 +2017,7 @@ clusters:
     rationale: Consolidated 4 -> 1 file
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/336
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/336
     added: '2026-01-20'
   1828c35d1207:
     type: similar_names
@@ -2000,7 +2036,7 @@ clusters:
     rationale: Consolidated alert manager shards into fewer cohesive modules
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/349
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/349
     added: '2026-01-21'
   19f1bd3c33d4:
     type: similar_names
@@ -2018,7 +2054,7 @@ clusters:
       under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/389
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/389
     added: '2026-01-21'
   1b083f952ad7:
     type: similar_names
@@ -2036,7 +2072,7 @@ clusters:
     rationale: Consolidate 6 test files into 4 files (<=240 lines each)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/303
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/303
     added: '2026-01-20'
   1b522be5396a:
     type: source_fanout
@@ -2062,7 +2098,7 @@ clusters:
     rationale: Consolidated 17 → 11 files (core + flows + observability)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/305
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/305
     added: '2026-01-20'
   1ba93042953b:
     type: similar_names
@@ -2080,7 +2116,7 @@ clusters:
     rationale: Consolidate 6 test files into 4 files (<=240 lines each)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/304
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/304
     added: '2026-01-20'
   1c5a28867cce:
     type: similar_names
@@ -2099,7 +2135,7 @@ clusters:
     rationale: Consolidated 5 → 4 files (broker_ping + degradation_state merged)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/308
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/308
     added: '2026-01-20'
   1cf535f58810:
     type: similar_names
@@ -2118,7 +2154,7 @@ clusters:
       under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/359
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/359
     added: '2026-01-20'
   1ddeaae0a707:
     type: similar_names
@@ -2137,7 +2173,7 @@ clusters:
     rationale: Consolidated hybrid paper broker shards into fewer cohesive modules
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/350
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/350
     added: '2026-01-21'
   21a3b31c1fec:
     type: source_fanout
@@ -2157,7 +2193,7 @@ clusters:
     rationale: Consolidated 11 → 5 files (<=240 lines each)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/305
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/305
     added: '2026-01-20'
   224e07597e52:
     type: similar_names
@@ -2175,7 +2211,7 @@ clusters:
       hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/390
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/390
     added: '2026-01-20'
   24df30e9af97:
     type: similar_names
@@ -2193,7 +2229,7 @@ clusters:
       hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/391
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/391
     added: '2026-01-21'
   2702cc2b5190:
     type: similar_names
@@ -2211,7 +2247,7 @@ clusters:
       cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/392
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/392
     added: '2026-01-21'
   2793420ff8e6:
     type: similar_names
@@ -2229,7 +2265,7 @@ clusters:
     rationale: Consolidate 6 test files into 4 files (<=240 lines each)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/304
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/304
     added: '2026-01-20'
   2a2b4d1c902b:
     type: similar_names
@@ -2248,7 +2284,7 @@ clusters:
     rationale: Consolidated 5 → 3 files (init+health, orderbook+filtering, trades)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/309
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/309
     added: '2026-01-20'
   2a4de4bad229:
     type: similar_names
@@ -2267,7 +2303,7 @@ clusters:
       hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/360
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/360
     added: '2026-01-20'
   2a83957b1884:
     type: similar_names
@@ -2284,7 +2320,7 @@ clusters:
     rationale: Consolidate 8 test files into 3 files (<=240 lines each)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/302
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/302
     added: '2026-01-20'
   2d3176c22d80:
     type: similar_names
@@ -2302,7 +2338,7 @@ clusters:
     rationale: Consolidated portfolio service suites into one module via shared helpers
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/343
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/343
     added: '2026-01-21'
   '310214e39620':
     type: similar_names
@@ -2321,7 +2357,7 @@ clusters:
     rationale: Consolidated 5 → 3 files (init+supports+publish, collect, run)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/310
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/310
     added: '2026-01-20'
   36c3dda34a26:
     type: similar_names
@@ -2339,7 +2375,7 @@ clusters:
       cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/393
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/393
     added: '2026-01-20'
   3ae819db86ca:
     type: similar_names
@@ -2363,7 +2399,7 @@ clusters:
       lines)
     status: done
     owner: rj
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/297
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/297
     added: '2026-01-20'
   417047edd7b5:
     type: similar_names
@@ -2381,7 +2417,7 @@ clusters:
       separate for hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/394
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/394
     added: '2026-01-20'
   43a48985bb6e:
     type: similar_names
@@ -2400,7 +2436,7 @@ clusters:
     rationale: Consolidate 7 test files into 5 files (<=240 lines each)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/303
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/303
     added: '2026-01-20'
   43ad7dc90d18:
     type: similar_names
@@ -2418,7 +2454,7 @@ clusters:
       cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/395
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/395
     added: '2026-01-21'
   448f0a961f38:
     type: similar_names
@@ -2436,7 +2472,7 @@ clusters:
       hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/392
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/392
     added: '2026-01-20'
   45c19aff861e:
     type: similar_names
@@ -2454,7 +2490,7 @@ clusters:
       separate for hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/396
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/396
     added: '2026-01-21'
   4ad11115861b:
     type: similar_names
@@ -2473,7 +2509,7 @@ clusters:
       hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/361
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/361
     added: '2026-01-22'
   4d20aae790b1:
     type: similar_names
@@ -2492,7 +2528,7 @@ clusters:
       cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/362
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/362
     added: '2026-01-20'
   4d680f449c31:
     type: similar_names
@@ -2511,7 +2547,7 @@ clusters:
     rationale: Consolidate 5 test files into single parametrized file
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/311
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/311
     added: '2026-01-20'
   4e52c9b8ac2b:
     type: similar_names
@@ -2530,7 +2566,7 @@ clusters:
       stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/363
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/363
     added: '2026-01-20'
   4ed82d18a683:
     type: source_fanout
@@ -2552,7 +2588,7 @@ clusters:
     rationale: Consolidated 9 test files into 7 focused modules (each <=240 lines)
     status: done
     owner: rj
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/298
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/298
     added: '2026-01-20'
   4fd6a8824efa:
     type: similar_names
@@ -2569,7 +2605,7 @@ clusters:
     rationale: Consolidate 6 test files into 3 files (<=240 lines each)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/303
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/303
     added: '2026-01-20'
   52946e567f9f:
     type: similar_names
@@ -2589,7 +2625,7 @@ clusters:
       hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/356
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/356
     added: '2026-01-21'
   5382ed5f2cfa:
     type: similar_names
@@ -2607,7 +2643,7 @@ clusters:
       separate
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/397
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/397
     added: '2026-01-20'
   54256db34e4d:
     type: similar_names
@@ -2626,7 +2662,7 @@ clusters:
       modules to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/364
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/364
     added: '2026-01-21'
   542f5c64c1b6:
     type: similar_names
@@ -2644,7 +2680,7 @@ clusters:
       cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/398
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/398
     added: '2026-01-20'
   55e8e1dee506:
     type: similar_names
@@ -2663,7 +2699,7 @@ clusters:
     rationale: Consolidate 7 test files into 5 files (<=240 lines each)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/303
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/303
     added: '2026-01-20'
   57a66f3200c9:
     type: similar_names
@@ -2681,7 +2717,7 @@ clusters:
       cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/389
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/389
     added: '2026-01-21'
   58908d14a224:
     type: similar_names
@@ -2700,7 +2736,7 @@ clusters:
       and edge cases split to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/365
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/365
     added: '2026-01-21'
   5a06e25609fe:
     type: similar_names
@@ -2719,7 +2755,7 @@ clusters:
       modules to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/366
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/366
     added: '2026-01-20'
   5a62074b66a1:
     type: similar_names
@@ -2738,7 +2774,7 @@ clusters:
       loop modules to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/367
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/367
     added: '2026-01-21'
   5a8749976a2e:
     type: similar_names
@@ -2757,7 +2793,7 @@ clusters:
     rationale: Consolidated market data shards into fewer cohesive modules
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/353
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/353
     added: '2026-01-21'
   5b3d06876e1e:
     type: similar_names
@@ -2776,7 +2812,7 @@ clusters:
     rationale: Consolidate 5 test files into single parametrized file
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/312
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/312
     added: '2026-01-20'
   5e74c94a6070:
     type: similar_names
@@ -2794,7 +2830,7 @@ clusters:
       for hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/399
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/399
     added: '2026-01-20'
   60bf455b111f:
     type: similar_names
@@ -2812,7 +2848,7 @@ clusters:
     rationale: Consolidated bot config suites into single module under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/368
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/368
     added: '2026-01-20'
   678535a285b3:
     type: source_fanout
@@ -2833,7 +2869,7 @@ clusters:
     rationale: Consolidated 6 → 4 files (guard_errors + symbols split)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/307
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/307
     added: '2026-01-20'
   68f5edc7f33a:
     type: similar_names
@@ -2852,7 +2888,7 @@ clusters:
     rationale: Consolidate 5 test files into single parametrized file
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/313
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/313
     added: '2026-01-20'
   6b3334007ca5:
     type: source_fanout
@@ -2872,7 +2908,7 @@ clusters:
     rationale: Consolidate 7 test files into 5 files (<=240 lines each)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/303
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/303
     added: '2026-01-20'
   7088ef34973a:
     type: source_fanout
@@ -2891,7 +2927,7 @@ clusters:
     rationale: Consolidate 8 test files into 4 files (<=240 lines each)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/302
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/302
     added: '2026-01-20'
   725609b987f2:
     type: similar_names
@@ -2910,7 +2946,7 @@ clusters:
       market data modules under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/369
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/369
     added: '2026-01-20'
   72ef294be830:
     type: similar_names
@@ -2928,7 +2964,7 @@ clusters:
       separate
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/400
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/400
     added: '2026-01-21'
   76566dd4cf49:
     type: source_fanout
@@ -2961,7 +2997,7 @@ clusters:
     rationale: Consolidated 18 → 13 files (core + checks, <=240 lines each)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/331
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/331
     added: '2026-01-20'
   76d0b4f00ad6:
     type: similar_names
@@ -2978,7 +3014,7 @@ clusters:
     rationale: Consolidated diagnostics checks into single suite under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/401
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/401
     added: '2026-01-21'
   7a4b57745cc0:
     type: source_fanout
@@ -2998,7 +3034,7 @@ clusters:
     rationale: Consolidate 9 test files into 5 focused modules (each <=240 lines)
     status: done
     owner: rj
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/299
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/299
     added: '2026-01-20'
   7ae3ae24a668:
     type: similar_names
@@ -3017,7 +3053,7 @@ clusters:
     rationale: Consolidate 5 test files into single parametrized file
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/314
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/314
     added: '2026-01-20'
   7dd7f1b90ccb:
     type: similar_names
@@ -3037,7 +3073,7 @@ clusters:
       cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/357
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/357
     added: '2026-01-21'
   8073d799fbaa:
     type: similar_names
@@ -3055,7 +3091,7 @@ clusters:
       hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/402
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/402
     added: '2026-01-20'
   80b88b7e58c0:
     type: similar_names
@@ -3073,7 +3109,7 @@ clusters:
       tests separate
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/403
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/403
     added: '2026-01-21'
   81985ca6ed6b:
     type: similar_names
@@ -3092,7 +3128,7 @@ clusters:
       separate to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/370
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/370
     added: '2026-01-20'
   829ec182749c:
     type: source_fanout
@@ -3117,7 +3153,7 @@ clusters:
     rationale: Consolidate 10 test files into 5 focused modules (each <=240 lines)
     status: done
     owner: rj
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/295
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/295
     added: '2026-01-20'
   85496ba5cfab:
     type: similar_names
@@ -3136,7 +3172,7 @@ clusters:
       under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/371
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/371
     added: '2026-01-21'
   8731f83b6ab5:
     type: similar_names
@@ -3154,7 +3190,7 @@ clusters:
     rationale: Consolidated into three modules to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/372
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/372
     added: '2026-01-21'
   8883d635b021:
     type: similar_names
@@ -3172,7 +3208,7 @@ clusters:
     rationale: Consolidated into single module under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/373
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/373
     added: '2026-01-20'
   89ace0d7c06c:
     type: similar_names
@@ -3190,7 +3226,7 @@ clusters:
     rationale: Consolidate 6 test files into 4 files (<=240 lines each)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/304
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/304
     added: '2026-01-20'
   8a1e11aeca85:
     type: similar_names
@@ -3208,7 +3244,7 @@ clusters:
       cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/392
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/392
     added: '2026-01-20'
   8a5666f3b255:
     type: similar_names
@@ -3226,7 +3262,7 @@ clusters:
       separate to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/397
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/397
     added: '2026-01-20'
   8bf0f5840b82:
     type: similar_names
@@ -3244,7 +3280,7 @@ clusters:
     rationale: Consolidated into three modules to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/374
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/374
     added: '2026-01-21'
   8d74e0251ecf:
     type: similar_names
@@ -3262,7 +3298,7 @@ clusters:
       signal-detail content separate to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/404
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/404
     added: '2026-01-20'
   8e54fe31d1b2:
     type: similar_names
@@ -3280,7 +3316,7 @@ clusters:
     rationale: Consolidated into two modules to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/375
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/375
     added: '2026-01-20'
   8e99233214a1:
     type: similar_names
@@ -3302,7 +3338,7 @@ clusters:
     rationale: Consolidate 8 test files into single parametrized file
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/302
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/302
     added: '2026-01-20'
   8fc986b459a0:
     type: similar_names
@@ -3320,7 +3356,7 @@ clusters:
     rationale: Consolidated into three modules to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/376
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/376
     added: '2026-01-20'
   9016ba13cca0:
     type: similar_names
@@ -3338,7 +3374,7 @@ clusters:
     rationale: Consolidated into three modules to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/377
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/377
     added: '2026-01-21'
   93fa26f42678:
     type: similar_names
@@ -3356,7 +3392,7 @@ clusters:
       editing coverage separate to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/405
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/405
     added: '2026-01-20'
   94e71330160f:
     type: similar_names
@@ -3374,7 +3410,7 @@ clusters:
     rationale: Consolidated into three modules to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/378
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/378
     added: '2026-01-21'
   95eb387c57c5:
     type: source_fanout
@@ -3397,7 +3433,7 @@ clusters:
     rationale: Consolidated websocket + reconnection suites; kept ws_events separate
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/340
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/340
     added: '2026-01-22'
   97978043d552:
     type: source_fanout
@@ -3417,7 +3453,7 @@ clusters:
     rationale: Consolidate 9 test files into 5 files (<=240 lines each)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/304
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/304
     added: '2026-01-20'
   982957ce2656:
     type: similar_names
@@ -3434,7 +3470,7 @@ clusters:
     rationale: Consolidated coverage and cache edges into shared historical data module
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/406
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/406
     added: '2026-01-20'
   9ac4e3c819d5:
     type: similar_names
@@ -3451,7 +3487,7 @@ clusters:
     rationale: Consolidated control flow and error handling into shared process modules
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/407
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/407
     added: '2026-01-20'
   9b09ad62333d:
     type: similar_names
@@ -3469,7 +3505,7 @@ clusters:
     rationale: Consolidated into three modules to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/379
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/379
     added: '2026-01-21'
   9ec1738d6db7:
     type: similar_names
@@ -3487,7 +3523,7 @@ clusters:
     rationale: Consolidated into two modules to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/380
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/380
     added: '2026-01-20'
   a0feb5e13a69:
     type: similar_names
@@ -3506,7 +3542,7 @@ clusters:
       cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/382
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/382
     added: '2026-01-20'
   a1a9bea8c6ac:
     type: similar_names
@@ -3524,7 +3560,7 @@ clusters:
     rationale: Consolidated into two modules to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/383
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/383
     added: '2026-01-20'
   a8b68bb428de:
     type: similar_names
@@ -3542,7 +3578,7 @@ clusters:
     rationale: Consolidated into three modules to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/384
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/384
     added: '2026-01-22'
   ac7d20d54ee8:
     type: similar_names
@@ -3560,7 +3596,7 @@ clusters:
     rationale: Consolidate 6 test files into 4 files (<=240 lines each)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/303
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/303
     added: '2026-01-20'
   acb92ca7c206:
     type: source_fanout
@@ -3581,7 +3617,7 @@ clusters:
     rationale: Consolidate 6 test files into single parametrized file
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/304
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/304
     added: '2026-01-20'
   b072a5007bf1:
     type: similar_names
@@ -3599,7 +3635,7 @@ clusters:
       cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/389
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/389
     added: '2026-01-20'
   b878f1ecbfcf:
     type: similar_names
@@ -3617,7 +3653,7 @@ clusters:
       cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/391
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/391
     added: '2026-01-21'
   b89b9f506607:
     type: similar_names
@@ -3635,7 +3671,7 @@ clusters:
       separate
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/397
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/397
     added: '2026-01-21'
   ba5346200fdc:
     type: similar_names
@@ -3654,7 +3690,7 @@ clusters:
     rationale: Consolidate 5 test files into single parametrized file
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/315
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/315
     added: '2026-01-20'
   bcf5f1feb7e9:
     type: similar_names
@@ -3673,7 +3709,7 @@ clusters:
     rationale: Consolidate 5 test files into single parametrized file
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/316
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/316
     added: '2026-01-20'
   bef8933bbed5:
     type: similar_names
@@ -3691,7 +3727,7 @@ clusters:
       score suite separate to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/391
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/391
     added: '2026-01-20'
   bf1037e6cb7f:
     type: similar_names
@@ -3709,7 +3745,7 @@ clusters:
       separate
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/398
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/398
     added: '2026-01-20'
   c00dd1e7c53c:
     type: similar_names
@@ -3728,7 +3764,7 @@ clusters:
     rationale: Consolidate 5 test files into single parametrized file
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/317
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/317
     added: '2026-01-20'
   c1e4c1ed0ffb:
     type: similar_names
@@ -3747,7 +3783,7 @@ clusters:
     rationale: Consolidate 5 test files into single parametrized file
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/318
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/318
     added: '2026-01-20'
   c4731752fc43:
     type: source_fanout
@@ -3766,7 +3802,7 @@ clusters:
     rationale: Consolidate 6 test files into 4 files (<=240 lines each)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/304
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/304
     added: '2026-01-20'
   c545b86c64bd:
     type: source_fanout
@@ -3789,7 +3825,7 @@ clusters:
     rationale: Consolidate 8 test files into single parametrized file
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/302
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/302
     added: '2026-01-20'
   c6bbc52b8b23:
     type: similar_names
@@ -3808,7 +3844,7 @@ clusters:
     rationale: Consolidated 11 → 5 files (<=240 lines each)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/305
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/305
     added: '2026-01-20'
   c6fbd4c62f0a:
     type: similar_names
@@ -3825,7 +3861,7 @@ clusters:
     rationale: Consolidated 3 -> 1 file
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/336
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/336
     added: '2026-01-21'
   c94a37d62ba6:
     type: similar_names
@@ -3843,7 +3879,7 @@ clusters:
     rationale: Consolidated 4 -> 1 file
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/336
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/336
     added: '2026-01-20'
   cc5aea60ee1b:
     type: similar_names
@@ -3862,7 +3898,7 @@ clusters:
     rationale: Consolidated fill model coverage into fewer cohesive modules
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/346
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/346
     added: '2026-01-21'
   cd320529fca2:
     type: similar_names
@@ -3880,7 +3916,7 @@ clusters:
     rationale: Consolidated into two modules to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/385
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/385
     added: '2026-01-20'
   cd648425ded4:
     type: source_fanout
@@ -3898,7 +3934,7 @@ clusters:
     rationale: Consolidate 6 test files into 3 files (<=240 lines each)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/303
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/303
     added: '2026-01-20'
   cdb4985dff87:
     type: similar_names
@@ -3916,7 +3952,7 @@ clusters:
       hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/391
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/391
     added: '2026-01-21'
   cebae704e17e:
     type: similar_names
@@ -3942,7 +3978,7 @@ clusters:
     rationale: Consolidate 12 test files into single parametrized file
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/325
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/325
     added: '2026-01-20'
   d120b9cb7c95:
     type: similar_names
@@ -3961,7 +3997,7 @@ clusters:
     rationale: Consolidate 7 test files into 5 files (<=240 lines each)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/303
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/303
     added: '2026-01-20'
   d2e226ef4410:
     type: source_fanout
@@ -3980,7 +4016,7 @@ clusters:
     rationale: Consolidate 6 test files into 4 files (<=240 lines each)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/303
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/303
     added: '2026-01-20'
   d461eb374bb2:
     type: similar_names
@@ -3998,7 +4034,7 @@ clusters:
     rationale: Consolidated into two modules to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/386
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/386
     added: '2026-01-20'
   d47c4f77bb07:
     type: similar_names
@@ -4017,7 +4053,7 @@ clusters:
     rationale: Consolidate 5 test files into single parametrized file
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/319
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/319
     added: '2026-01-20'
   d622238858da:
     type: similar_names
@@ -4035,7 +4071,7 @@ clusters:
     rationale: Consolidated into three modules to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/387
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/387
     added: '2026-01-22'
   d732e7cd3e8a:
     type: source_fanout
@@ -4055,7 +4091,7 @@ clusters:
     rationale: Consolidate 7 test files into 5 files (<=240 lines each)
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/303
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/303
     added: '2026-01-20'
   da0ea2376a4d:
     type: similar_names
@@ -4074,7 +4110,7 @@ clusters:
     rationale: Consolidate 5 test files into single parametrized file
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/320
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/320
     added: '2026-01-20'
   de08eabdc085:
     type: similar_names
@@ -4092,7 +4128,7 @@ clusters:
     rationale: Consolidated 4 test files into two modules to stay under hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/388
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/388
     added: '2026-01-20'
   e130faa60249:
     type: similar_names
@@ -4118,7 +4154,7 @@ clusters:
     rationale: Consolidate 12 test files into single parametrized file
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/326
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/326
     added: '2026-01-20'
   e15ea682e8fa:
     type: similar_names
@@ -4135,7 +4171,7 @@ clusters:
     rationale: Consolidated 3 -> 1 file
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/338
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/338
     added: '2026-01-21'
   ecb76d4271aa:
     type: similar_names
@@ -4154,7 +4190,7 @@ clusters:
     rationale: Consolidate 5 test files into single parametrized file
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/321
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/321
     added: '2026-01-20'
   f08c1e19e6ef:
     type: similar_names
@@ -4173,7 +4209,7 @@ clusters:
     rationale: Consolidate 5 test files into single parametrized file
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/322
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/322
     added: '2026-01-20'
   f2c6cc4f883e:
     type: similar_names
@@ -4191,7 +4227,7 @@ clusters:
       cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/390
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/390
     added: '2026-01-20'
   f9cf9481c6bd:
     type: similar_names
@@ -4209,7 +4245,7 @@ clusters:
       hygiene cap
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/394
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/394
     added: '2026-01-21'
   fb5cae8b4c58:
     type: source_fanout
@@ -4230,7 +4266,7 @@ clusters:
     rationale: Consolidate 6 test files into single parametrized file
     status: done
     owner: claude
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/304
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/304
     added: '2026-01-20'
   feca38fe83aa:
     type: similar_names
@@ -4247,5 +4283,5 @@ clusters:
     rationale: Consolidated basic/unavailable coverage into core module
     status: done
     owner: codex
-    pr_url: https://github.com/Solders-Girdles/GPT-Trader/pull/391
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/391
     added: '2026-01-20'
