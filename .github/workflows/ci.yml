@@ -13,6 +13,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   changes:
     name: CI Change Classifier
@@ -492,8 +495,6 @@ jobs:
     name: Unit Tests (Core)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    permissions:
-      contents: read
     env:
       GPT_TRADER_STRICT_CONTAINER: "1"
       PYTHONWARNINGS: default
@@ -544,8 +545,6 @@ jobs:
     name: Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions:
-      contents: read
     env:
       GPT_TRADER_STRICT_CONTAINER: "1"
       PYTHONWARNINGS: default
@@ -579,8 +578,6 @@ jobs:
     name: Windows Unit Tests (Portability)
     runs-on: windows-latest
     timeout-minutes: 15
-    permissions:
-      contents: read
     env:
       GPT_TRADER_STRICT_CONTAINER: "1"
       PYTHONWARNINGS: default
