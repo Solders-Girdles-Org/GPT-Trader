@@ -133,6 +133,40 @@ def test_auto_approval_skip_is_audited_without_leaving_proposed(
     assert audit_log.current_state(trade_idea.decision_id) is TradeIdeaState.PROPOSED
 
 
+def test_auto_execution_skip_is_audited_without_leaving_approved(
+    audit_log: TradeIdeaAuditLog, trade_idea: TradeIdea
+) -> None:
+    propose(audit_log, trade_idea)
+    audit_log.append(
+        build_event(
+            trade_idea,
+            action=AuditAction.APPROVED,
+            before_state=TradeIdeaState.PROPOSED,
+            after_state=TradeIdeaState.APPROVED,
+            minute=1,
+        )
+    )
+
+    audit_log.append(
+        build_event(
+            trade_idea,
+            action=AuditAction.AUTO_EXECUTION_SKIPPED,
+            before_state=TradeIdeaState.APPROVED,
+            after_state=TradeIdeaState.APPROVED,
+            actor_type=ActorType.SYSTEM,
+            minute=2,
+        )
+    )
+
+    events = audit_log.verify()
+    assert [event.action for event in events] == [
+        AuditAction.PROPOSED,
+        AuditAction.APPROVED,
+        AuditAction.AUTO_EXECUTION_SKIPPED,
+    ]
+    assert audit_log.current_state(trade_idea.decision_id) is TradeIdeaState.APPROVED
+
+
 def test_append_rejects_stale_before_state(
     audit_log: TradeIdeaAuditLog, trade_idea: TradeIdea
 ) -> None:

@@ -24,6 +24,7 @@ _ACTION_KEYS = {
     AuditAction.PROPOSED: "proposed",
     AuditAction.CHANGED: "requested_changes",
     AuditAction.AUTO_APPROVAL_SKIPPED: "auto_approval_skipped",
+    AuditAction.AUTO_EXECUTION_SKIPPED: "auto_execution_skipped",
     AuditAction.APPROVED: "approved",
     AuditAction.REJECTED: "rejected",
     AuditAction.SUBMITTED: "submitted",

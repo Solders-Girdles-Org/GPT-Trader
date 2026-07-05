@@ -118,7 +118,11 @@ async def _fetch_positions_and_audit(
     # mutate the broker: dry-run, or proposal-only mode where decisions are
     # routed to trade-idea proposals instead of the broker.
     dry_run = getattr(engine.context.config, "dry_run", False)
-    proposal_only = getattr(engine.context.config, "strategy_signal_proposals_enabled", False)
+    # The event-driven paper lane implies proposal routing: decisions become
+    # trade ideas (paper-executed in-process), never live broker orders.
+    proposal_only = getattr(
+        engine.context.config, "strategy_signal_proposals_enabled", False
+    ) or getattr(engine.context.config, "event_driven_paper_lane_enabled", False)
     if dry_run or proposal_only:
         logger.info(
             "Skipping order audit (no broker mutation in this mode)",

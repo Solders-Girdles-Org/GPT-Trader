@@ -198,6 +198,10 @@ CROSS_SLICE_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset(
         # drives paper/mock brokers only (docs/decisions/adopt-five-role-composition.md).
         ("idea_execution", "trade_ideas"),
         ("idea_execution", "brokerages"),
+        # engines/strategy.py drives the in-process event-driven paper lane
+        # (EventDrivenIdeaLane) per decision under the risk kernel
+        # (docs/decisions/adopt-event-driven-execution-topology.md, #1191).
+        ("live_trade", "idea_execution"),
         # RegimeAwareProposer overlays regime state; PositionSizer bridge
         # enriches sizing on trade-idea proposal records.
         ("trade_ideas", "intelligence"),

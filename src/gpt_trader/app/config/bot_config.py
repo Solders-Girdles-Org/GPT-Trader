@@ -200,6 +200,15 @@ class BotConfig:
     # engine enters proposal-only mode and never places orders while the gate is
     # on. See docs/DIRECTION.md, docs/STATUS.md, docs/architecture/SEAMS.md.
     strategy_signal_proposals_enabled: bool = False
+    # Event-driven paper lane (default OFF). Implies proposal routing and, per
+    # event, carries each proposed idea through the risk kernel — system
+    # approval, execution-time autonomy re-check — into paper execution in the
+    # same process (#1191, docs/decisions/adopt-event-driven-execution-topology.md).
+    # Paper only: the engine still never submits live orders while this gate is
+    # on, and the Stage 2 operator env gates (GPT_TRADER_IDEAS_AUTO_APPROVAL /
+    # GPT_TRADER_IDEAS_AUTO_EXECUTION) plus the audited autonomy mode apply per
+    # decision.
+    event_driven_paper_lane_enabled: bool = False
     # Stage 2 derivation seam (default ON). When enabled, the runtime risk
     # manager's appetite fields (daily_loss_limit_pct, max_exposure_pct) are
     # seeded from the active RiskBudget version at engine startup, and the
@@ -555,6 +564,7 @@ class BotConfig:
                 "dry_run": schema.execution.dry_run,
                 "mock_broker": schema.execution.mock_broker,
                 "strategy_signal_proposals_enabled": schema.execution.strategy_signal_proposals,
+                "event_driven_paper_lane_enabled": schema.execution.event_driven_paper_lane,
                 "risk_budget_runtime_seed_enabled": schema.execution.risk_budget_runtime_seed,
                 "log_level": schema.monitoring.log_level,
                 "status_interval": schema.monitoring.update_interval,

@@ -153,6 +153,61 @@ class TestRecordOutcomes:
             )
 
 
+class TestRecordDeniedExecution:
+    def approved_idea(self, service: TradeIdeaService):
+        idea = proposed_idea(service)
+        check = service.kernel.check_approval(idea, actor_type=ActorType.HUMAN)
+        service.kernel.record_approval(idea, check, actor_id="rj", reason="Risk verified")
+        return idea
+
+    def test_appends_audited_skip_and_keeps_idea_approved(self, service: TradeIdeaService) -> None:
+        idea = self.approved_idea(service)
+        check = service.kernel.check_execution(idea.decision_id, actor_type=ActorType.SYSTEM)
+        assert not check.admitted
+
+        service.kernel.record_denied_execution(
+            idea,
+            check,
+            actor_id="event-idea-lane",
+            reason="execution denied at the kernel's execution gate",
+        )
+
+        view = service.get(idea.decision_id)
+        assert view.state is TradeIdeaState.APPROVED
+        skip = view.events[-1]
+        assert skip.action is AuditAction.AUTO_EXECUTION_SKIPPED
+        assert skip.actor_type is ActorType.SYSTEM
+        assert skip.actor_id == "event-idea-lane"
+        assert skip.evidence == check.execution_denial_evidence()
+
+    def test_refuses_admitted_check(self, service: TradeIdeaService) -> None:
+        idea = self.approved_idea(service)
+        service.set_autonomy_mode(
+            AutonomyMode.BOUNDED_AUTONOMY,
+            actor_type=ActorType.HUMAN,
+            actor_id="rj",
+            reason="Stage 2 exercised in tests",
+        )
+        check = service.kernel.check_execution(idea.decision_id, actor_type=ActorType.SYSTEM)
+        assert check.admitted
+
+        with pytest.raises(PolicyViolationError, match="the kernel admitted it"):
+            service.kernel.record_denied_execution(
+                idea, check, actor_id="event-idea-lane", reason="not a denial"
+            )
+        assert service.get(idea.decision_id).state is TradeIdeaState.APPROVED
+
+    def test_execution_denial_evidence_lists_violations_without_budget(
+        self, service: TradeIdeaService
+    ) -> None:
+        check = service.kernel.check_execution("trade-20260612-001", actor_type=ActorType.SYSTEM)
+
+        evidence = check.execution_denial_evidence()
+        assert evidence[0].startswith("autonomy_state version ")
+        assert all(f"violation: {violation}" in evidence for violation in check.violations)
+        assert check.violations
+
+
 class TestCheckExecution:
     def test_denies_outside_bounded_autonomy(self, service: TradeIdeaService) -> None:
         check = service.kernel.check_execution("trade-20260612-001", actor_type=ActorType.SYSTEM)

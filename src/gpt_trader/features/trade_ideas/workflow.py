@@ -43,6 +43,10 @@ ALLOWED_TRANSITIONS: dict[TradeIdeaState, frozenset[TradeIdeaState]] = {
     ),
     TradeIdeaState.APPROVED: frozenset(
         {
+            # Audited no-op: an execution-gate denial (auto_execution_skipped)
+            # is recorded without moving the idea, mirroring PROPOSED->PROPOSED
+            # for auto_approval_skipped.
+            TradeIdeaState.APPROVED,
             TradeIdeaState.SUBMITTED,
             TradeIdeaState.CANCELLED,
             TradeIdeaState.EXPIRED,

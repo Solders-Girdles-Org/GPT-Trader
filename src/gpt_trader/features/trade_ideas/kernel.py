@@ -160,6 +160,18 @@ class KernelCheck:
             *(f"violation: {violation}" for violation in self.violations),
         )
 
+    def execution_denial_evidence(self) -> tuple[str, ...]:
+        """Evidence recorded when a denied execution check is audited.
+
+        Execution checks carry no budget inputs (exposure was gated at
+        approval), so the evidence is the autonomy resolution the denial was
+        judged on plus every violation.
+        """
+        return (
+            self._autonomy_evidence(),
+            *(f"violation: {violation}" for violation in self.violations),
+        )
+
 
 class RiskKernel:
     """In-process gate that admits or denies an (idea, action) pair per decision.
@@ -311,6 +323,37 @@ class RiskKernel:
             actor_id=actor_id,
             reason=reason,
             evidence=check.denial_evidence(),
+        )
+
+    def record_denied_execution(
+        self,
+        idea: TradeIdea,
+        check: KernelCheck,
+        *,
+        actor_id: str,
+        reason: str,
+    ) -> None:
+        """Append the audited AUTO_EXECUTION_SKIPPED event for a denied check.
+
+        Used by execution clients that record denials instead of raising (the
+        event-driven lane, #1191): the idea stays ``approved`` — the denial is
+        an audited no-op, so a mid-stream ratchet-down or kill-switch leaves
+        evidence on the idea-level trail instead of vanishing into a log line.
+        """
+        if check.admitted:
+            raise PolicyViolationError(
+                f"Cannot record an execution denial for '{check.decision_id}': "
+                "the kernel admitted it",
+                [],
+            )
+        self._runtime.append_audit(
+            idea,
+            action=AuditAction.AUTO_EXECUTION_SKIPPED,
+            after_state=TradeIdeaState.APPROVED,
+            actor_type=check.actor_type,
+            actor_id=actor_id,
+            reason=reason,
+            evidence=check.execution_denial_evidence(),
         )
 
 

@@ -20,6 +20,10 @@ def test_cross_slice_allowlist_is_frozen_topology() -> None:
             # brokers only (docs/decisions/adopt-five-role-composition.md).
             ("idea_execution", "trade_ideas"),
             ("idea_execution", "brokerages"),
+            # engines/strategy.py drives the in-process event-driven paper lane
+            # per decision under the risk kernel
+            # (docs/decisions/adopt-event-driven-execution-topology.md, #1191).
+            ("live_trade", "idea_execution"),
             ("intelligence", "live_trade"),
             ("live_trade", "brokerages"),
             ("live_trade", "intelligence"),

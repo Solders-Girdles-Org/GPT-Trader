@@ -188,6 +188,8 @@ def _apply_profile_kwargs(config: BotConfig, profile_kwargs: dict[str, Any]) -> 
         config.strategy_signal_proposals_enabled = profile_kwargs[
             "strategy_signal_proposals_enabled"
         ]
+    if "event_driven_paper_lane_enabled" in profile_kwargs:
+        config.event_driven_paper_lane_enabled = profile_kwargs["event_driven_paper_lane_enabled"]
     if "risk_budget_runtime_seed_enabled" in profile_kwargs:
         config.risk_budget_runtime_seed_enabled = profile_kwargs["risk_budget_runtime_seed_enabled"]
 

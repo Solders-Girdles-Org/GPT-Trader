@@ -13,6 +13,7 @@ from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
 from gpt_trader.features.brokerages.mock import DeterministicBroker
 from gpt_trader.features.idea_execution import (
     AUTO_EXECUTION_ENV_VAR,
+    EVENT_LANE_ACTOR_ID,
     IdeaNotExecutableError,
     PaperIdeaExecutor,
     resolve_auto_execution_enabled,
@@ -209,6 +210,35 @@ def test_human_approved_execution_ignores_auto_execution_gate(
     ]
     assert len(submitted) == 1
     assert submitted[0].evidence == ()
+
+
+def test_execute_event_lane_approved_idea_when_gate_passes(
+    service: TradeIdeaService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Event-lane system approvals (#1191) pass the same Stage 2 execution gate."""
+    monkeypatch.setenv(AUTO_EXECUTION_ENV_VAR, "1")
+    service.set_autonomy_mode(
+        AutonomyMode.BOUNDED_AUTONOMY,
+        actor_type=ActorType.HUMAN,
+        actor_id="test-operator",
+        reason="Test: enter bounded autonomy for event-lane execution",
+    )
+    decision_id = "trade-20260702-exec-event-lane-fill"
+    _approval_event(
+        service,
+        decision_id,
+        actor_type=ActorType.SYSTEM,
+        actor_id=EVENT_LANE_ACTOR_ID,
+    )
+
+    result = _executor(service).execute(decision_id)
+
+    assert result.final_state == TradeIdeaState.FILLED.value
+    submitted = [
+        event for event in service.get(decision_id).events if event.action is AuditAction.SUBMITTED
+    ]
+    assert len(submitted) == 1
+    assert any(f"actor_id={EVENT_LANE_ACTOR_ID}" in item for item in submitted[0].evidence)
 
 
 def test_execute_system_auto_approved_idea_when_gate_passes(
