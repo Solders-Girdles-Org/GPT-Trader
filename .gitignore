@@ -152,7 +152,7 @@ var/agents/testing/test_inventory.json
 # test_inventory.json above): regenerated on demand (uv run agent-regenerate)
 # and shipped via the scheduled agent-artifacts refresh package when present;
 # not committed. The curated reasoning/*.md summaries stay tracked.
-# Decision executed 2026-07-01 (owner-approved); see docs/agents/canonical_sources.md.
+# Decision executed 2026-07-01 (owner-approved); scope contract in docs/agents/README.md.
 var/agents/reasoning/*.json
 var/agents/reasoning/*.dot
 var/agents/testing/source_test_map.json

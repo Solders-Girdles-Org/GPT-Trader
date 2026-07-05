@@ -13,7 +13,7 @@ superseded-by:
 Generated `var/agents/**` inventories are derived truth, but the committed
 subset still dominates repo churn: 103 of 181 commits since 2026-06-01 touched
 `var/agents`, and the 2026-07-01 gitignore pass
-([canonical_sources.md](../agents/canonical_sources.md)) barely moved the rate
+(scope contract now in [docs/agents/README.md](../agents/README.md)) barely moved the rate
 (19 of 35 commits since). The ongoing driver is `testing/**`: 41 file-touches
 since 2026-07-01, all committed JSON, because the inventory regenerates
 whenever tests change — which is nearly every PR. (`reasoning/` shows 26

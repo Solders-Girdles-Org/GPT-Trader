@@ -41,10 +41,10 @@ That's it! Now, every time you run `git commit`, the pre-commit hooks will run a
 ### Pre-PR Verification Checklist
 1. Review `docs/README.md` and prefer code + `var/agents/**` generated inventories for anything that drifts.
 2. Refresh dependencies: `uv sync`.
-3. Collect tests: `uv run pytest --collect-only`.
-4. Run the full unit suite: `uv run pytest tests/unit -q`.
-5. Execute slice-specific suites relevant to your change set (examples below).
-6. Validate docs links: `make agent-docs-links` (runs `scripts/maintenance/docs_link_audit.py`).
+3. Run the full local gate: `uv run local-ci` — the command set and
+   blocking/advisory contract are owned by
+   [docs/DEVELOPMENT_GUIDELINES.md](docs/DEVELOPMENT_GUIDELINES.md#local-ci-command).
+4. Execute slice-specific suites relevant to your change set (examples below).
 
 ### Recommended Commands
 
@@ -93,7 +93,8 @@ Before branching, make sure to:
    - Add new documentation to appropriate `/docs` subdirectories
 6. **Commit your changes** (`git commit -m 'Add amazing feature'`)
 7. **Push to your fork** (`git push origin feature/amazing-feature`)
-8. **Open a Pull Request**
+8. **Open a Pull Request** summarising risk impact, telemetry changes, and
+   rollout steps
 
 ## Issue Labels
 
@@ -254,119 +255,11 @@ Place new scripts in the taxonomy directory that matches their purpose (see
 - Include examples for complex features
 - State each fact once and link to it (see [Information Architecture](docs/INFORMATION_ARCHITECTURE.md)); avoid duplicate process prose — agent rules belong in `AGENTS.md`
 
-## Quality Gate Commands
+## Quality Gate and CI Contract
 
-Before submitting a PR, run these commands to catch issues early:
-
-### Type Checking (mypy)
-
-```bash
-# Full type check
-uv run mypy src/gpt_trader
-
-# Check specific module (faster iteration)
-uv run mypy src/gpt_trader/features/live_trade/execution/
-```
-
-**Common mypy issues:**
-- Resolve new errors or document existing ones in the PR summary
-- New code should pass strict type checking
-
-### Unit Tests
-
-```bash
-# Fast parallel run (recommended)
-uv run pytest tests/unit -n auto -q
-
-# Verbose output for debugging
-uv run pytest tests/unit -v --tb=short
-
-# Run specific test file
-uv run pytest tests/unit/gpt_trader/features/live_trade/execution/test_order_submission_flows.py -v
-
-# Run with coverage
-uv run pytest tests/unit --cov=src/gpt_trader --cov-report=term-missing
-```
-
-### Naming Standards Check
-
-```bash
-# Check for naming convention violations
-uv run agent-naming
-```
-
-## Common CI Failures and Fixes
-
-| Failure | Cause | Fix |
-|---------|-------|-----|
-| `black --check` | Formatting | Run `uv run black .` |
-| `ruff check` | Linting violations | Run `uv run ruff check --fix .` |
-| `mypy` errors | Type issues | Fix type annotations (pre-existing shim errors can be ignored) |
-| Import error | Wrong module path | Use canonical paths (see `docs/DEPRECATIONS.md`) |
-| Test using deprecated path | Patch targets shim | Update to patch canonical module directly |
-
-### Full Quality Gate
-
-Run the full PR-readiness gate before opening a PR:
-
-```bash
-uv run local-ci
-```
-
-(`make ci-required` is a thin alias for the same command.) For quick iteration
-the commands below cover the most common failures, but they are **not** a full
-substitute for `uv run local-ci` (which also runs docs audits, test
-guardrails, the property/contract/integration suites, and — as a non-blocking
-advisory warning — `agent-regenerate --verify`):
-
-```bash
-uv run ruff check .
-uv run black --check .
-uv run mypy src/gpt_trader
-uv run pytest tests/unit -n auto -q
-pre-commit run --all-files
-```
-
-## CI Contract
-
-The compact blocking/advisory CI contract lives in
-[`docs/DEVELOPMENT_GUIDELINES.md`](docs/DEVELOPMENT_GUIDELINES.md#continuous-integration).
-Use that section for branch-protection context names, blocking status, and
-workflow semantics. Keep this section as a local command quick-reference, not a
-second CI-lane table.
-
-### Local Command Quick Reference
-
-Makefile shortcuts:
-- `make lint` (ruff check + black --check)
-- `make lint-fix` (ruff check --fix)
-- `make lint-fmt-fix` (ruff check --fix + black)
-- `make fmt` (black)
-- `make fmt-check` (black --check)
-
-```bash
-# Lint lane
-uv run ruff check . && uv run black --check .
-
-# Type check lane
-uv run mypy src
-
-# Test guardrails
-uv run python scripts/ci/check_test_hygiene.py
-
-# Unit tests
-uv run pytest tests/unit -n auto -q
-
-# Property tests
-uv run pytest tests/property -v
-
-# Contract tests
-uv run pytest tests/contract -v
-```
-
-## Pre-commit Hook Configuration
-
-Our pre-commit hooks enforce:
-- **Black**: Code formatting (line length 100)
-- **Ruff**: Fast Python linting
-- **MyPy**: Type checking (optional types)
+The local verification command set, the CI-lane table, and the
+blocking/advisory contract are owned by
+[`docs/DEVELOPMENT_GUIDELINES.md`](docs/DEVELOPMENT_GUIDELINES.md#continuous-integration)
+— including the canonical `uv run local-ci` gate to run before opening a PR
+and the common-CI-failure fixes. This doc intentionally does not restate
+commands.

@@ -41,8 +41,10 @@ cp config/environments/.env.template .env   # set MOCK_BROKER=1 to run without c
 
 ## Everyday commands
 
-The commands you reach for on almost every task (full reference in
-[CONTRIBUTING.md](CONTRIBUTING.md) and [docs/DEVELOPMENT_GUIDELINES.md](docs/DEVELOPMENT_GUIDELINES.md)):
+The commands you reach for on almost every task (the verification command set
+and CI contract are owned by
+[docs/DEVELOPMENT_GUIDELINES.md](docs/DEVELOPMENT_GUIDELINES.md); the
+contribution workflow by [CONTRIBUTING.md](CONTRIBUTING.md)):
 
 ```bash
 uv run pytest tests/unit -n auto -q     # fast unit tests
