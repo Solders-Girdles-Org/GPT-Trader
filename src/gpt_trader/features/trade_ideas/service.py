@@ -64,6 +64,10 @@ from gpt_trader.features.trade_ideas.closeout import (
     CloseoutResolution,
     MaxLossSnapshot,
 )
+from gpt_trader.features.trade_ideas.kernel import (
+    RiskKernel,
+    autonomy_resolution_violations,
+)
 from gpt_trader.features.trade_ideas.models import (
     AutonomyMode,
     ConfidenceLabel,
@@ -284,6 +288,12 @@ class TradeIdeaService:
         self._budget_log = RiskBudgetLog(root / "risk_budget.jsonl")
         self._autonomy_log = AutonomyStateLog(root / "autonomy_state.jsonl")
         self._now = now_factory
+        self._kernel = RiskKernel(self, now_factory=self._now)
+
+    @property
+    def kernel(self) -> RiskKernel:
+        """Runtime risk kernel gating every (idea, action) decision on this store."""
+        return self._kernel
 
     @property
     def root(self) -> Path:
@@ -416,7 +426,7 @@ class TradeIdeaService:
         self._autonomy_log.append(entry)
         return entry
 
-    def _decision_autonomy(
+    def decision_autonomy(
         self,
         *,
         now: datetime,
@@ -467,16 +477,7 @@ class TradeIdeaService:
 
     def resolve_execution_autonomy(self, *, now: datetime | None = None) -> AutonomyResolution:
         """Resolve autonomy at an execution decision boundary, applying the ratchet."""
-        return self._decision_autonomy(now=now or self._now())
-
-    @staticmethod
-    def _autonomy_resolution_violations(resolution: AutonomyResolution) -> list[str]:
-        if resolution.source != AUTONOMY_SOURCE_FAIL_CLOSED:
-            return []
-        return [
-            "autonomy state resolution failed closed to "
-            f"'{resolution.mode.value}': {resolution.error}"
-        ]
+        return self.decision_autonomy(now=now or self._now())
 
     def approval_violations(
         self,
@@ -520,14 +521,14 @@ class TradeIdeaService:
     ) -> list[str]:
         policy = ApprovalPolicy(resolution.mode)
         return [
-            *self._autonomy_resolution_violations(resolution),
+            *autonomy_resolution_violations(resolution),
             *policy.approval_violations(
                 idea,
                 actor_type=actor_type,
                 budget=budget,
                 open_approved_count=self.open_approved_count(),
                 now=self._now(),
-                review_started_at=self._review_started_at(idea.decision_id),
+                review_started_at=self.review_started_at(idea.decision_id),
                 budget_context=self.approval_budget_context(
                     exclude_decision_id=idea.decision_id,
                 ),
@@ -691,10 +692,10 @@ class TradeIdeaService:
     def update_budget(self, budget: RiskBudget, actor_type: ActorType, actor_id: str) -> None:
         """Enact a new budget version, subject to the autonomy-mode policy."""
         now = self._now()
-        resolution = self._decision_autonomy(now=now)
+        resolution = self.decision_autonomy(now=now)
         policy = ApprovalPolicy(resolution.mode)
         violations = [
-            *self._autonomy_resolution_violations(resolution),
+            *autonomy_resolution_violations(resolution),
             *policy.budget_change_violations(actor_type),
         ]
         if violations:
@@ -713,7 +714,7 @@ class TradeIdeaService:
         # The enacted budget is part of this decision: re-check the ratchet
         # against it so tightening max_daily_loss_pct below already-realized
         # same-day losses lowers the level now, not at some later decision.
-        self._decision_autonomy(now=now)
+        self.decision_autonomy(now=now)
 
     # -- lifecycle actions -------------------------------------------------
 
@@ -727,7 +728,7 @@ class TradeIdeaService:
     ) -> TradeIdeaView:
         self.validate_new_proposal(idea)
         self._store.save(idea)
-        self._append(
+        self.append_audit(
             idea,
             action=AuditAction.PROPOSED,
             after_state=TradeIdeaState.PROPOSED,
@@ -760,7 +761,7 @@ class TradeIdeaService:
             for idea in ideas:
                 created_decision_ids.append(idea.decision_id)
                 self._store.save(idea)
-                self._append(
+                self.append_audit(
                     idea,
                     action=AuditAction.PROPOSED,
                     after_state=TradeIdeaState.PROPOSED,
@@ -780,7 +781,7 @@ class TradeIdeaService:
 
     def request_changes(self, decision_id: str, actor_id: str, reason: str) -> TradeIdeaView:
         idea = self._require_idea(decision_id)
-        self._append(
+        self.append_audit(
             idea,
             action=AuditAction.CHANGED,
             after_state=TradeIdeaState.NEEDS_CHANGES,
@@ -799,7 +800,7 @@ class TradeIdeaService:
     ) -> TradeIdeaView:
         self.validate_resubmission(idea)
         self._store.save(idea)
-        self._append(
+        self.append_audit(
             idea,
             action=AuditAction.PROPOSED,
             after_state=TradeIdeaState.PROPOSED,
@@ -810,43 +811,15 @@ class TradeIdeaService:
         return self.get(idea.decision_id)
 
     def approve(self, decision_id: str, actor_id: str, reason: str) -> TradeIdeaView:
+        """Human-review client of the risk kernel: deny raises, admit is recorded."""
         idea = self._require_idea(decision_id)
-        now = self._now()
-        budget = self.current_budget()
-        budget_context = self.approval_budget_context(
-            exclude_decision_id=decision_id,
-            now=now,
-        )
-        resolution = self._decision_autonomy(
-            now=now,
-            budget=budget,
-            budget_context=budget_context,
-        )
-        policy = ApprovalPolicy(resolution.mode)
-        violations = [
-            *self._autonomy_resolution_violations(resolution),
-            *policy.approval_violations(
-                idea,
-                actor_type=ActorType.HUMAN,
-                budget=budget,
-                open_approved_count=self.open_approved_count(),
-                now=now,
-                review_started_at=self._review_started_at(decision_id),
-                budget_context=budget_context,
-            ),
-        ]
-        if violations:
+        check = self._kernel.check_approval(idea, actor_type=ActorType.HUMAN)
+        if not check.admitted:
             raise PolicyViolationError(
-                f"Approval of '{decision_id}' refused: " + "; ".join(violations), violations
+                f"Approval of '{decision_id}' refused: " + "; ".join(check.violations),
+                list(check.violations),
             )
-        self._append(
-            idea,
-            action=AuditAction.APPROVED,
-            after_state=TradeIdeaState.APPROVED,
-            actor_type=ActorType.HUMAN,
-            actor_id=actor_id,
-            reason=reason,
-        )
+        self._kernel.record_approval(idea, check, actor_id=actor_id, reason=reason)
         return self.get(decision_id)
 
     def auto_approve_sweep(
@@ -875,8 +848,8 @@ class TradeIdeaService:
                 gate_violations,
             )
         now = self._now()
-        resolution = self._decision_autonomy(now=now)
-        gate_violations.extend(self._autonomy_resolution_violations(resolution))
+        resolution = self.decision_autonomy(now=now)
+        gate_violations.extend(autonomy_resolution_violations(resolution))
         if resolution.mode is not AutonomyMode.BOUNDED_AUTONOMY:
             gate_violations.append(
                 "auto-approval requires audited autonomy mode "
@@ -897,78 +870,33 @@ class TradeIdeaService:
         skipped: list[AutoApprovalSkip] = []
         for candidate in candidates:
             idea = candidate.idea
-            decision_time = self._now()
-            budget = self.current_budget()
-            budget_context = self.approval_budget_context(
-                exclude_decision_id=idea.decision_id,
-                now=decision_time,
-            )
-            decision_resolution = self._decision_autonomy(
-                now=decision_time,
-                budget=budget,
-                budget_context=budget_context,
-            )
-            policy = ApprovalPolicy(decision_resolution.mode)
-            violations = [
-                *self._autonomy_resolution_violations(decision_resolution),
-                *policy.approval_violations(
+            check = self._kernel.check_approval(idea, actor_type=ActorType.SYSTEM)
+            if not check.admitted:
+                self._kernel.record_denied_approval(
                     idea,
-                    actor_type=ActorType.SYSTEM,
-                    budget=budget,
-                    open_approved_count=self.open_approved_count(),
-                    now=decision_time,
-                    review_started_at=self._review_started_at(idea.decision_id),
-                    budget_context=budget_context,
-                ),
-            ]
-            if violations:
-                self._append(
-                    idea,
-                    action=AuditAction.AUTO_APPROVAL_SKIPPED,
-                    after_state=TradeIdeaState.PROPOSED,
-                    actor_type=ActorType.SYSTEM,
+                    check,
                     actor_id=actor_id,
                     reason=(
                         f"{AUTO_APPROVAL_REASON_PREFIX}skipped because "
                         "approval-policy violations remain"
                     ),
-                    evidence=(
-                        f"autonomy_state version {decision_resolution.version} "
-                        f"mode={decision_resolution.mode.value} "
-                        f"(source={decision_resolution.source})",
-                        f"risk budget version {budget.version}: "
-                        f"approval_violations={len(violations)}",
-                        *(f"violation: {violation}" for violation in violations),
-                    ),
                 )
                 skipped.append(
                     AutoApprovalSkip(
                         decision_id=idea.decision_id,
-                        violations=tuple(violations),
+                        violations=check.violations,
                     )
                 )
                 continue
-            self._append(
+            self._kernel.record_approval(
                 idea,
-                action=AuditAction.APPROVED,
-                after_state=TradeIdeaState.APPROVED,
-                actor_type=ActorType.SYSTEM,
+                check,
                 actor_id=actor_id,
                 reason=(
                     f"{AUTO_APPROVAL_REASON_PREFIX}zero approval-policy violations "
-                    f"inside the budget envelope of risk budget version {budget.version}"
+                    f"inside the budget envelope of risk budget version {check.budget_version}"
                 ),
-                evidence=(
-                    f"autonomy_state version {decision_resolution.version} "
-                    f"mode={decision_resolution.mode.value} "
-                    f"(source={decision_resolution.source})",
-                    f"risk budget version {budget.version}: approval_violations=0",
-                    "budget envelope: "
-                    f"same_day_realized_loss_pct={budget_context.same_day_realized_loss_pct} "
-                    f"open_approved_at_risk_pct={budget_context.open_approved_at_risk_pct} "
-                    f"candidate_max_loss_pct={idea.max_loss.percent_of_account} "
-                    f"max_daily_loss_pct={budget.max_daily_loss_pct}",
-                ),
+                evidence=check.admission_evidence(),
             )
             approved.append(self.get(idea.decision_id))
         return AutoApprovalSweepResult(
@@ -987,7 +915,7 @@ class TradeIdeaService:
         actor_type: ActorType = ActorType.HUMAN,
     ) -> TradeIdeaView:
         idea = self._require_idea(decision_id)
-        self._append(
+        self.append_audit(
             idea,
             action=AuditAction.REJECTED,
             after_state=TradeIdeaState.REJECTED,
@@ -1005,7 +933,7 @@ class TradeIdeaService:
         actor_type: ActorType = ActorType.HUMAN,
     ) -> TradeIdeaView:
         idea = self._require_idea(decision_id)
-        self._append(
+        self.append_audit(
             idea,
             action=AuditAction.CANCELLED,
             after_state=TradeIdeaState.CANCELLED,
@@ -1023,7 +951,7 @@ class TradeIdeaService:
         actor_type: ActorType = ActorType.SYSTEM,
     ) -> TradeIdeaView:
         idea = self._require_idea(decision_id)
-        self._append(
+        self.append_audit(
             idea,
             action=AuditAction.EXPIRED,
             after_state=TradeIdeaState.EXPIRED,
@@ -1080,7 +1008,7 @@ class TradeIdeaService:
     ) -> TradeIdeaView:
         venue = _validate_audit_venue(venue)
         idea = self._require_idea(decision_id)
-        self._append(
+        self.append_audit(
             idea,
             action=AuditAction.SUBMITTED,
             after_state=TradeIdeaState.SUBMITTED,
@@ -1104,7 +1032,7 @@ class TradeIdeaService:
     ) -> TradeIdeaView:
         venue = _validate_audit_venue(venue)
         idea = self._require_idea(decision_id)
-        self._append(
+        self.append_audit(
             idea,
             action=AuditAction.FILLED,
             after_state=TradeIdeaState.FILLED,
@@ -1189,7 +1117,7 @@ class TradeIdeaService:
         autonomy_resolution = self.peek_autonomy()
         policy = ApprovalPolicy(autonomy_resolution.mode)
         policy_violations = [
-            *self._autonomy_resolution_violations(autonomy_resolution),
+            *autonomy_resolution_violations(autonomy_resolution),
             *policy.approval_violations(
                 view.idea,
                 actor_type=ActorType.HUMAN,
@@ -1666,7 +1594,7 @@ class TradeIdeaService:
             value=broker_ticket.to_dict(),
         )
 
-    def _review_started_at(self, decision_id: str) -> datetime | None:
+    def review_started_at(self, decision_id: str) -> datetime | None:
         return self._review_started_at_from_events(tuple(self._audit.read_events(decision_id)))
 
     def _review_started_at_from_events(self, events: tuple[AuditEvent, ...]) -> datetime | None:
@@ -1680,7 +1608,7 @@ class TradeIdeaService:
                 return event.timestamp
         return None
 
-    def _append(
+    def append_audit(
         self,
         idea: TradeIdea,
         *,

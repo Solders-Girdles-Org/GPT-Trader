@@ -52,6 +52,12 @@ from gpt_trader.features.trade_ideas.closeout import (
     MaxLossSnapshot,
 )
 from gpt_trader.features.trade_ideas.eligibility import evaluate_eligibility, is_eligible
+from gpt_trader.features.trade_ideas.kernel import (
+    KernelCheck,
+    KernelRuntime,
+    RiskKernel,
+    autonomy_resolution_violations,
+)
 from gpt_trader.features.trade_ideas.models import (
     AutonomyMode,
     BrokerTicket,
@@ -210,6 +216,8 @@ __all__ = [
     "ConfidenceLabel",
     "EntryZone",
     "InvalidTransitionError",
+    "KernelCheck",
+    "KernelRuntime",
     "MarketSnapshot",
     "MaxLoss",
     "MaxLossSnapshot",
@@ -241,6 +249,7 @@ __all__ = [
     "ReplayTournamentReport",
     "RiskBudget",
     "RiskBudgetLog",
+    "RiskKernel",
     "ScoringLevels",
     "SizingRecommendation",
     "SnapshotIntegrityError",
@@ -268,6 +277,7 @@ __all__ = [
     "TradeIdeaStore",
     "TradeIdeaView",
     "UnknownTradeIdeaError",
+    "autonomy_resolution_violations",
     "autonomy_transition_violations",
     "build_trade_idea_track_record_report",
     "canonical_ticket_json",

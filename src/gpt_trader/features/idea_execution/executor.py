@@ -27,7 +27,6 @@ from gpt_trader.features.trade_ideas import (
     ActorType,
     AuditAction,
     AuditEvent,
-    AutonomyMode,
     AutonomyResolution,
     PaperFillEvent,
     PaperFillReconciler,
@@ -164,7 +163,12 @@ def paper_auto_execution_gate_evidence(
     *,
     now: datetime,
 ) -> tuple[str, ...] | None:
-    """Return submission evidence when a system approval passes the Stage 2 gate."""
+    """Return submission evidence when a system approval passes the Stage 2 gate.
+
+    The autonomy re-check is the risk kernel's execution gate; this lane adds
+    only its own admission preconditions (a sweep-issued system approval and
+    the operator-set auto-execution flag) and the env-specific evidence line.
+    """
     if approval_event is None:
         return None
     if approval_event.actor_type is not ActorType.SYSTEM:
@@ -173,10 +177,14 @@ def paper_auto_execution_gate_evidence(
         return None
     if not resolve_auto_execution_enabled():
         return None
-    resolution = service.resolve_execution_autonomy(now=now)
-    if resolution.mode is not AutonomyMode.BOUNDED_AUTONOMY:
+    check = service.kernel.check_execution(
+        approval_event.decision_id,
+        actor_type=ActorType.SYSTEM,
+        now=now,
+    )
+    if not check.admitted:
         return None
-    return _gate_evidence(approval_event, resolution)
+    return _gate_evidence(approval_event, check.autonomy)
 
 
 class PaperIdeaExecutor:
