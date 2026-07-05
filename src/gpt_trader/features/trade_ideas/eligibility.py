@@ -1,18 +1,40 @@
-"""Strategy-eligibility gate for trade ideas.
+"""Strategy-eligibility gate for trade ideas, split into two constraint classes.
 
-Encodes the automatic rejection conditions from the accepted framework
-(docs/DIRECTION.md, Decision 2): ideas without an
-invalidation level, max-loss estimate, reproducible data source, defined
-entry, exit rule, or expiry must never reach a reviewer as actionable.
+Implements the eligibility split from
+docs/decisions/adopt-event-driven-execution-topology.md (#1190):
+
+- **Invariant constraints** (this module's checks) apply identically at every
+  autonomy level. They are blast-radius controls from the accepted framework
+  (docs/DIRECTION.md, Decision 2): ideas without an invalidation level,
+  max-loss estimate, reproducible data source, defined entry, exit rule, or
+  expiry are never actionable, no matter who or what is approving.
+- **Mode-dependent constraints** (review-latency survivability, enforced by
+  ``ApprovalPolicy.review_latency_violation``) exist only because a human
+  review loop is in the decision path. They apply under
+  ``human_approved_execution`` (and the fail-closed ``research_only``); under
+  ``bounded_autonomy`` the horizon floor comes from measured capability, not
+  human latency.
+
+Rejection reasons carry their class prefix so the audit trail can distinguish
+"unsound idea" from "too fast for a human" when building track-record
+evidence.
 """
 
 from __future__ import annotations
 
 from gpt_trader.features.trade_ideas.models import TradeIdea
 
+INVARIANT_ELIGIBILITY_PREFIX = "invariant eligibility: "
+MODE_DEPENDENT_ELIGIBILITY_PREFIX = "mode-dependent eligibility (human_approved_execution): "
+
 
 def evaluate_eligibility(idea: TradeIdea) -> list[str]:
-    """Return human-readable rejection reasons; an empty list means eligible."""
+    """Return invariant rejection reasons; an empty list means eligible.
+
+    Every check here is autonomy-level invariant. Mode-dependent constraints
+    never belong in this function — they live on ``ApprovalPolicy``, which
+    knows the resolved autonomy mode.
+    """
     reasons: list[str] = []
 
     if not idea.thesis.strip():
@@ -39,5 +61,5 @@ def evaluate_eligibility(idea: TradeIdea) -> list[str]:
 
 
 def is_eligible(idea: TradeIdea) -> bool:
-    """True when the idea survives every automatic rejection condition."""
+    """True when the idea survives every invariant rejection condition."""
     return not evaluate_eligibility(idea)

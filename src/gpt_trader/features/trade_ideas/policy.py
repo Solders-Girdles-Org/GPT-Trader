@@ -20,7 +20,11 @@ from decimal import Decimal
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.trade_ideas.audit import ActorType
 from gpt_trader.features.trade_ideas.budget import RiskBudget
-from gpt_trader.features.trade_ideas.eligibility import evaluate_eligibility
+from gpt_trader.features.trade_ideas.eligibility import (
+    INVARIANT_ELIGIBILITY_PREFIX,
+    MODE_DEPENDENT_ELIGIBILITY_PREFIX,
+    evaluate_eligibility,
+)
 from gpt_trader.features.trade_ideas.models import (
     AutonomyMode,
     ProductType,
@@ -112,7 +116,9 @@ class ApprovalPolicy:
                 BOUNDED_AUTONOMY_ACTOR_APPROVAL_VIOLATION + f"; got actor_type '{actor_type.value}'"
             )
 
-        violations.extend(evaluate_eligibility(idea))
+        violations.extend(
+            INVARIANT_ELIGIBILITY_PREFIX + reason for reason in evaluate_eligibility(idea)
+        )
 
         if has_budget_context and budget_context.same_day_realized_loss_unavailable_count:
             violations.append(
@@ -227,6 +233,18 @@ class ApprovalPolicy:
 
         return violations
 
+    @property
+    def review_latency_applies(self) -> bool:
+        """True when human-review-latency survivability constrains this mode.
+
+        Mode-dependent eligibility (#1190): review latency exists only because
+        a human review loop is in the decision path. Under ``bounded_autonomy``
+        the horizon floor comes from measured capability, not human latency,
+        so the constraint does not apply. Every other mode — including the
+        fail-closed ``research_only`` — keeps it, conservatively.
+        """
+        return self._autonomy_mode is not AutonomyMode.BOUNDED_AUTONOMY
+
     def review_latency_violation(
         self,
         *,
@@ -234,14 +252,21 @@ class ApprovalPolicy:
         budget: RiskBudget,
         now: datetime,
     ) -> str | None:
-        """Return a violation when the active review window has elapsed."""
+        """Return a violation when the active review window has elapsed.
+
+        Mode-dependent: returns ``None`` unconditionally when
+        ``review_latency_applies`` is false for the policy's autonomy mode.
+        """
+        if not self.review_latency_applies:
+            return None
         if review_started_at is None:
             return None
         review_deadline = review_started_at + timedelta(hours=budget.max_review_latency_hours)
         if review_deadline > now:
             return None
         return (
-            f"Idea review deadline expired at {review_deadline.isoformat()} "
+            MODE_DEPENDENT_ELIGIBILITY_PREFIX
+            + f"Idea review deadline expired at {review_deadline.isoformat()} "
             f"after max_review_latency_hours={budget.max_review_latency_hours}"
         )
 
