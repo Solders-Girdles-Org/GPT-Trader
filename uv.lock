@@ -463,7 +463,6 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
-    { name = "filelock" },
     { name = "pandas" },
     { name = "pydantic" },
     { name = "pyjwt" },
@@ -502,6 +501,7 @@ dev = [
     { name = "bandit" },
     { name = "black" },
     { name = "coverage" },
+    { name = "filelock" },
     { name = "freezegun" },
     { name = "httpx" },
     { name = "hypothesis" },
@@ -523,7 +523,6 @@ requires-dist = [
     { name = "aiohttp", marker = "extra == 'live-trade'", specifier = ">=3.12.15,<4.0.0" },
     { name = "cryptography", specifier = ">=48.0.1,<49.0.0" },
     { name = "fastapi", marker = "extra == 'web'", specifier = ">=0.115.0,<1.0.0" },
-    { name = "filelock", specifier = ">=3.20.3,<4.0.0" },
     { name = "jinja2", marker = "extra == 'web'", specifier = ">=3.1.4,<4.0.0" },
     { name = "opentelemetry-api", marker = "extra == 'observability'", specifier = ">=1.25.0,<2.0.0" },
     { name = "opentelemetry-exporter-otlp", marker = "extra == 'observability'", specifier = ">=1.25.0,<2.0.0" },
@@ -549,6 +548,7 @@ dev = [
     { name = "bandit", specifier = ">=1.7.9,<2.0.0" },
     { name = "black", specifier = ">=26.3.1,<26.4.0" },
     { name = "coverage", specifier = ">=7.0.0,<8.0.0" },
+    { name = "filelock", specifier = ">=3.20.3,<4.0.0" },
     { name = "freezegun", specifier = ">=1.2.0,<2.0.0" },
     { name = "httpx", specifier = ">=0.27.0,<1.0.0" },
     { name = "hypothesis", specifier = ">=6.144.0,<7.0.0" },

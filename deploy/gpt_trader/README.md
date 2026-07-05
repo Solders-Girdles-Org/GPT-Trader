@@ -21,7 +21,7 @@ The Dockerfile defines several stages selectable via the `BUILD_TARGET` build ar
 | `development` | Iterative development with source bind mounts |
 | `testing`     | CI-oriented build that runs unit tests        |
 | `production`  | Minimal runtime image for deployment         |
-| `security`    | Runs `safety` and `bandit` scanners           |
+| `security`    | Runs `pip-audit` and `bandit` scanners        |
 
 Example build command:
 ```bash
