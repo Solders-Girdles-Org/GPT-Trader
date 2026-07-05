@@ -182,6 +182,16 @@ the command.
 5. The gate also reads `runtime_data/<profile>/events.db` for liveness and `var/data/status.json` (or your configured status file), so ensure those files exist alongside the report directory before rerunning local CI.
 6. For more background on the required files, freshness windows, and how stale data is interpreted, see [Readiness gate inputs & stale-data interpretation](READINESS.md#readiness-gate-inputs--stale-data-interpretation).
 
+#### 3. Common CI failures and fixes
+
+| Failure | Cause | Fix |
+|---------|-------|-----|
+| `black --check` | Formatting | Run `uv run black .` |
+| `ruff check` | Linting violations | Run `uv run ruff check --fix .` |
+| `mypy` errors | Type issues | Fix type annotations (pre-existing shim errors can be ignored) |
+| Import error | Wrong module path | Use canonical paths (see [DEPRECATIONS.md](DEPRECATIONS.md)) |
+| Test using deprecated path | Patch targets shim | Update to patch canonical module directly |
+
 ### Agent Artifacts Freshness
 
 The **Agent Artifacts Freshness** check verifies generated inventories under
@@ -274,12 +284,7 @@ git diff --check
 
 ## Submitting Changes
 
-1. Create a descriptive branch.
-2. Implement code + tests + docs.
-3. Run `uv run pytest -q` and any targeted integration scripts.
-4. Open a pull request summarising risk impact, telemetry changes, and rollout
-   steps.
-
-Legacy contribution guides were removed from the tree; if you need to review
-them, pull from repository history. Do not base new development on those
-documents.
+The contribution workflow (environment setup, branching, PR checklist, and PR
+expectations) is owned by [CONTRIBUTING.md](../CONTRIBUTING.md). Legacy
+contribution guides were removed from the tree; if you need to review them,
+pull from repository history.

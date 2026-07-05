@@ -67,3 +67,10 @@ its content exactly as provided, bypassing the envelope.
 
 The trade-idea CLI applies these conventions end to end; see
 [`TRADE_IDEA_CLI_SPEC.md`](../specs/TRADE_IDEA_CLI_SPEC.md).
+
+## Ownership
+
+This doc owns the *general* CLI response/output contract. Command-family specs
+(e.g. [TRADE_IDEA_CLI_SPEC.md](../specs/TRADE_IDEA_CLI_SPEC.md)) are
+self-canonical for their own surface and should reference this doc rather than
+restate the envelope.

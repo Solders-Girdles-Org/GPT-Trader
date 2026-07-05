@@ -56,9 +56,6 @@ suppressions:
   - doc: AGENTS.md
     item: "--fill"
     reason: gh pr create flag quoted in prose
-  - doc: CONTRIBUTING.md
-    item: "--all-files"
-    reason: pre-commit flag quoted in prose
   - doc: README.md
     item: "--all-files"
     reason: pre-commit flag quoted in prose
