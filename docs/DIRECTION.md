@@ -92,11 +92,17 @@ trade-idea record, append-only audit log, approval workflow, eligibility gate,
 and versioned risk budget exist in code — that *is* their specification. What
 remains gated before any non-manual execution lane opens:
 
-- **Strategy eligibility.** An idea is eligible only if it survives human review
-  latency: multi-hour/day horizon, explicit entry/invalidation/exit/max-loss,
+- **Strategy eligibility.** Eligibility splits into two constraint classes
+  ([adopt-event-driven-execution-topology](decisions/adopt-event-driven-execution-topology.md)).
+  *Invariant, at every autonomy level:* explicit entry/invalidation/exit/max-loss,
   explainable from recorded data, sizeable before entry, with an expiry. Missing
   invalidation, missing max-loss, no reproducible data source, or a need for
-  continuous babysitting are automatic rejections.
+  continuous babysitting are automatic rejections. *Mode-dependent:* surviving
+  human review latency (multi-hour/day horizon) applies only under
+  `human_approved_execution`; under `bounded_autonomy` the horizon floor comes
+  from measured capability, not human latency. Rejection reasons record which
+  class failed so track-record evidence can distinguish an unsound idea from
+  one that is merely too fast for a human review loop.
 - **Numeric risk budget.** Max loss per idea, max daily loss, max open notional
   by product type, max concurrent approved-but-unexecuted tickets, max review
   latency, and whether sizing is advisory or hard-capped must be chosen values.

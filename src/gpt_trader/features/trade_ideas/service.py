@@ -971,9 +971,11 @@ class TradeIdeaService:
         """Expire all stale ideas that can legally transition to expired."""
         now = self._now()
         budget = self._budget_log.current() or DEFAULT_RISK_BUDGET
-        # Review-latency checks are autonomy-mode independent; a static policy
-        # is safe here and keeps the expiry sweep read-only on the autonomy log.
-        policy = ApprovalPolicy()
+        # Review-latency expiry is mode-dependent eligibility (#1190): it keys
+        # off the audited autonomy log via a read-only peek, so the sweep still
+        # never seeds or ratchets state. A fail-closed resolution yields
+        # research_only, which conservatively keeps latency expiry active.
+        policy = ApprovalPolicy(self.peek_autonomy().mode)
         expired: list[TradeIdeaView] = []
         for view in self.list_views():
             if view.state not in EXPIRABLE_STATES:
@@ -1275,6 +1277,10 @@ class TradeIdeaService:
                 sort_by=TradeIdeaListSortKey.EXPIRES_AT,
             )
         ).views
+        # Review-latency deadlines are mode-dependent eligibility (#1190):
+        # warn about them only when the resolved mode still enforces them, so
+        # the queue never predicts an expiration the sweep would not perform.
+        review_latency_applies = ApprovalPolicy(self.peek_autonomy().mode).review_latency_applies
         upcoming_expirations: list[TradeIdeaQueueExpiration] = []
         for view in (*proposed, *needs_changes):
             expiration = _queue_expiration(
@@ -1283,6 +1289,7 @@ class TradeIdeaService:
                 window_end,
                 budget,
                 review_started_at=self._review_started_at_from_events(view.events),
+                review_latency_applies=review_latency_applies,
             )
             if expiration is not None:
                 upcoming_expirations.append(expiration)
@@ -1778,12 +1785,13 @@ def _queue_expiration(
     budget: RiskBudget,
     *,
     review_started_at: datetime | None,
+    review_latency_applies: bool = True,
 ) -> TradeIdeaQueueExpiration | None:
     deadlines: list[tuple[str, datetime]] = []
     horizon_expires_at = view.idea.time_horizon.expires_at
     if horizon_expires_at is not None:
         deadlines.append(("time_horizon", horizon_expires_at))
-    if review_started_at is not None:
+    if review_latency_applies and review_started_at is not None:
         review_deadline = review_started_at + timedelta(hours=budget.max_review_latency_hours)
         deadlines.append(("review_latency", review_deadline))
 

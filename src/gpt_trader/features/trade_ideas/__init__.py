@@ -51,7 +51,12 @@ from gpt_trader.features.trade_ideas.closeout import (
     DuplicateCloseoutAttributionError,
     MaxLossSnapshot,
 )
-from gpt_trader.features.trade_ideas.eligibility import evaluate_eligibility, is_eligible
+from gpt_trader.features.trade_ideas.eligibility import (
+    INVARIANT_ELIGIBILITY_PREFIX,
+    MODE_DEPENDENT_ELIGIBILITY_PREFIX,
+    evaluate_eligibility,
+    is_eligible,
+)
 from gpt_trader.features.trade_ideas.kernel import (
     KernelCheck,
     KernelRuntime,
@@ -187,6 +192,8 @@ __all__ = [
     "DuplicateCloseoutAttributionError",
     "DuplicateTradeIdeaError",
     "IDEAS_ROOT_ENV_VAR",
+    "INVARIANT_ELIGIBILITY_PREFIX",
+    "MODE_DEPENDENT_ELIGIBILITY_PREFIX",
     "TICKET_PAYLOAD_SCHEMA_VERSION",
     "TERMINAL_STATES",
     "ActorType",
