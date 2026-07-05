@@ -105,8 +105,9 @@ bypass guards:
 This section is the compact contributor-facing CI contract. The executable
 source of truth remains `.github/workflows/*.yml` plus GitHub branch protection.
 Current `main` branch protection requires only the named `CI` contexts listed in
-the first row below, with strict up-to-date checks and conversation resolution
-enabled. Selected context-specific lanes self-skip by changed path while keeping
+the first row below, with conversation resolution enabled and a required merge
+queue (#1127; strict up-to-date is off — the queue validates entries against the
+latest `main` via `merge_group` runs). Selected context-specific lanes self-skip by changed path while keeping
 those check names stable. The expected protection settings are machine-checked:
 `uv run python scripts/ci/check_branch_protection.py` (also surfaced as an
 `agent-pr-ready` advisory) fails when live GitHub settings drift from the

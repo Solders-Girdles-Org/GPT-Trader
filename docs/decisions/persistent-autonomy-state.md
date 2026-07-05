@@ -32,11 +32,11 @@ Today the autonomy level satisfies none of that:
   and every version carries the actor and rationale that produced it.
 
 Why decide now: Stage 2 auto-approval
-([#1039](https://github.com/Solders-Girdles/GPT-Trader/issues/1039)) is
+([#1039](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1039)) is
 blocked on an explicit autonomy-mode gate, and its acceptance criteria assume
 a mode that can be verified rather than asserted. The automatic ratchet-down
 needs a well-defined "breach" to consume, which is exactly what the risk
-unification ([#1120](https://github.com/Solders-Girdles/GPT-Trader/issues/1120),
+unification ([#1120](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1120),
 in flight) provides: one appetite vocabulary and one trading-day boundary.
 The operator console direction
 ([adopt-operator-web-console](adopt-operator-web-console.md)) will also need
@@ -62,7 +62,7 @@ a truthful read surface for "what may the system do right now, and why".
   violates the recorded-and-reversible property, and it collides with the
   accepted rule that a profile name is never execution approval
   ([prod-canary-profile-meaning](prod-canary-profile-meaning.md), hardening
-  tracked in [#1122](https://github.com/Solders-Girdles/GPT-Trader/issues/1122)).
+  tracked in [#1122](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1122)).
 - **Option C — Fold the mode into `RiskBudget` versions.** Reuses the existing
   log and its integrity checks, but couples risk appetite with authority: a
   budget tweak and an autonomy grant become the same event type, muddying both
@@ -97,7 +97,7 @@ With Option A accepted:
   appends the breach evidence it acted on. Every transition is also an
   audited workflow event.
 - Ratchet triggers are defined against the unified risk vocabulary from
-  [#1120](https://github.com/Solders-Girdles/GPT-Trader/issues/1120) (one
+  [#1120](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1120) (one
   appetite source, one trading-day boundary) so "breach" is a single
   well-defined event, not two dialects. The trigger set ships with the
   implementation issue, not this record.
@@ -108,7 +108,7 @@ With Option A accepted:
 - Entering `bounded_autonomy` remains gated by [DIRECTION](../DIRECTION.md):
   this record changes where the level is *recorded*, not what the level *is*.
   Together with the budget gates, this unblocks
-  [#1039](https://github.com/Solders-Girdles/GPT-Trader/issues/1039).
+  [#1039](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1039).
 - Implementation follows in a bounded issue after this record; ratchet triggers
   are defined there against the unified risk vocabulary from #1120.
 

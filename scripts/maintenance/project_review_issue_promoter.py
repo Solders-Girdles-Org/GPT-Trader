@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-DEFAULT_REPOSITORY = "Solders-Girdles/GPT-Trader"
+DEFAULT_REPOSITORY = "Solders-Girdles-Org/GPT-Trader"
 SCHEMA_VERSION = "gpt-trader.agent-finding.v1"
 
 SEVERITIES = {"low", "medium", "high", "critical"}

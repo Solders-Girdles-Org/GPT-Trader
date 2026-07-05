@@ -84,8 +84,9 @@ checks, and merge only when it reports ready.
 git switch -c <branch>
 git push -u origin HEAD
 gh pr create --fill
-# Merge once agent-pr-ready reports ready and all threads are resolved:
-gh pr merge --squash --delete-branch
+# Once agent-pr-ready reports ready and all threads are resolved, enqueue;
+# the merge queue validates against latest main and merges when green:
+gh pr merge --squash --auto
 ```
 
 Standing approval covers PR merges only — live order submission and execution
@@ -98,9 +99,11 @@ Merge mechanics that repeatedly bite agents (`agent-pr-ready` detects all three)
   a child PR whose base branch just vanished. Recovery: restore the deleted
   branch from the merge SHA, reopen the child, retarget it. If you must stack,
   merge base-first.
-- **Strict up-to-date serializes batch merges.** Every merge to `main` flips
-  other green PRs to BEHIND; run `gh pr update-branch <pr>` and let CI re-run
-  rather than treating stale green as mergeable.
+- **Merges go through the merge queue** (#1127, 2026-07-04). Strict up-to-date
+  is off: the queue re-validates each entry against the latest `main` via a
+  `merge_group` CI run, so green PRs no longer invalidate each other. GitHub
+  reports `mergeStateStatus: BLOCKED` for direct merges even on ready PRs;
+  `gh pr merge --squash --auto` enqueues instead of merging directly.
 - **The protection contract is machine-checked.** `scripts/ci/check_branch_protection.py`
   owns the expected required checks/settings; drift between it and live GitHub
   settings surfaces as an `agent-pr-ready` warning.

@@ -39,7 +39,7 @@ authorization path.
 
 `ProfileLoader` semantics are unchanged. Docs and tests are hardened so no
 profile value is ever treated as execution approval — tracked in
-[#1122](https://github.com/Solders-Girdles/GPT-Trader/issues/1122).
+[#1122](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1122).
 
 ## Safety boundary
 

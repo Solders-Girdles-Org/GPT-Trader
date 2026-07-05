@@ -8,8 +8,9 @@ Usage:
 The EXPECTED_* constants below are the machine-checkable source of truth for
 what `main` branch protection must require; the prose CI contract table in
 docs/DEVELOPMENT_GUIDELINES.md points here. Update them deliberately, in the
-same change that updates the GitHub setting. The merge-queue migration (#1127)
-will flip EXPECTED_STRICT to False when it lands.
+same change that updates the GitHub setting. The merge-queue migration (#1127,
+2026-07-04) flipped EXPECTED_STRICT to False: the queue validates each entry
+against the latest main via merge_group CI, superseding strict up-to-date.
 
 Requires `gh` auth with admin read on the repository (the protection API is
 admin-scoped), so this runs locally and in `agent-pr-ready` — not in the
@@ -24,7 +25,7 @@ import subprocess
 from typing import Any
 from urllib.parse import quote
 
-DEFAULT_REPOSITORY = "Solders-Girdles/GPT-Trader"
+DEFAULT_REPOSITORY = "Solders-Girdles-Org/GPT-Trader"
 DEFAULT_BRANCH = "main"
 
 EXPECTED_REQUIRED_CHECKS = frozenset(
@@ -39,7 +40,7 @@ EXPECTED_REQUIRED_CHECKS = frozenset(
         "Integration Tests",
     }
 )
-EXPECTED_STRICT = True
+EXPECTED_STRICT = False
 EXPECTED_ENFORCE_ADMINS = True
 EXPECTED_CONVERSATION_RESOLUTION = True
 EXPECTED_REQUIRED_APPROVING_REVIEWS = 0

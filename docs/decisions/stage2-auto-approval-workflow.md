@@ -12,7 +12,7 @@ superseded-by:
 
 The accepted rubric ([adopt-measured-outcome-rubric](adopt-measured-outcome-rubric.md))
 names Stage 2 as "auto-approval within budget", and
-[#1039](https://github.com/Solders-Girdles/GPT-Trader/issues/1039) specifies the
+[#1039](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1039) specifies the
 workflow: ideas that pass **every** approval-policy check auto-approve with a
 system actor; ideas with any violation stay `proposed` for human review; both
 paths are audited.
@@ -26,15 +26,15 @@ waited on now exist:
 
 - Budget gates are explicit and enforced at approval time — per-idea max loss,
   projected daily loss, open-notional cap, concurrency, review latency
-  ([#1036](https://github.com/Solders-Girdles/GPT-Trader/issues/1036),
-  [#1120](https://github.com/Solders-Girdles/GPT-Trader/issues/1120)).
+  ([#1036](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1036),
+  [#1120](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1120)).
 - The autonomy level is persistent, audited, and human-raised-only, with an
   automatic breach ratchet
   ([persistent-autonomy-state](persistent-autonomy-state.md),
-  [#1170](https://github.com/Solders-Girdles/GPT-Trader/issues/1170)); that
+  [#1170](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1170)); that
   record states it "unblocks #1039" together with the budget gates.
 - Paper fills reconcile to the audit trail, so envelope exposure is measured,
-  not asserted ([#1035](https://github.com/Solders-Girdles/GPT-Trader/issues/1035)).
+  not asserted ([#1035](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1035)).
 
 ## Options
 
@@ -97,4 +97,4 @@ This decision authorizes no broker/API call, no live execution, and no money
 movement. It does not change the autonomy level: the seeded default stays
 `human_approved_execution`, raising it still requires an audited human action,
 and the feature flag defaults off. Order submission remains out of scope
-([#1039](https://github.com/Solders-Girdles/GPT-Trader/issues/1039) non-goals).
+([#1039](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1039) non-goals).
