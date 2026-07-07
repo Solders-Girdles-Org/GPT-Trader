@@ -26,12 +26,14 @@ approval; nothing in this slice weakens that boundary.
 
 from gpt_trader.features.idea_execution.cycle import (
     DEFAULT_CYCLE_ACTOR_ID,
+    BusyInstrument,
     ExecutionTurn,
     PaperCycleLockError,
     PaperCycleResult,
     PaperCycleRunner,
     ProposerTurn,
     SnapshotProvider,
+    busy_instruments,
 )
 from gpt_trader.features.idea_execution.event_lane import (
     EVENT_LANE_REASON_PREFIX,
@@ -72,6 +74,7 @@ __all__ = [
     "EventDrivenIdeaLane",
     "EventLaneOutcome",
     "EventLaneStage",
+    "BusyInstrument",
     "IdeaNotExecutableError",
     "PaperExecutionError",
     "PaperExecutionResult",
@@ -83,6 +86,7 @@ __all__ = [
     "PaperOnlyLaneError",
     "ProposerTurn",
     "SnapshotProvider",
+    "busy_instruments",
     "paper_auto_execution_gate_evidence",
     "resolve_auto_execution_enabled",
     "resolve_filled_ideas",

@@ -43,6 +43,7 @@ from gpt_trader.features.idea_execution import (
     DEFAULT_PAPER_EXECUTION_ACTOR_ID,
     PaperCycleRunner,
     PaperIdeaExecutor,
+    busy_instruments,
 )
 from gpt_trader.features.intelligence.regime import RegimeConfig
 from gpt_trader.features.live_trade.strategies.baseline import (
@@ -2918,9 +2919,26 @@ def _cycle_proposer(
     )
 
 
+def _cycle_busy_symbol_extras(
+    service: TradeIdeaService, snapshot_symbols: tuple[str, ...]
+) -> tuple[str, ...]:
+    """Busy instruments the requested universe no longer covers."""
+    present = {symbol.casefold() for symbol in snapshot_symbols}
+    return tuple(
+        sorted(
+            {
+                blocker.instrument.upper()
+                for blocker in busy_instruments(service).values()
+                if blocker.instrument.casefold() not in present
+            }
+        )
+    )
+
+
 def _handle_cycle(args: Namespace) -> CliResponse:
     command = "ideas cycle"
     try:
+        service = _service(args)
         if args.snapshot is not None:
             snapshot_path = args.snapshot
 
@@ -2953,9 +2971,25 @@ def _handle_cycle(args: Namespace) -> CliResponse:
 
             def snapshot_provider() -> tuple[MarketSnapshot, str]:
                 snapshot = asyncio.run(_build_coinbase_market_snapshot(args, request))
+                # Busy instruments must keep receiving candles after the
+                # configured universe drops them: without fresh candles the
+                # exit monitor can never resolve their filled ideas, so the
+                # instrument would starve permanently (issue #1215). Top-up
+                # fetches are per-symbol and non-fatal so one delisted or
+                # renamed instrument cannot fail every future turn; its idea
+                # simply stays open until candles are available again.
+                for symbol in _cycle_busy_symbol_extras(service, snapshot.symbols()):
+                    try:
+                        extra = asyncio.run(
+                            _build_coinbase_market_snapshot(
+                                args, replace(request, symbols=(symbol,))
+                            )
+                        )
+                    except Exception:  # noqa: BLE001
+                        continue
+                    snapshot = replace(snapshot, series=(*snapshot.series, *extra.series))
                 return snapshot, snapshot.source
 
-        service = _service(args)
         selected_proposers = tuple(dict.fromkeys(args.proposers or DEFAULT_CYCLE_PROPOSERS))
         runner = PaperCycleRunner(
             service,
