@@ -19,7 +19,12 @@ Execution work should follow the
 [Direction](DIRECTION.md). Treat
 the existing `canary` and `prod` profiles as legacy live-operation assets:
 useful for validation, but not proof that a product, account, or autonomy level
-is ready.
+is ready. Per the accepted
+[prod-canary-profile-meaning](decisions/prod-canary-profile-meaning.md)
+decision, a profile name is configuration, never approval — the gates in
+[DIRECTION.md](DIRECTION.md) and recorded human approval are the only
+authorization path (test-enforced in
+`tests/unit/gpt_trader/app/config/test_profile_not_execution_approval.py`).
 
 ## Operating Posture
 

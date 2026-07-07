@@ -1,6 +1,10 @@
 # Canary Production Profile - Safe Testing Configuration
 # Purpose: Initial production deployment with minimal risk exposure
 #
+# Selecting this profile is configuration, not execution approval: live
+# operation still requires the gates in docs/DIRECTION.md and recorded human
+# approval (docs/decisions/prod-canary-profile-meaning.md).
+#
 # This profile implements multiple safety layers:
 # 1. Tiny notional amounts (0.01 BTC max)
 # 2. Reduce-only mode (no position increases)
