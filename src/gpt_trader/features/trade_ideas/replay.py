@@ -299,6 +299,33 @@ def extract_numeric_scoring_levels(idea: TradeIdea) -> ScoringLevels:
     return levels
 
 
+def exit_plan_scoring_levels(idea: TradeIdea) -> ScoringLevels:
+    """Scoring levels from the structured exit plan, falling back to text.
+
+    Prefers the machine-readable ``exit_plan`` (#1218) over parsing the free-text
+    invalidation/target fields, and delegates to
+    ``extract_numeric_scoring_levels`` when no complete plan is present so
+    human-authored and pre-exit-plan ideas still resolve.
+    """
+    plan = idea.exit_plan
+    if (
+        plan is not None
+        and plan.stop is not None
+        and plan.target is not None
+        and idea.entry_zone.lower is not None
+        and idea.entry_zone.upper is not None
+    ):
+        levels = ScoringLevels(
+            entry_lower=idea.entry_zone.lower,
+            entry_upper=idea.entry_zone.upper,
+            stop=plan.stop,
+            target=plan.target,
+        )
+        _validate_level_order(idea, levels)
+        return levels
+    return extract_numeric_scoring_levels(idea)
+
+
 def score_trade_idea(
     idea: TradeIdea,
     *,
