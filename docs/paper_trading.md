@@ -190,12 +190,23 @@ is required to verify max_open_notional_pct budget exposure` until a human
 attests equity.
 
 The default conservative configuration lives in
-`scripts/ops/stage1_cycle_turn.sh` (BTC-USD/ETH-USD, ONE_HOUR candles,
-lookback 200, default proposers `baseline` and `regime-aware`). Symbols,
-granularity, lookback, and the proposer set are env-overridable there
-(`CYCLE_SYMBOLS`, `CYCLE_GRANULARITY`, `CYCLE_LOOKBACK`, and space-separated
+`scripts/ops/stage1_cycle_turn.sh`: eight liquid Coinbase USD spot pairs
+(BTC, ETH, SOL, XRP, LTC, LINK, AVAX, DOT — all quoted above $1 so the default
+price precision of 0.01 stays meaningful), ONE_HOUR candles, lookback 200,
+default proposers `baseline` and `regime-aware`. A universe of just two symbols
+starves track-record depth: the busy-instrument skip admits at most one open
+idea per instrument, so per-turn proposal flow scales with the instrument set
+(issue #1215). Symbols, granularity, lookback, price precision, and the
+proposer set are env-overridable there (`CYCLE_SYMBOLS`, `CYCLE_GRANULARITY`,
+`CYCLE_LOOKBACK`, `CYCLE_PRICE_PRECISION`, and space-separated
 `CYCLE_PROPOSERS`, for example `CYCLE_PROPOSERS=baseline`); cadence belongs
 only in the scheduler entry.
+
+Shrinking `CYCLE_SYMBOLS` never strands an unresolved trade: each turn tops the
+snapshot fetch up with any instrument that still has an open idea or a filled
+idea awaiting closeout, so the exit monitor keeps receiving candles until the
+position resolves. Top-up fetches are per-symbol and non-fatal — a delisted
+instrument defers its own resolution without failing the turn.
 
 Strategy-backed proposers — the live strategy library running over the turn's
 snapshot through the `Proposer` contract — are opt-in until replay parity is

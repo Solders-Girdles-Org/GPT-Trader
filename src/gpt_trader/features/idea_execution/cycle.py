@@ -83,6 +83,47 @@ def _instrument_key(instrument: str) -> str:
     return instrument.casefold()
 
 
+@dataclass(frozen=True, slots=True)
+class BusyInstrument:
+    """Why an instrument must not receive a new proposal this turn."""
+
+    instrument: str
+    decision_id: str
+    reason: str
+
+
+def busy_instruments(service: TradeIdeaService) -> dict[str, BusyInstrument]:
+    """Instruments blocked from new proposals, keyed by casefolded instrument.
+
+    An instrument is busy while an idea for it is open, and also while a filled
+    trade awaits closeout attribution: until the outcome is recorded, the trade
+    is unresolved and the same ongoing signal must not pyramid a second position
+    onto it. Snapshot acquisition uses the same map to keep fetching candles for
+    busy instruments even after the configured universe drops them — otherwise a
+    filled idea could never resolve and would starve its instrument permanently
+    (issue #1215).
+    """
+    busy: dict[str, BusyInstrument] = {}
+    for view in service.list_views():
+        instrument_key = _instrument_key(view.idea.instrument)
+        if view.state in _OPEN_STATES:
+            busy[instrument_key] = BusyInstrument(
+                instrument=view.idea.instrument,
+                decision_id=view.idea.decision_id,
+                reason="instrument already has an open idea",
+            )
+        elif view.state is TradeIdeaState.FILLED and view.closeout_attribution is None:
+            busy.setdefault(
+                instrument_key,
+                BusyInstrument(
+                    instrument=view.idea.instrument,
+                    decision_id=view.idea.decision_id,
+                    reason="instrument has a filled idea awaiting closeout",
+                ),
+            )
+    return busy
+
+
 def _latest_approval_event(view: TradeIdeaView) -> AuditEvent | None:
     for event in reversed(view.events):
         if event.action is AuditAction.APPROVED:
@@ -340,25 +381,8 @@ class PaperCycleRunner:
     ) -> ProposerTurn:
         candidates = proposer.propose(snapshot)
 
-        # An instrument is busy while an idea for it is open, and also while a
-        # filled trade awaits closeout attribution: until the outcome is
-        # recorded, the trade is unresolved and the same ongoing signal must
-        # not pyramid a second position onto it.
-        busy_instruments: dict[str, tuple[str, str]] = {}
-        known_decision_ids: set[str] = set()
-        for view in self._service.list_views():
-            known_decision_ids.add(view.idea.decision_id)
-            instrument_key = _instrument_key(view.idea.instrument)
-            if view.state in _OPEN_STATES:
-                busy_instruments[instrument_key] = (
-                    view.idea.decision_id,
-                    "instrument already has an open idea",
-                )
-            elif view.state is TradeIdeaState.FILLED and view.closeout_attribution is None:
-                busy_instruments.setdefault(
-                    instrument_key,
-                    (view.idea.decision_id, "instrument has a filled idea awaiting closeout"),
-                )
+        busy = busy_instruments(self._service)
+        known_decision_ids = {view.idea.decision_id for view in self._service.list_views()}
         admitted = []
         skipped: list[dict[str, str]] = []
         for idea in candidates:
@@ -375,22 +399,22 @@ class PaperCycleRunner:
                 )
                 continue
             instrument_key = _instrument_key(idea.instrument)
-            busy = busy_instruments.get(instrument_key)
-            if busy is not None:
-                existing_decision_id, reason = busy
+            blocker = busy.get(instrument_key)
+            if blocker is not None:
                 skipped.append(
                     {
                         "instrument": idea.instrument,
-                        "reason": reason,
-                        "existing_decision_id": existing_decision_id,
+                        "reason": blocker.reason,
+                        "existing_decision_id": blocker.decision_id,
                     }
                 )
                 continue
             admitted.append(idea)
             known_decision_ids.add(idea.decision_id)
-            busy_instruments[instrument_key] = (
-                idea.decision_id,
-                "instrument already has an open idea",
+            busy[instrument_key] = BusyInstrument(
+                instrument=idea.instrument,
+                decision_id=idea.decision_id,
+                reason="instrument already has an open idea",
             )
 
         proposed_decision_ids: tuple[str, ...] = ()

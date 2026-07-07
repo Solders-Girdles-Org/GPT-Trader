@@ -21,9 +21,12 @@ from gpt_trader.core import Candle
 from gpt_trader.features.trade_ideas import (
     MarketSnapshot,
     SymbolSeries,
+    TimeHorizon,
+    TradeIdeaService,
     market_snapshot_to_payload,
 )
 from tests.unit.gpt_trader.cli.commands.conftest import attest_ideas_root
+from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
 
 # Relative to the wall clock: the ``ideas cycle``/``ideas approve`` CLI runs
 # on real time, and the baseline proposer derives idea expiry from the
@@ -254,6 +257,128 @@ def test_cycle_stateful_strategy_proposers_are_selectable(
         "snapshot-strategy-mean-reversion": 1,
         "snapshot-strategy-regime-switcher": 0,
     }
+
+
+def _flat_market_series(symbol: str, *, as_of: datetime) -> SymbolSeries:
+    start = as_of - timedelta(hours=60)
+    return SymbolSeries(
+        symbol=symbol,
+        granularity="ONE_HOUR",
+        candles=tuple(
+            Candle(
+                ts=start + timedelta(hours=index),
+                open=Decimal("100"),
+                high=Decimal("100"),
+                low=Decimal("100"),
+                close=Decimal("100"),
+                volume=Decimal("10"),
+            )
+            for index in range(59)
+        ),
+    )
+
+
+def _install_fake_coinbase_builder(
+    monkeypatch: pytest.MonkeyPatch, *, failing_symbols: frozenset[str] = frozenset()
+) -> list[tuple[str, ...]]:
+    """Fake the network snapshot build; returns the per-call symbol requests."""
+    requested: list[tuple[str, ...]] = []
+
+    async def fake_build(args: Any, request: Any) -> MarketSnapshot:
+        requested.append(request.symbols)
+        for symbol in request.symbols:
+            if symbol in failing_symbols:
+                raise RuntimeError(f"no candles for {symbol}")
+        return MarketSnapshot(
+            as_of=request.as_of,
+            source="test:fake-coinbase",
+            series=tuple(
+                _flat_market_series(symbol, as_of=request.as_of) for symbol in request.symbols
+            ),
+        )
+
+    monkeypatch.setattr("gpt_trader.cli.commands.ideas._build_coinbase_market_snapshot", fake_build)
+    return requested
+
+
+def _seed_busy_instrument(root: Path, instrument: str) -> str:
+    decision_id = f"trade-{datetime.now(UTC):%Y%m%d}-{instrument.replace('-', '').lower()}-busy"
+    TradeIdeaService(root).propose(
+        build_trade_idea(
+            decision_id=decision_id,
+            instrument=instrument,
+            time_horizon=TimeHorizon(
+                expected_hold="3-10 days",
+                expires_at=datetime.now(UTC) + timedelta(days=7),
+            ),
+        ),
+        actor_id="test-proposer",
+    )
+    return decision_id
+
+
+def test_cycle_snapshot_tops_up_busy_instruments_outside_the_universe(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # An open ETH idea whose symbol the configured universe no longer covers
+    # must still get candles, or its eventual fill could never resolve and the
+    # instrument would starve permanently (issue #1215).
+    root = tmp_path / "ideas"
+    attest_ideas_root(root)
+    _seed_busy_instrument(root, "ETH-USD")
+    requested = _install_fake_coinbase_builder(monkeypatch)
+
+    exit_code, response = _run_json(
+        capsys,
+        [
+            "ideas",
+            "cycle",
+            "--from-coinbase",
+            "--symbols",
+            "BTC-USD",
+            "--granularity",
+            "ONE_HOUR",
+            "--lookback",
+            "60",
+            *_root_args(root),
+        ],
+    )
+
+    assert exit_code == 0
+    assert response["success"] is True
+    assert response["data"]["snapshot"]["symbols"] == ["BTC-USD", "ETH-USD"]
+    assert requested == [("BTC-USD",), ("ETH-USD",)]
+
+
+def test_cycle_busy_instrument_top_up_failure_does_not_fail_the_turn(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "ideas"
+    attest_ideas_root(root)
+    _seed_busy_instrument(root, "ETH-USD")
+    requested = _install_fake_coinbase_builder(monkeypatch, failing_symbols=frozenset({"ETH-USD"}))
+
+    exit_code, response = _run_json(
+        capsys,
+        [
+            "ideas",
+            "cycle",
+            "--from-coinbase",
+            "--symbols",
+            "BTC-USD",
+            "--granularity",
+            "ONE_HOUR",
+            "--lookback",
+            "60",
+            *_root_args(root),
+        ],
+    )
+
+    assert exit_code == 0
+    assert response["success"] is True
+    assert response["data"]["snapshot"]["symbols"] == ["BTC-USD"]
+    # The top-up was attempted and its failure deferred, not fatal.
+    assert requested == [("BTC-USD",), ("ETH-USD",)]
 
 
 def test_cycle_from_coinbase_requires_market_parameters(
