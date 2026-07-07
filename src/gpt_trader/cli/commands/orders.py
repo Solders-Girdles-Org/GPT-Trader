@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 import json
 from argparse import Namespace
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import asdict
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Protocol, TypeVar, cast, runtime_checkable
 
@@ -14,6 +15,7 @@ from gpt_trader.app.container import create_application_container
 from gpt_trader.cli import options, services
 from gpt_trader.cli.response import CliErrorCode, CliResponse
 from gpt_trader.core import OrderSide, OrderType, TimeInForce
+from gpt_trader.persistence.event_store import EventStore
 from gpt_trader.persistence.orders_store import OrderRecord, OrdersStore, OrderStatus
 
 _CONFIG_SKIP_KEYS = {
@@ -35,6 +37,8 @@ _CONFIG_SKIP_KEYS = {
 _DEFAULT_HISTORY_LIMIT = 20
 _MAX_HISTORY_LIMIT = 200
 _HISTORY_COMMAND_NAME = "orders history list"
+_SUPPRESSED_COMMAND_NAME = "orders suppressed"
+_SUPPRESSED_EVENT_TYPE = "order_suppressed"
 T = TypeVar("T")
 
 
@@ -102,6 +106,23 @@ def register(subparsers: Any) -> None:
     )
     options.add_output_options(history_list, include_quiet=False)
     history_list.set_defaults(handler=_handle_history_list, subcommand="history list")
+
+    suppressed = orders_subparsers.add_parser(
+        "suppressed",
+        help="Summarize dry-run suppressed order writes (order_suppressed events)",
+    )
+    options.add_profile_option(suppressed, inherit_from_parent=True)
+    suppressed.add_argument(
+        "--limit",
+        type=int,
+        default=_DEFAULT_HISTORY_LIMIT,
+        help=(
+            "Maximum number of events to return (1-"
+            f"{_MAX_HISTORY_LIMIT}, default {_DEFAULT_HISTORY_LIMIT})"
+        ),
+    )
+    options.add_output_options(suppressed, include_quiet=False)
+    suppressed.set_defaults(handler=_handle_suppressed, subcommand="suppressed")
 
 
 def _handle_preview(args: Namespace) -> CliResponse | int:
@@ -322,6 +343,126 @@ def _handle_history_list(args: Namespace) -> CliResponse | int:
 
     print(_format_history_text(records, limit, symbol, status_filter))
     return 0
+
+
+def _handle_suppressed(args: Namespace) -> CliResponse | int:
+    output_format = getattr(args, "output_format", "text")
+    command_name = _SUPPRESSED_COMMAND_NAME
+
+    try:
+        limit = _validate_history_limit(args.limit)
+    except ValueError as exc:
+        message = str(exc)
+        if output_format == "json":
+            return CliResponse.error_response(
+                command=command_name,
+                code=CliErrorCode.INVALID_ARGUMENT,
+                message=message,
+                details={"limit": args.limit},
+            )
+        print(f"Error: {message}")
+        return 1
+
+    try:
+        events = _with_event_store(
+            args,
+            lambda store: store.get_recent_by_type(_SUPPRESSED_EVENT_TYPE, limit),
+        )
+    except Exception as exc:
+        if output_format == "json":
+            return CliResponse.error_response(
+                command=command_name,
+                code=CliErrorCode.OPERATION_FAILED,
+                message="Failed to read suppressed-order events",
+                details={"error": str(exc)},
+            )
+        print(f"Error: Failed to read suppressed-order events: {exc}")
+        return 1
+
+    rows = [_suppressed_row(event) for event in reversed(events)]
+    counts_by_action: dict[str, int] = {}
+    for row in rows:
+        action = cast(str, row["action"])
+        counts_by_action[action] = counts_by_action.get(action, 0) + 1
+
+    if output_format == "json":
+        return CliResponse.success_response(
+            command=command_name,
+            data={
+                "events": rows,
+                "count": len(rows),
+                "counts_by_action": counts_by_action,
+                "filters": {"limit": limit},
+            },
+        )
+
+    if not rows:
+        print("No suppressed order writes recorded.")
+        return 0
+
+    print(_format_suppressed_text(rows, counts_by_action, limit))
+    return 0
+
+
+def _suppressed_row(event: Any) -> dict[str, Any]:
+    data = event.get("data") if isinstance(event, Mapping) else None
+    if not isinstance(data, Mapping):
+        data = {}
+    timestamp = data.get("timestamp")
+    recorded_at = (
+        datetime.fromtimestamp(timestamp, tz=UTC).isoformat()
+        if isinstance(timestamp, (int, float))
+        else None
+    )
+    return {
+        "recorded_at": recorded_at,
+        "action": str(data.get("action") or "unknown"),
+        "symbol": data.get("symbol"),
+        "side": data.get("side"),
+        "quantity": data.get("quantity"),
+        "price": data.get("price"),
+        "order_id": data.get("order_id"),
+        "reason": data.get("reason"),
+        "bot_id": data.get("bot_id"),
+    }
+
+
+def _format_suppressed_text(
+    rows: list[dict[str, Any]],
+    counts_by_action: dict[str, int],
+    limit: int,
+) -> str:
+    count = len(rows)
+    counts_line = ", ".join(
+        f"{action}={counts_by_action[action]}" for action in sorted(counts_by_action)
+    )
+    lines = [
+        f"Suppressed order writes (limit={limit})",
+        f"Returned {count} event{'s' if count != 1 else ''} (newest first)",
+        f"Counts by action: {counts_line}",
+        "",
+    ]
+    for row in rows:
+        detail_parts = [
+            f"{key}={row[key]}"
+            for key in ("symbol", "side", "quantity", "price", "order_id", "bot_id")
+            if row.get(key) is not None
+        ]
+        recorded = row["recorded_at"] or "unknown-time"
+        reason = row["reason"] or "unknown"
+        detail = f" {' '.join(detail_parts)}" if detail_parts else ""
+        lines.append(f"{recorded} {row['action']} (reason={reason}){detail}")
+    return "\n".join(lines)
+
+
+def _with_event_store(args: Namespace, callback: Callable[[EventStore], T]) -> T:
+    config = services.build_config_from_args(args, skip=_CONFIG_SKIP_KEYS)
+    container = create_application_container(config)
+    store = container.event_store
+    try:
+        return callback(store)
+    finally:
+        store.close()
 
 
 def _validate_history_limit(limit: int) -> int:

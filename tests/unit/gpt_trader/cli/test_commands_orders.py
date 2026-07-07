@@ -1,5 +1,8 @@
 """CLI `orders` command tests: payload building, previews, editing, history.
 
+The `orders suppressed` tests live in test_commands_orders_suppressed.py
+(400-line test-hygiene cap).
+
 Consolidated from test_commands_orders_editing.py and
 test_commands_orders_history.py (dedupe cluster 65a…81, #1083); all three
 shared the orders_command_test_helpers boundary doubles.

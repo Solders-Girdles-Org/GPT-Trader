@@ -114,7 +114,9 @@ Exit criteria:
 
 - Preflight report is current.
 - Runtime logs and status output are clean.
-- Risk guards produce expected decisions.
+- Risk guards produce expected decisions. Inspect the writes the dry run
+  suppressed with `uv run gpt-trader orders suppressed --profile canary`
+  (counts by action plus the most recent events).
 - Operator can stop the process and inspect state.
 
 ### Gate 3: Human-Approved Canary
