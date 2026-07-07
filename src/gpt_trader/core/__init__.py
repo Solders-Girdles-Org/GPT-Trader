@@ -24,6 +24,14 @@ from gpt_trader.core.errors import (
     RateLimitError,
 )
 
+# Instrument taxonomy
+from gpt_trader.core.instruments import (
+    AssetClass,
+    Instrument,
+    InstrumentParseError,
+    ProductType,
+)
+
 # Market data types
 from gpt_trader.core.market import (
     Candle,
@@ -60,6 +68,11 @@ __all__ = [
     "TimeInForce",
     "MarketType",
     "OrderStatus",
+    # Instrument taxonomy
+    "AssetClass",
+    "Instrument",
+    "InstrumentParseError",
+    "ProductType",
     # Market data
     "Candle",
     "Quote",

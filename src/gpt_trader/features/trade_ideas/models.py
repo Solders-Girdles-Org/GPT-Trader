@@ -20,6 +20,8 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any
 
+from gpt_trader.core.instruments import Instrument, ProductType
+
 _SAFE_DECISION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
@@ -32,14 +34,6 @@ class AutonomyMode(str, Enum):
     RESEARCH_ONLY = "research_only"
     HUMAN_APPROVED_EXECUTION = "human_approved_execution"
     BOUNDED_AUTONOMY = "bounded_autonomy"
-
-
-class ProductType(str, Enum):
-    SPOT = "spot"
-    FUTURES = "futures"
-    OPTIONS = "options"
-    EVENT_CONTRACT = "event_contract"
-    OTHER = "other"
 
 
 class TradeDirection(str, Enum):
@@ -359,6 +353,18 @@ class TradeIdea:
     def __post_init__(self) -> None:
         if not is_safe_decision_id(self.decision_id):
             raise ValueError("decision_id must be a safe path segment")
+
+    @property
+    def instrument_info(self) -> Instrument:
+        """Structured view of the instrument string (derived, never persisted).
+
+        The persisted schema keeps ``instrument`` as a plain string: idea
+        records are content-hashed and audit events chain on those hashes, so
+        the serialized form must not change. Raises
+        :class:`gpt_trader.core.instruments.InstrumentParseError` when the
+        string does not match a known shape.
+        """
+        return Instrument.parse(self.instrument)
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
