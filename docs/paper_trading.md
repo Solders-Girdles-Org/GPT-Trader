@@ -210,6 +210,32 @@ above that (the default 200 is). For sub-cent symbols the proposal price
 levels quantize to zero at the default precision and fail closed; pass a
 finer `--price-precision` for the turn.
 
+### Bounded-autonomy turns (Stage 2)
+
+`scripts/ops/stage2_cycle_turn.sh` runs the same turn under bounded autonomy. It
+sets the two audited Stage-2 gates (`GPT_TRADER_IDEAS_AUTO_APPROVAL=1`,
+`GPT_TRADER_IDEAS_AUTO_EXECUTION=1`), system-approves every violation-free
+proposal inside the budget envelope (`ideas approve --auto-sweep`), then runs one
+cycle turn so those approvals paper-execute against the turn's snapshot. It is
+paper-only and never contacts a live broker. To run unattended Stage-2 turns,
+point the launchd/cron entry below at `stage2_cycle_turn.sh` instead of
+`stage1_cycle_turn.sh`; the same env overrides (`CYCLE_SYMBOLS`, etc.), overlap
+lock, and manifest-row evidence contract apply.
+
+Enabling Stage 2 is an operator act with two audited preconditions:
+
+- The autonomy log resolves to `bounded_autonomy` (`ideas autonomy show`). Set it
+  with `ideas autonomy set bounded_autonomy --actor <you> --reason "..."`. Both
+  gates silently no-op under any other mode, so a breach that ratchets autonomy
+  down (daily-loss or drawdown-from-peak) halts auto-approval and auto-execution
+  until the mode is re-earned — the down-ratchet is audited, never silent.
+- Account equity is attested (the same Stage-1 prerequisite above).
+
+Reverting is immediate and reversible: point the scheduler back at
+`stage1_cycle_turn.sh`, or run
+`ideas autonomy set human_approved_execution --actor <you> --reason "..."` to drop
+the audited mode so both gates no-op regardless of the env vars.
+
 ### launchd (macOS)
 
 Save as `~/Library/LaunchAgents/com.gpt-trader.stage1-cycle.plist`, replacing
