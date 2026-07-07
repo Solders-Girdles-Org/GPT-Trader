@@ -71,9 +71,11 @@ enabled and the autonomy log still resolves to `bounded_autonomy` at execution
 time. The execution gate reuses the daily-loss ratchet, so a breach lowers the
 mode before remaining system-approved ideas can execute.
 
-**The in-process event-driven lane now exists behind a default-off gate**
-(`event_driven_paper_lane_enabled`, #1191). When the operator enables it, the
-live engine carries each proposed idea through the risk kernel — system
+**The in-process event-driven lane exists behind a default-off gate**
+(`event_driven_paper_lane_enabled`, #1191) and is **operator-enabled on the
+`paper` profile** (recorded approval 2026-07-07; `config/profiles/paper.yaml`).
+With the gate on, the live engine carries each proposed idea through the risk
+kernel — system
 approval, then an execution-time autonomy re-check — into paper execution in
 the same engine cycle (`features/idea_execution/event_lane.py`), honoring the
 same two env gates and the audited autonomy mode per decision. Kernel denials
@@ -83,9 +85,9 @@ the next event, not the next hourly turn. The hourly batch cycle continues
 unchanged as the evidence harness
 ([adopt-event-driven-execution-topology](decisions/adopt-event-driven-execution-topology.md)).
 
-This is mechanism state, not a promotion claim. Live order submission remains
-out of scope, and operationally flipping either flag remains an operator act
-gated by the measured-outcome rubric.
+This is not a promotion claim. Live order submission remains out of scope; the
+lane is paper-only and still bounded by the two env gates, the audited
+autonomy mode, and the budget envelope at event time.
 
 ## The structural fact
 
