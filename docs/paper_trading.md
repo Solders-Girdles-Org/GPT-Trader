@@ -326,6 +326,50 @@ print(f"consecutive clean days: {streak} (through {max(days, default='n/a')})")
 EOF
 ```
 
+## Replay Evidence for the Stage 1 → 2 Scorecard
+
+Three scorecard gates (`risk_calibration`, `expectancy`, `benchmark_edge`)
+need closed-idea outcomes, and the wall-clock observation window is 60 days.
+Replay evidence makes those quantities readable now, without waiting:
+`ideas replay tournament` replays proposers point-in-time over a recorded
+snapshot window, and `ideas scorecard --replay-report <path>` reports the
+result as replay-labeled evidence **alongside** the wall-clock gates — it is
+never blended into a gate verdict, so the two evidence classes stay
+distinguishable in every output.
+
+One replay-evidence turn is scripted:
+
+```bash
+scripts/ops/replay_evidence.sh
+```
+
+The script mirrors the Stage-2 cycle turn's universe and granularity so the
+replay measures the proposer set that is actually running: it snapshot-builds
+the paper universe from read-only public Coinbase candles
+(`ideas snapshot build --from-coinbase`), runs one tournament per symbol with
+the active pair (`baseline-ma-10-50,regime-aware-ma-10-50` — the deterministic
+baseline is the benchmark side of the edge comparison), then renders the
+scorecard with all reports attached. Each run writes a self-contained
+directory under `var/data/trade_ideas/replay_evidence/<UTC timestamp>/`:
+the snapshot, per-symbol tournament reports, and the durable scorecard
+artifact. Override `REPLAY_SYMBOLS`, `REPLAY_GRANULARITY`, `REPLAY_LOOKBACK`,
+`REPLAY_PROPOSERS`, or `REPLAY_EVIDENCE_DIR` per invocation; everything is
+broker-free and never reads accounts or places orders.
+
+To attach replay evidence to any scorecard render by hand:
+
+```bash
+uv run gpt-trader ideas scorecard \
+  --replay-report var/data/trade_ideas/replay_evidence/<run>/tournament_BTC-USD.json \
+  --replay-report var/data/trade_ideas/replay_evidence/<run>/tournament_ETH-USD.json
+```
+
+Both raw replay artifacts and the CliResponse envelope written by
+`--format json --output <path>` are accepted. Interpretation: per-proposer
+`target_hit_rate` / `stop_hit_rate` are the replay read on risk calibration,
+`average_return_r` is the replay read on expectancy, and the `edge vs
+baseline-ma-…` lines are the replay read on benchmark edge.
+
 ## Readiness Evidence Inputs
 
 Paper trading produces evidence that feeds the readiness checklist; it does not

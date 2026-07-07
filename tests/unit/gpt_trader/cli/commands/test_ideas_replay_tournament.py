@@ -244,3 +244,68 @@ def test_replay_tournament_rejects_unknown_proposer_id(
     assert exit_code == 1
     assert response["errors"][0]["code"] == CliErrorCode.INVALID_ARGUMENT.value
     assert response["errors"][0]["details"]["field"] == "proposers"
+
+
+def _regime_history_fixture() -> dict[str, list[dict[str, str]]]:
+    """55 flat closes (the regime-aware floor for ma-2-4) then a crossover tail."""
+    closes = ["100"] * 55 + ["110", "90", "112", "112", "132"]
+    return {
+        "candles": [
+            _candle(index - len(closes), open_=close, high=close, low=close, close=close)
+            for index, close in enumerate(closes)
+        ]
+    }
+
+
+def test_replay_tournament_ranks_regime_aware_beside_baseline(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fixture = _write_fixture(tmp_path / "regime-candles.json", _regime_history_fixture())
+    argv = _tournament_args(fixture)
+    argv[argv.index("--proposers") + 1] = "baseline-ma-2-4,regime-aware-ma-2-4"
+
+    exit_code, response = _run_json(capsys, argv)
+
+    assert exit_code == 0
+    data = response["data"]
+    assert data["proposer_count"] == 2
+    proposer_ids = {report["proposer_id"] for report in data["reports"]}
+    assert proposer_ids == {"baseline-ma-2-4", "regime-aware-ma-2-4"}
+    # The shared window starts at the regime-confirmation floor and both
+    # proposers trade: the regime-aware proposer only relabels confidence.
+    assert all(report["ideas_proposed"] >= 1 for report in data["reports"])
+
+
+def test_replay_tournament_regime_aware_floor_dominates_min_history(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fixture = _write_fixture(tmp_path / "regime-candles.json", _regime_history_fixture())
+    argv = _tournament_args(fixture)
+    argv[argv.index("--proposers") + 1] = "baseline-ma-2-4,regime-aware-ma-2-4"
+    argv.extend(["--min-history", "10"])
+
+    exit_code, response = _run_json(capsys, argv)
+
+    assert exit_code == 1
+    assert response["errors"][0]["code"] == CliErrorCode.INVALID_ARGUMENT.value
+    # The shared window floor is the regime-aware proposer's confirmation
+    # floor (long-EMA 50 + min-regime-ticks 5 = 55), not the baseline's.
+    assert "--min-history must be at least 55" in response["errors"][0]["message"]
+
+
+def test_replay_tournament_rejects_malformed_regime_aware_windows(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fixture = _write_fixture(tmp_path / "candles.json", _tournament_fixture())
+    argv = _tournament_args(fixture)
+    argv[argv.index("--proposers") + 1] = "regime-aware-ma-2"
+
+    exit_code, response = _run_json(capsys, argv)
+
+    assert exit_code == 1
+    assert response["errors"][0]["code"] == CliErrorCode.INVALID_ARGUMENT.value
+    assert response["errors"][0]["details"]["field"] == "proposers"
+    assert "regime-aware-ma-<short>-<long>" in response["errors"][0]["message"]
