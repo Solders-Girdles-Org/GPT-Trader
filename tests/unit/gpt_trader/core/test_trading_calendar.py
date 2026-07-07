@@ -17,6 +17,7 @@ from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
 
+from gpt_trader.core.instruments import InstrumentParseError
 from gpt_trader.core.risk_units import trading_day
 from gpt_trader.core.trading_calendar import (
     SESSION_24X7,
@@ -24,6 +25,7 @@ from gpt_trader.core.trading_calendar import (
     AlwaysOpenCalendar,
     ExchangeBackedCalendar,
     TradingCalendar,
+    get_calendar_for_instrument,
     get_trading_calendar,
 )
 
@@ -131,3 +133,21 @@ class TestGetTradingCalendar:
     def test_unknown_session_raises(self) -> None:
         with pytest.raises(ValueError, match="Unknown trading session"):
             get_trading_calendar("XNAS")
+
+
+class TestGetCalendarForInstrument:
+    def test_crypto_pair_maps_to_24x7(self) -> None:
+        assert get_calendar_for_instrument("BTC-USD").session_id == SESSION_24X7
+
+    def test_equity_ticker_maps_to_xnys(self) -> None:
+        assert get_calendar_for_instrument("AAPL").session_id == SESSION_XNYS
+
+    def test_lookup_is_case_insensitive_like_instrument_keying(self) -> None:
+        # Busy tracking and snapshot marks key on casefolded instrument
+        # strings, so session resolution must accept the same spellings.
+        assert get_calendar_for_instrument("btc-usd").session_id == SESSION_24X7
+        assert get_calendar_for_instrument("aapl").session_id == SESSION_XNYS
+
+    def test_unclassifiable_instrument_raises(self) -> None:
+        with pytest.raises(InstrumentParseError):
+            get_calendar_for_instrument("BTC-USD-PERP")

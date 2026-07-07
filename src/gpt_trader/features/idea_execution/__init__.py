@@ -32,6 +32,7 @@ from gpt_trader.features.idea_execution.cycle import (
     PaperCycleResult,
     PaperCycleRunner,
     ProposerTurn,
+    SessionCalendarResolver,
     SnapshotProvider,
     busy_instruments,
 )
@@ -85,6 +86,7 @@ __all__ = [
     "PaperIdeaExecutor",
     "PaperOnlyLaneError",
     "ProposerTurn",
+    "SessionCalendarResolver",
     "SnapshotProvider",
     "busy_instruments",
     "paper_auto_execution_gate_evidence",
