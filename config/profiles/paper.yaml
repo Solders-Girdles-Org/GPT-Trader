@@ -31,6 +31,10 @@ execution:
   dry_run: true
   mock_broker: true
   mock_fills: true
+  # Operator-enabled 2026-07-07 (RJ): event-driven paper lane (#1191).
+  # Paper-only; still requires GPT_TRADER_IDEAS_AUTO_APPROVAL /
+  # GPT_TRADER_IDEAS_AUTO_EXECUTION and an audited bounded_autonomy mode.
+  event_driven_paper_lane: true
 
 monitoring:
   log_level: "INFO"
