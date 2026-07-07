@@ -205,7 +205,20 @@ def _required_payload_datetime(payload: Mapping[str, Any], key: str, field: str)
     return parsed
 
 
-def _load_candle_fixture(path: Path) -> tuple[Candle, ...]:
+def _load_candle_fixture(
+    path: Path,
+    *,
+    symbol: str | None = None,
+    granularity: str | None = None,
+) -> tuple[Candle, ...]:
+    """Load replay candles from a bare fixture or a recorded market snapshot.
+
+    Accepts either a JSON object with a top-level ``candles`` array or a
+    recorded ``MarketSnapshot`` payload (``ideas snapshot build`` output and
+    the cycle's persisted per-run snapshots), so replay can run over recorded
+    windows without hand-built fixtures. Snapshot payloads need ``symbol`` to
+    pick the series; ``granularity`` disambiguates multi-granularity series.
+    """
     try:
         raw_payload = path.read_text(encoding="utf-8")
     except OSError as error:
@@ -218,11 +231,46 @@ def _load_candle_fixture(path: Path) -> tuple[Candle, ...]:
     if not isinstance(payload, dict):
         raise CandleInputError("Candle fixture must be a JSON object", field="candles")
 
+    if "series" in payload and "candles" not in payload:
+        return _candles_from_snapshot_payload(payload, symbol=symbol, granularity=granularity)
+
     raw_candles = payload.get("candles")
     if not isinstance(raw_candles, list):
         raise CandleInputError("Candle fixture must contain a candles array", field="candles")
 
     return tuple(_parse_candle(row, index) for index, row in enumerate(raw_candles))
+
+
+def _candles_from_snapshot_payload(
+    payload: Mapping[str, Any],
+    *,
+    symbol: str | None,
+    granularity: str | None,
+) -> tuple[Candle, ...]:
+    if symbol is None:
+        raise CandleInputError(
+            "A recorded snapshot payload needs a symbol to pick its candle series",
+            field="symbol",
+        )
+    snapshot = _market_snapshot_from_payload(payload)
+    matches = [series for series in snapshot.series if series.symbol == symbol]
+    if granularity is not None and len(matches) > 1:
+        matches = [series for series in matches if series.granularity == granularity]
+    if not matches:
+        available = ", ".join(f"{series.symbol}:{series.granularity}" for series in snapshot.series)
+        raise CandleInputError(
+            f"Recorded snapshot has no candle series for '{symbol}'"
+            + (f" at granularity '{granularity}'" if granularity is not None else "")
+            + (f" (available: {available})" if available else ""),
+            field="symbol",
+        )
+    if len(matches) > 1:
+        raise CandleInputError(
+            f"Recorded snapshot has multiple candle series for '{symbol}'; "
+            "pass a granularity to disambiguate",
+            field="granularity",
+        )
+    return matches[0].candles
 
 
 def _parse_candle(row: Any, index: int) -> Candle:

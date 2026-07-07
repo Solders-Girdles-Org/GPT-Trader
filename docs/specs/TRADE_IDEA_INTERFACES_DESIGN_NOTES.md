@@ -107,6 +107,33 @@ Kernel denials are audited on the idea trail (`auto_approval_skipped` /
 `auto_execution_skipped`). Paper only: live order submission stays gated by
 [docs/DIRECTION.md](../DIRECTION.md).
 
+## Promotion scorecard and replay evidence (#1193)
+
+**`ideas scorecard`** scores the Stage 1 → 2 promotion gates of the
+[measured-outcome rubric](../decisions/adopt-measured-outcome-rubric.md) —
+track-record depth, eligibility pass rate, attribution coverage, risk
+calibration, expectancy (avg R), benchmark edge vs the deterministic baseline,
+max drawdown-from-peak — plus the loop-health reds (proposals flowing,
+attribution coverage, audit integrity), with the observation-window rule
+(rolling 60 days *and* ≥ 200 closed ideas, whichever is larger) applied.
+Every metric computes from the idea-level closeout/audit trail
+(`features/trade_ideas/scorecard.py`); the batch cycle's run artifacts are
+launchd scaffolding and are never read, test-enforced, so the evidence stays
+valid under the event-driven lane. Gates that lack inputs render
+`not_yet_measurable` rather than pass — drawdown-from-peak stays unmeasurable
+until the continuous portfolio monitors (#1192) land, so the scorecard cannot
+claim promotability before then. Thresholds are the owner-tunable values
+recorded on the rubric decision.
+
+**Replay-accelerated evidence.** The `ideas replay` commands accept a recorded
+market-snapshot payload (`ideas snapshot build` output, or a cycle run's
+persisted snapshot) as `--file` input in addition to bare candle fixtures, so
+calibration and edge compute at machine speed over recorded windows.
+`ideas scorecard --replay-report <json>` renders those figures alongside the
+wall-clock gates, always labeled `replay-derived` and never blended into a
+gate verdict; whether replay evidence counts toward promotion is a separate
+owner call recorded on the rubric decision.
+
 ## Design Principles
 
 1. **Thin adapters only.** Interfaces parse input, resolve actor identity,
