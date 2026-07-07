@@ -139,6 +139,7 @@ def make_cycle_runner(
     *,
     proposers: list | None = None,
     execute_approved: bool = True,
+    now: datetime = CYCLE_NOW,
 ) -> PaperCycleRunner:
     return PaperCycleRunner(
         service,
@@ -146,7 +147,7 @@ def make_cycle_runner(
         proposers=proposers if proposers is not None else [BaselineProposer()],
         broker=DeterministicBroker(),
         execute_approved=execute_approved,
-        now_factory=lambda: CYCLE_NOW,
+        now_factory=lambda: now,
     )
 
 

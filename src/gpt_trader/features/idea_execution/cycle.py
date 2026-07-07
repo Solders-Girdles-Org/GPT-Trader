@@ -33,6 +33,8 @@ from typing import Any
 
 from filelock import FileLock, Timeout
 
+from gpt_trader.core.instruments import InstrumentParseError
+from gpt_trader.core.trading_calendar import TradingCalendar, get_calendar_for_instrument
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.brokerages.mock import DeterministicBroker
 from gpt_trader.features.idea_execution.executor import (
@@ -76,6 +78,16 @@ SnapshotProvider = Callable[[], tuple[MarketSnapshot, str]]
 The provider owns acquisition (network fetch or file load); the runner never
 imports a market-data client, so the paper lane's import topology stays
 paper-only.
+"""
+
+SessionCalendarResolver = Callable[[str], TradingCalendar]
+"""Maps an instrument string to the session calendar it trades on.
+
+Injected like ``SnapshotProvider`` so deterministic tests can pin session
+state; the default resolves through the instrument taxonomy
+(``get_calendar_for_instrument``). May raise ``InstrumentParseError`` for
+unclassifiable instruments — the runner turns that into a loud per-candidate
+skip, never a silent pass.
 """
 
 
@@ -143,6 +155,7 @@ class ProposerTurn:
     proposal_count: int
     proposed_decision_ids: tuple[str, ...]
     skipped_open_instruments: tuple[dict[str, str], ...]
+    skipped_closed_sessions: tuple[dict[str, str], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -150,6 +163,7 @@ class ProposerTurn:
             "proposal_count": self.proposal_count,
             "proposed_decision_ids": list(self.proposed_decision_ids),
             "skipped_open_instruments": list(self.skipped_open_instruments),
+            "skipped_closed_sessions": list(self.skipped_closed_sessions),
         }
 
 
@@ -184,6 +198,7 @@ class PaperCycleResult:
     execution: ExecutionTurn
     queue: dict[str, Any] = field(default_factory=dict)
     report_summary: dict[str, Any] = field(default_factory=dict)
+    session_gate: tuple[dict[str, Any], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -192,6 +207,7 @@ class PaperCycleResult:
             "finished_at": self.finished_at.isoformat(),
             "outcome": "completed",
             "snapshot": self.snapshot,
+            "session_gate": [dict(decision) for decision in self.session_gate],
             "expired_decision_ids": list(self.expired_decision_ids),
             "attributed_decision_ids": list(self.attributed_decision_ids),
             "resolved_decision_ids": list(self.resolved_decision_ids),
@@ -226,6 +242,7 @@ class PaperCycleRunner:
         execute_approved: bool = True,
         actor_id: str = DEFAULT_CYCLE_ACTOR_ID,
         now_factory: Callable[[], datetime] | None = None,
+        session_calendar_resolver: SessionCalendarResolver | None = None,
     ) -> None:
         self._service = service
         self._cycle_root = cycle_root
@@ -234,6 +251,7 @@ class PaperCycleRunner:
         self._execute_approved = execute_approved
         self._actor_id = actor_id
         self._now_factory = now_factory or (lambda: datetime.now(UTC))
+        self._session_calendar_resolver = session_calendar_resolver or get_calendar_for_instrument
         # The executor must share the turn's clock: with an injected clock
         # (deterministic or historical turns) a wall-clock expiry check would
         # refuse ideas the rest of the turn still considers live.
@@ -317,9 +335,17 @@ class PaperCycleRunner:
         snapshot_info = self._persist_snapshot(snapshot, snapshot_reference, run_dir)
         row["snapshot"] = snapshot_info
 
+        # One session decision per snapshot instrument per turn, evaluated at
+        # the turn's own clock and recorded on the manifest row so a quiet
+        # turn (equity market closed) explains itself in the evidence trail.
+        session_gate = tuple(
+            self._session_decision(series.symbol, started_at) for series in snapshot.series
+        )
+        row["session_gate"] = [dict(decision) for decision in session_gate]
+
         proposer_turns: list[ProposerTurn] = []
         for proposer in self._proposers:
-            turn = self._run_proposer(proposer, snapshot, snapshot_reference)
+            turn = self._run_proposer(proposer, snapshot, snapshot_reference, started_at)
             proposer_turns.append(turn)
             row["proposers"] = [item.to_dict() for item in proposer_turns]
 
@@ -371,13 +397,47 @@ class PaperCycleRunner:
             execution=execution,
             queue=queue_summary,
             report_summary=report_summary,
+            session_gate=session_gate,
         )
+
+    def _session_decision(self, instrument: str, moment: datetime) -> dict[str, Any]:
+        """Answer "may this instrument trade at ``moment``?" as manifest evidence."""
+        try:
+            calendar = self._session_calendar_resolver(instrument)
+        except InstrumentParseError as error:
+            return {
+                "instrument": instrument,
+                "session": None,
+                "open": False,
+                "reason": f"instrument is not classifiable: {error}",
+            }
+        decision: dict[str, Any] = {
+            "instrument": instrument,
+            "session": calendar.session_id,
+            "open": calendar.is_open(moment),
+        }
+        if not decision["open"]:
+            next_open = calendar.next_open(moment)
+            decision["reason"] = (
+                f"market closed for session {calendar.session_id} "
+                f"at {moment.isoformat()}"
+                + (f"; next open {next_open.isoformat()}" if next_open is not None else "")
+            )
+        return decision
+
+    def _closed_session_skip(self, instrument: str, moment: datetime) -> dict[str, str] | None:
+        """Return a skip entry when ``instrument`` must not trade at ``moment``."""
+        decision = self._session_decision(instrument, moment)
+        if decision["open"]:
+            return None
+        return {"instrument": instrument, "reason": str(decision["reason"])}
 
     def _run_proposer(
         self,
         proposer: Proposer,
         snapshot: MarketSnapshot,
         snapshot_reference: str,
+        moment: datetime,
     ) -> ProposerTurn:
         candidates = proposer.propose(snapshot)
 
@@ -385,6 +445,7 @@ class PaperCycleRunner:
         known_decision_ids = {view.idea.decision_id for view in self._service.list_views()}
         admitted = []
         skipped: list[dict[str, str]] = []
+        skipped_closed: list[dict[str, str]] = []
         for idea in candidates:
             # Deterministic proposers emit the same decision_id for the same
             # snapshot, so a rerun over a saved snapshot must skip
@@ -397,6 +458,14 @@ class PaperCycleRunner:
                         "existing_decision_id": idea.decision_id,
                     }
                 )
+                continue
+            # Session gate (issue #1232): a sessioned instrument outside its
+            # market hours is skipped loudly and — deliberately — without
+            # touching the busy map, so the skip cannot block a later
+            # proposer or a later turn.
+            closed_skip = self._closed_session_skip(idea.instrument, moment)
+            if closed_skip is not None:
+                skipped_closed.append(closed_skip)
                 continue
             instrument_key = _instrument_key(idea.instrument)
             blocker = busy.get(instrument_key)
@@ -440,6 +509,7 @@ class PaperCycleRunner:
             proposal_count=len(proposed_decision_ids),
             proposed_decision_ids=proposed_decision_ids,
             skipped_open_instruments=tuple(skipped),
+            skipped_closed_sessions=tuple(skipped_closed),
         )
 
     def _execute_approved_ideas(

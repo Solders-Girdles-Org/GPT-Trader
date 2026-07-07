@@ -27,6 +27,8 @@ from datetime import UTC, date, datetime
 from functools import lru_cache
 from typing import TYPE_CHECKING, Protocol
 
+from gpt_trader.core.instruments import AssetClass, Instrument
+
 if TYPE_CHECKING:
     import pandas
 
@@ -34,6 +36,14 @@ SESSION_24X7 = "24x7"
 SESSION_XNYS = "XNYS"
 
 SUPPORTED_SESSIONS = (SESSION_24X7, SESSION_XNYS)
+
+# Phase-1 venue assumption (issue #1224): every equity instrument trades US
+# regular hours, every crypto instrument trades around the clock. When a
+# second equity venue arrives this becomes instrument metadata, not a map.
+SESSION_ID_BY_ASSET_CLASS: dict[AssetClass, str] = {
+    AssetClass.CRYPTO: SESSION_24X7,
+    AssetClass.EQUITY: SESSION_XNYS,
+}
 
 
 def _as_utc(moment: datetime) -> datetime:
@@ -165,12 +175,30 @@ def get_trading_calendar(session_id: str) -> TradingCalendar:
     raise ValueError(f"Unknown trading session {session_id!r} (supported: {supported})")
 
 
+def get_calendar_for_instrument(instrument: str) -> TradingCalendar:
+    """Return the session calendar an instrument string trades on.
+
+    Classification comes from the structured taxonomy
+    (:meth:`~gpt_trader.core.instruments.Instrument.parse`), never ad-hoc
+    string sniffing. The lookup is case-insensitive to match the repo's
+    casefolded instrument keying (busy tracking, snapshot marks); the
+    instrument string itself is never rewritten. Raises
+    :class:`~gpt_trader.core.instruments.InstrumentParseError` when the
+    string does not classify — callers decide whether that is a loud skip
+    or a hard failure.
+    """
+    asset_class = Instrument.parse(instrument.upper()).asset_class
+    return get_trading_calendar(SESSION_ID_BY_ASSET_CLASS[asset_class])
+
+
 __all__ = [
     "SESSION_24X7",
+    "SESSION_ID_BY_ASSET_CLASS",
     "SESSION_XNYS",
     "SUPPORTED_SESSIONS",
     "AlwaysOpenCalendar",
     "ExchangeBackedCalendar",
     "TradingCalendar",
+    "get_calendar_for_instrument",
     "get_trading_calendar",
 ]
