@@ -200,6 +200,39 @@ class MaxLoss:
 
 
 @dataclass(frozen=True, slots=True)
+class ExitPlan:
+    """Machine-readable stop and target levels for resolving a filled position.
+
+    The free-text ``invalidation`` / ``target_exit`` fields carry the human
+    rationale; these numeric levels let the paper-exit monitor resolve a filled
+    idea against later marks (issue #1218). Optional so human-authored ideas and
+    pre-existing records omit it — and serialized only when set, so a record
+    without a plan hashes exactly as it did before this field existed.
+    """
+
+    stop: Decimal | None = None
+    target: Decimal | None = None
+
+    def __post_init__(self) -> None:
+        _validate_finite_decimal(self.stop, "exit_plan.stop")
+        _validate_finite_decimal(self.target, "exit_plan.target")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "stop": _decimal_to_str(self.stop),
+            "target": _decimal_to_str(self.target),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> ExitPlan:
+        payload = _object_payload(payload, "exit_plan")
+        return cls(
+            stop=_decimal_or_none(payload.get("stop"), "exit_plan.stop"),
+            target=_decimal_or_none(payload.get("target"), "exit_plan.target"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class SizingRecommendation:
     """Proposed size and how it was derived."""
 
@@ -321,13 +354,14 @@ class TradeIdea:
     failure_mode: str
     do_not_trade_if: tuple[str, ...] = ()
     broker_ticket: BrokerTicket = field(default_factory=BrokerTicket)
+    exit_plan: ExitPlan | None = None
 
     def __post_init__(self) -> None:
         if not is_safe_decision_id(self.decision_id):
             raise ValueError("decision_id must be a safe path segment")
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "decision_id": self.decision_id,
             "autonomy_mode": self.autonomy_mode.value,
             "thesis": self.thesis,
@@ -346,6 +380,12 @@ class TradeIdea:
             "do_not_trade_if": list(self.do_not_trade_if),
             "broker_ticket": self.broker_ticket.to_dict(),
         }
+        # Serialized only when set: a record without an exit plan must produce
+        # the exact canonical form (and record_hash) it did before this field
+        # existed, so audit integrity over the pre-existing trail is preserved.
+        if self.exit_plan is not None:
+            payload["exit_plan"] = self.exit_plan.to_dict()
+        return payload
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> TradeIdea:
@@ -369,6 +409,9 @@ class TradeIdea:
             failure_mode=_string_value(payload["failure_mode"], "failure_mode"),
             do_not_trade_if=_string_sequence(payload.get("do_not_trade_if", ()), "do_not_trade_if"),
             broker_ticket=BrokerTicket.from_dict(payload.get("broker_ticket", {})),
+            exit_plan=(
+                ExitPlan.from_dict(payload["exit_plan"]) if "exit_plan" in payload else None
+            ),
         )
 
     def record_hash(self) -> str:

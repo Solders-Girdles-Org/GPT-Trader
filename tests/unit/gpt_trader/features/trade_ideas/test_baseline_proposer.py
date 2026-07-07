@@ -98,6 +98,14 @@ def test_idea_records_are_complete_and_pinned() -> None:
     assert idea.sizing_recommendation.quantity is not None
     assert idea.sizing_recommendation.notional is not None
     assert "kelly_factor=1.0000 (kelly_enabled=false)" in idea.sizing_recommendation.rationale
+    # Machine-readable exit levels for filled-position resolution (#1218),
+    # bracketing the entry and consistent with the free-text plan.
+    assert idea.exit_plan is not None
+    assert idea.exit_plan.stop is not None
+    assert idea.exit_plan.target is not None
+    assert idea.exit_plan.stop < idea.entry_zone.upper < idea.exit_plan.target
+    assert str(idea.exit_plan.stop) in idea.invalidation
+    assert str(idea.exit_plan.target) in idea.target_exit
 
 
 def test_position_sizer_enriches_sizing_with_regime_kelly_and_budget_cap() -> None:
