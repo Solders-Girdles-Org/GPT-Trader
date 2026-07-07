@@ -168,6 +168,7 @@ BUDGET_FIELDS = (
     "allow_naked_shorts",
     "account_equity",
     "max_drawdown_from_peak_pct",
+    "max_equity_buying_power_pct",
 )
 
 
@@ -1231,6 +1232,15 @@ def register(subparsers: Any) -> None:
         help=(
             "Drawdown-from-peak appetite for the continuous portfolio "
             "monitors; breach ratchets autonomy down through the audited path"
+        ),
+    )
+    budget_set.add_argument(
+        "--max-equity-buying-power-pct",
+        type=_non_negative_decimal_value,
+        help=(
+            "Cash-account buying-power cap for equity instruments, in percent "
+            "of attested account equity; 100 = cash-account fidelity. Crypto "
+            "spot is never checked against it"
         ),
     )
     budget_set.set_defaults(handler=_handle_budget_set, subcommand="budget set")

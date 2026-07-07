@@ -65,6 +65,26 @@ def test_instrument_preserves_the_exact_symbol_string() -> None:
     assert Instrument.parse("AAPL").symbol == "AAPL"
 
 
+def test_settlement_days_derive_from_asset_class() -> None:
+    # Cash-account settlement is data keyed off the asset class (#1231):
+    # crypto spot settles immediately, US equities settle T+1.
+    assert Instrument.parse("BTC-USD").settlement_days == 0
+    assert Instrument.parse("AAPL").settlement_days == 1
+
+
+def test_settlement_days_are_total_over_the_asset_class_vocabulary() -> None:
+    # Every classifiable instrument must have a settlement answer; a new
+    # asset class without one would KeyError here before it could reach the
+    # buying-power check.
+    for asset_class in AssetClass:
+        instrument = Instrument(
+            symbol="X",
+            asset_class=asset_class,
+            product_type=ProductType.SPOT,
+        )
+        assert instrument.settlement_days >= 0
+
+
 def test_product_type_vocabulary_is_unchanged() -> None:
     # Persisted trade-idea records serialize these exact values; the enum
     # moved to core but its vocabulary must not drift.
