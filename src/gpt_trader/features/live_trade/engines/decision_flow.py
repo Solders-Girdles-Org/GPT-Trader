@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import time
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from gpt_trader.core import Position
@@ -44,8 +44,10 @@ async def process_symbol(
             engine._connection_status = "DISCONNECTED"
             return
 
-    if ticker is None or not ticker.get("price"):
-        logger.error(f"No ticker data for {symbol}")
+    price = _parse_ticker_price(ticker) if ticker is not None else None
+    if price is None:
+        raw_price = ticker.get("price") if ticker is not None else None
+        logger.error(f"No valid ticker price for {symbol}: {raw_price!r}")
         engine._connection_status = "DISCONNECTED"
         return
 
@@ -65,7 +67,6 @@ async def process_symbol(
     engine._last_latency = time.time() - start_time
     engine._connection_status = "CONNECTED"
 
-    price = Decimal(str(ticker.get("price", 0)))
     logger.info(f"{symbol} price: {price}")
 
     if engine.context.risk_manager is not None:
@@ -109,6 +110,25 @@ async def process_symbol(
         equity=equity,
         position_state=position_state,
     )
+
+
+def _parse_ticker_price(ticker: dict[str, Any]) -> Decimal | None:
+    """Validate a ticker price before it becomes a live mark (#1123).
+
+    Returns None for missing, malformed, non-finite (NaN/Infinity), or
+    non-positive prices so a bad quote is never persisted to the tick store,
+    reported, or fed into strategy/risk state.
+    """
+    raw = ticker.get("price")
+    if raw is None:
+        return None
+    try:
+        price = Decimal(str(raw))
+    except (InvalidOperation, ValueError):
+        return None
+    if not price.is_finite() or price <= 0:
+        return None
+    return price
 
 
 async def handle_decision(
