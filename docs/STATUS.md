@@ -78,7 +78,13 @@ through one library call (`TradeIdeaService.portfolio_monitors`) by both
 `gpt-trader ideas monitors` and the console accountant page. The
 drawdown-from-peak appetite is a budget lever (`max_drawdown_from_peak_pct`,
 unset by default); a breach at any decision boundary ratchets autonomy down
-through the same audited path as the daily-loss trigger.
+through the same audited path as the daily-loss trigger. On the operational
+`paper` profile the lever is **seeded at 15%** (1.5x the 10% daily-loss cap;
+owner-approved 2026-07-07, budget version 3, #1217). The seed is a starting
+value, not an owner constant: per the [charter](DIRECTION.md), the durable
+owner of this lever is the agent, which renegotiates it through the same
+audited budget workflow as track record accumulates (the Stage 2 -> 3
+"budget renegotiation exercised" gate).
 
 **The promotion gates are now measurable in one command** (`ideas scorecard`,
 #1193): the Stage 1 -> 2 gates of the
@@ -89,9 +95,10 @@ applied, never from the batch cycle's run artifacts (test-enforced).
 Replay-derived calibration/edge over recorded snapshot windows reports
 alongside -- labeled, never blended into -- the wall-clock gates.
 Drawdown-from-peak now scores from the same equity ledger the monitors read
-(#1192); it stays not-yet-measurable until an operator sets the
-`max_drawdown_from_peak_pct` budget lever, so the scorecard cannot claim
-promotability until that appetite is configured.
+(#1192); it stays not-yet-measurable on any profile whose budget leaves the
+`max_drawdown_from_peak_pct` lever unset, so the scorecard cannot claim
+promotability until that appetite is configured. With the paper-profile seed
+in place (#1217), the gate is scoreable there.
 
 **The in-process event-driven lane exists behind a default-off gate**
 (`event_driven_paper_lane_enabled`, #1191) and is **operator-enabled on the
