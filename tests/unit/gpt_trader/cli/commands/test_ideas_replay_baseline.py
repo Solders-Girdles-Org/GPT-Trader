@@ -336,3 +336,57 @@ def test_replay_baseline_json_output_returns_replay_report(
     assert data["target_hit_rate"] == "1"
     assert data["average_return_r"] == "2"
     assert data["ideas"][0]["outcome"] == "target_hit"
+
+
+def _snapshot_payload_fixture() -> dict[str, Any]:
+    """Recorded market-snapshot payload wrapping the baseline-hit candles."""
+    # A recorded snapshot's candles are strictly before its as_of; the last
+    # baseline-hit candle sits at AS_OF + 1h.
+    return {
+        "as_of": (AS_OF + timedelta(hours=2)).isoformat(),
+        "source": "coinbase:candles",
+        "series": [
+            {
+                "symbol": "ETH-USD",
+                "granularity": "ONE_HOUR",
+                "candles": _flat_fixture()["candles"],
+            },
+            {
+                "symbol": "BTC-USD",
+                "granularity": "ONE_HOUR",
+                "candles": _baseline_hit_fixture()["candles"],
+            },
+        ],
+    }
+
+
+def test_replay_baseline_runs_over_a_recorded_snapshot_window(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    snapshot = _write_fixture(tmp_path / "snapshot.json", _snapshot_payload_fixture())
+
+    exit_code, response = _run_json(capsys, _baseline_args(snapshot))
+
+    assert exit_code == 0
+    data = response["data"]
+    # Same window, same figures as the bare candle fixture: the recorded
+    # snapshot's BTC-USD series feeds replay directly.
+    assert data["symbol"] == "BTC-USD"
+    assert data["ideas_proposed"] == 1
+    assert data["target_hits"] == 1
+
+
+def test_replay_baseline_recorded_snapshot_without_symbol_series_is_rejected(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    payload = _snapshot_payload_fixture()
+    payload["series"] = [payload["series"][0]]  # ETH-USD only
+    snapshot = _write_fixture(tmp_path / "snapshot.json", payload)
+
+    exit_code, response = _run_json(capsys, _baseline_args(snapshot))
+
+    assert exit_code == 1
+    assert response["errors"][0]["code"] == CliErrorCode.INVALID_ARGUMENT.value
+    assert response["errors"][0]["details"]["field"] == "symbol"

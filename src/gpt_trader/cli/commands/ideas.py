@@ -131,6 +131,11 @@ from gpt_trader.features.trade_ideas.report import (
     build_trade_idea_track_record_report,
     format_trade_idea_track_record_report,
 )
+from gpt_trader.features.trade_ideas.scorecard import (
+    build_replay_evidence,
+    build_stage_promotion_scorecard,
+    format_stage_promotion_scorecard,
+)
 from gpt_trader.persistence.event_store import EventStore
 
 VENUE_CHOICES = ("coinbase", "manual")
@@ -474,6 +479,37 @@ def register(subparsers: Any) -> None:
     )
     report.set_defaults(handler=_handle_report, subcommand="report")
 
+    scorecard = ideas_subparsers.add_parser(
+        "scorecard",
+        help="Score the Stage 1 -> 2 promotion gates from the idea-level trail",
+        description=(
+            "Read-only measured-outcome rubric scorecard over local trade-idea "
+            "records, audit events, and closeout attributions, with the "
+            "observation-window rule applied. Optionally reports replay-derived "
+            "evidence alongside (never blended into) the wall-clock gates. This "
+            "command never contacts a broker or account and never reads the "
+            "batch cycle manifest."
+        ),
+    )
+    _add_common_options(scorecard)
+    scorecard.add_argument(
+        "--replay-report",
+        type=Path,
+        action="append",
+        dest="replay_reports",
+        metavar="PATH",
+        help=(
+            "JSON payload from an 'ideas replay' run (single report or "
+            "tournament) to report as replay-derived evidence; repeatable"
+        ),
+    )
+    scorecard.add_argument(
+        "--output-dir",
+        type=Path,
+        help="Write a durable scorecard artifact into this directory",
+    )
+    scorecard.set_defaults(handler=_handle_scorecard, subcommand="scorecard")
+
     export_ticket = ideas_subparsers.add_parser(
         "export-ticket",
         help="Export a deterministic broker-neutral ticket artifact",
@@ -548,7 +584,10 @@ def register(subparsers: Any) -> None:
         "--file",
         type=Path,
         required=True,
-        help="JSON fixture with a top-level candles array of OHLCV bars",
+        help=(
+            "JSON fixture with a top-level candles array of OHLCV bars, or a "
+            "recorded market-snapshot payload (its series matching --symbol is used)"
+        ),
     )
     baseline.add_argument("--symbol", required=True, help="Symbol represented by the candles")
     baseline.add_argument(
@@ -623,7 +662,10 @@ def register(subparsers: Any) -> None:
         "--file",
         type=Path,
         required=True,
-        help="JSON fixture with a top-level candles array of OHLCV bars",
+        help=(
+            "JSON fixture with a top-level candles array of OHLCV bars, or a "
+            "recorded market-snapshot payload (its series matching --symbol is used)"
+        ),
     )
     regime_aware.add_argument("--symbol", required=True, help="Symbol represented by the candles")
     regime_aware.add_argument(
@@ -688,7 +730,10 @@ def register(subparsers: Any) -> None:
         "--file",
         type=Path,
         required=True,
-        help="JSON fixture with a top-level candles array of OHLCV bars",
+        help=(
+            "JSON fixture with a top-level candles array of OHLCV bars, or a "
+            "recorded market-snapshot payload (its series matching --symbol is used)"
+        ),
     )
     strategy_replay.add_argument(
         "--symbol", required=True, help="Symbol represented by the candles"
@@ -743,7 +788,10 @@ def register(subparsers: Any) -> None:
         dest="file",
         type=Path,
         required=True,
-        help="JSON fixture with a top-level candles array of OHLCV bars",
+        help=(
+            "JSON fixture with a top-level candles array of OHLCV bars, or a "
+            "recorded market-snapshot payload (its series matching --symbol is used)"
+        ),
     )
     tournament.add_argument("--symbol", required=True, help="Symbol represented by the candles")
     tournament.add_argument(
@@ -2174,6 +2222,47 @@ def _handle_report(args: Namespace) -> CliResponse:
     return _success(command, args, payload, text, was_noop=idea_count == 0)
 
 
+def _handle_scorecard(args: Namespace) -> CliResponse:
+    command = "ideas scorecard"
+    try:
+        payload = build_stage_promotion_scorecard(_service(args))
+        replay_evidence = [
+            build_replay_evidence(_load_replay_report_payload(path))
+            for path in args.replay_reports or ()
+        ]
+    except Exception as error:
+        return _mapped_error(command, args, error)
+    if replay_evidence:
+        payload = {**payload, "replay_evidence": replay_evidence}
+
+    artifact_path = _write_output_dir_artifact(
+        args,
+        stem="trade-idea-scorecard",
+        artifact_id=payload["scorecard_id"],
+        extension="json",
+        content=_json_artifact(payload),
+    )
+    if artifact_path is not None:
+        payload = {**payload, "artifact_path": artifact_path}
+
+    text = format_stage_promotion_scorecard(payload)
+    if artifact_path is not None:
+        text += f"\nartifact_path: {artifact_path}"
+    return _success(command, args, payload, text, was_noop=payload["idea_count"] == 0)
+
+
+def _load_replay_report_payload(path: Path) -> Mapping[str, Any]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, Mapping):
+        raise ValueError(f"Replay report '{path}' must be a JSON object")
+    # Accept both a raw replay artifact and a CliResponse envelope from
+    # 'ideas replay ... --format json --output <path>'.
+    data = payload.get("data")
+    if isinstance(data, Mapping) and "proposer_id" not in payload and "reports" not in payload:
+        return data
+    return payload
+
+
 def _handle_export_ticket(args: Namespace) -> CliResponse | RawCliOutput:
     command = "ideas export-ticket"
     decision_id_error = _decision_id_error(command, args, args.decision_id)
@@ -2228,7 +2317,11 @@ def _handle_replay_baseline(args: Namespace) -> CliResponse:
     command = "ideas replay baseline"
     try:
         _validate_replay_granularity(args.granularity)
-        candles = _load_candle_fixture(args.file)
+        candles = _load_candle_fixture(
+            args.file,
+            symbol=args.symbol,
+            granularity=args.granularity,
+        )
         proposer_config = _replay_baseline_config_from_args(args)
         optimize_study = cast(Path | None, getattr(args, "from_optimize_study", None))
         if optimize_study is not None:
@@ -2274,7 +2367,11 @@ def _handle_replay_strategy(args: Namespace) -> CliResponse:
     command = "ideas replay strategy"
     try:
         _validate_replay_granularity(args.granularity)
-        candles = _load_candle_fixture(args.file)
+        candles = _load_candle_fixture(
+            args.file,
+            symbol=args.symbol,
+            granularity=args.granularity,
+        )
         min_history = _resolve_strategy_replay_min_history(args)
         report = TradeIdeaReplayRunner(
             _snapshot_strategy_proposer(
@@ -2297,7 +2394,11 @@ def _handle_replay_regime_aware(args: Namespace) -> CliResponse:
     command = "ideas replay regime-aware"
     try:
         _validate_replay_granularity(args.granularity)
-        candles = _load_candle_fixture(args.file)
+        candles = _load_candle_fixture(
+            args.file,
+            symbol=args.symbol,
+            granularity=args.granularity,
+        )
         proposer_config = _replay_baseline_config_from_args(args)
         regime_config = RegimeConfig()
         min_history = _resolve_replay_min_history(
@@ -2332,7 +2433,11 @@ def _handle_replay_tournament(args: Namespace) -> CliResponse:
     command = "ideas replay tournament"
     try:
         _validate_replay_granularity(args.granularity)
-        candles = _load_candle_fixture(args.file)
+        candles = _load_candle_fixture(
+            args.file,
+            symbol=args.symbol,
+            granularity=args.granularity,
+        )
         entries = _tournament_entries(args)
         min_history = _resolve_tournament_min_history(
             args, max(required for _, required in entries)

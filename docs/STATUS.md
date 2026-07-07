@@ -71,6 +71,17 @@ enabled and the autonomy log still resolves to `bounded_autonomy` at execution
 time. The execution gate reuses the daily-loss ratchet, so a breach lowers the
 mode before remaining system-approved ideas can execute.
 
+**The promotion gates are now measurable in one command** (`ideas scorecard`,
+#1193): the Stage 1 -> 2 gates of the
+[measured-outcome rubric](decisions/adopt-measured-outcome-rubric.md) score
+pass/fail from the idea-level closeout/audit trail
+(`features/trade_ideas/scorecard.py`) with the observation-window rule
+applied, never from the batch cycle's run artifacts (test-enforced).
+Replay-derived calibration/edge over recorded snapshot windows reports
+alongside -- labeled, never blended into -- the wall-clock gates.
+Drawdown-from-peak renders not-yet-measurable until the continuous portfolio
+monitors (#1192) land, so the scorecard cannot claim promotability yet.
+
 **The in-process event-driven lane exists behind a default-off gate**
 (`event_driven_paper_lane_enabled`, #1191) and is **operator-enabled on the
 `paper` profile** (recorded approval 2026-07-07; `config/profiles/paper.yaml`).
