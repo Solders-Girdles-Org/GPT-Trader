@@ -134,6 +134,7 @@ from gpt_trader.features.trade_ideas.replay import (
     ScoringLevels,
     TradeIdeaReplayRunner,
     TradeIdeaReplayTournamentRunner,
+    exit_plan_scoring_levels,
     extract_numeric_scoring_levels,
     score_trade_idea,
 )
@@ -312,6 +313,7 @@ __all__ = [
     "drawdown_from_peak_breach_evidence",
     "equity_ledger",
     "evaluate_eligibility",
+    "exit_plan_scoring_levels",
     "extract_numeric_scoring_levels",
     "format_trade_idea_track_record_report",
     "is_eligible",

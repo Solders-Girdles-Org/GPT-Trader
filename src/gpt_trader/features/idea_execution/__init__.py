@@ -54,10 +54,15 @@ from gpt_trader.features.idea_execution.executor import (
     paper_auto_execution_gate_evidence,
     resolve_auto_execution_enabled,
 )
+from gpt_trader.features.idea_execution.exit_monitor import (
+    DEFAULT_EXIT_MONITOR_ACTOR_ID,
+    resolve_filled_ideas,
+)
 
 __all__ = [
     "AUTO_EXECUTION_ENV_VAR",
     "DEFAULT_CYCLE_ACTOR_ID",
+    "DEFAULT_EXIT_MONITOR_ACTOR_ID",
     "DEFAULT_PAPER_EXECUTION_ACTOR_ID",
     "EVENT_LANE_ACTOR_ID",
     "EVENT_LANE_REASON_PREFIX",
@@ -80,4 +85,5 @@ __all__ = [
     "SnapshotProvider",
     "paper_auto_execution_gate_evidence",
     "resolve_auto_execution_enabled",
+    "resolve_filled_ideas",
 ]

@@ -41,6 +41,7 @@ from gpt_trader.features.idea_execution.executor import (
     PaperIdeaExecutor,
     paper_auto_execution_gate_evidence,
 )
+from gpt_trader.features.idea_execution.exit_monitor import resolve_filled_ideas
 from gpt_trader.features.trade_ideas import (
     ActorType,
     AuditAction,
@@ -137,6 +138,7 @@ class PaperCycleResult:
     snapshot: dict[str, Any]
     expired_decision_ids: tuple[str, ...]
     attributed_decision_ids: tuple[str, ...]
+    resolved_decision_ids: tuple[str, ...]
     proposer_turns: tuple[ProposerTurn, ...]
     execution: ExecutionTurn
     queue: dict[str, Any] = field(default_factory=dict)
@@ -151,6 +153,7 @@ class PaperCycleResult:
             "snapshot": self.snapshot,
             "expired_decision_ids": list(self.expired_decision_ids),
             "attributed_decision_ids": list(self.attributed_decision_ids),
+            "resolved_decision_ids": list(self.resolved_decision_ids),
             "proposers": [turn.to_dict() for turn in self.proposer_turns],
             "execution": self.execution.to_dict(),
             "queue": self.queue,
@@ -286,6 +289,17 @@ class PaperCycleRunner:
         )
         row["execution"] = execution.to_dict()
 
+        # Resolve open filled positions against this turn's candles (first touch
+        # of the plan's target/stop, or mark-to-market once expired) so realized
+        # P&L lands on the trail — the evidence the Stage 1->2 calibration /
+        # expectancy / benchmark gates read (issue #1218). Runs before the report
+        # so the fresh closeouts are reflected in this turn's artifact.
+        resolved = resolve_filled_ideas(
+            self._service, snapshot, now=self._now_factory(), actor_id=self._actor_id
+        )
+        resolved_decision_ids = tuple(record.decision_id for record in resolved)
+        row["resolved_decision_ids"] = list(resolved_decision_ids)
+
         report = build_trade_idea_track_record_report(self._service, now=self._now_factory())
         (run_dir / "report.json").write_text(
             f"{json.dumps(report, indent=2, sort_keys=True, default=str)}\n",
@@ -311,6 +325,7 @@ class PaperCycleRunner:
             snapshot=snapshot_info,
             expired_decision_ids=expired_decision_ids,
             attributed_decision_ids=attributed_decision_ids,
+            resolved_decision_ids=resolved_decision_ids,
             proposer_turns=tuple(proposer_turns),
             execution=execution,
             queue=queue_summary,
