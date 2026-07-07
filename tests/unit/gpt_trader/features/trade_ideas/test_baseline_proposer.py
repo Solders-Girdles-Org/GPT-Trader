@@ -180,6 +180,24 @@ def test_stale_crossover_outside_lookback_produces_nothing() -> None:
     assert BaselineProposer(CONFIG).propose(snapshot_of(make_series(stale))) == []
 
 
+def test_degenerate_rounded_levels_produce_nothing() -> None:
+    # A sub-dollar close within half a cent of the long average rounds the
+    # stop and the entry midpoint to the same 0.01-precision level, leaving
+    # no defined risk per unit (#1226): stop 0.82, entry zone 0.81-0.83.
+    degenerate = ["0.82"] * 29 + ["0.821"]
+
+    assert BaselineProposer(CONFIG).propose(snapshot_of(make_series(degenerate))) == []
+
+
+def test_sub_dollar_crossover_with_clear_ma_gap_still_proposes() -> None:
+    clear_gap = ["0.80"] * 28 + ["0.81", "0.83"]
+
+    ideas = BaselineProposer(CONFIG).propose(snapshot_of(make_series(clear_gap)))
+
+    assert len(ideas) == 1
+    assert ideas[0].direction is TradeDirection.LONG
+
+
 def test_insufficient_history_produces_nothing() -> None:
     short_history = ["100"] * 10 + ["102", "104"]
 
