@@ -225,6 +225,38 @@ def test_snapshot_build_does_not_accept_response_output_sink(
     assert json.loads(out.read_text(encoding="utf-8")) == {"snapshot": True}
 
 
+def test_snapshot_build_from_stooq_routes_to_equities_builder(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    out = tmp_path / "snapshot.json"
+    captured: dict[str, Any] = {}
+
+    async def fake_equities_build(request: Any, **kwargs: Any) -> MarketSnapshot:
+        captured["request"] = request
+        captured["kwargs"] = kwargs
+        return _minimal_snapshot("AAPL", "ONE_DAY")
+
+    async def fail_coinbase_build(args: Any, request: Any) -> MarketSnapshot:
+        raise AssertionError("--from-stooq must not route to the Coinbase builder")
+
+    monkeypatch.setattr(ideas, "build_equities_market_snapshot", fake_equities_build)
+    monkeypatch.setattr(ideas, "_build_coinbase_market_snapshot", fail_coinbase_build)
+    argv = _snapshot_build_args(out)
+    argv[argv.index("--from-coinbase")] = "--from-stooq"
+    argv[argv.index("--symbols") + 1] = "AAPL"
+
+    exit_code, response = _run_json(capsys, argv)
+
+    assert exit_code == 0
+    assert captured["request"].symbols == ("AAPL",)
+    assert captured["kwargs"]["source_label"] == "stooq:market-candles"
+    assert captured["kwargs"]["base_url"] == "https://stooq.com"
+    assert response["data"]["snapshot"]["symbols"] == ["AAPL"]
+    assert out.exists()
+
+
 def test_snapshot_build_rejects_duplicate_symbols(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

@@ -55,9 +55,12 @@ from gpt_trader.features.live_trade.strategies.mean_reversion import MeanReversi
 from gpt_trader.features.live_trade.strategies.regime_switcher import RegimeSwitchingStrategy
 from gpt_trader.features.recorder import (
     DEFAULT_COINBASE_BASE_URL,
+    DEFAULT_EQUITIES_SNAPSHOT_SOURCE_LABEL,
     DEFAULT_SNAPSHOT_SOURCE_LABEL,
+    DEFAULT_STOOQ_BASE_URL,
     MarketSnapshotBuildRequest,
     build_coinbase_market_snapshot,
+    build_equities_market_snapshot,
     canonical_granularity,
 )
 from gpt_trader.features.strategy_tools import (
@@ -297,12 +300,12 @@ def register(subparsers: Any) -> None:
     snapshot_subparsers = snapshot.add_subparsers(dest="snapshot_command", required=True)
     snapshot_build = snapshot_subparsers.add_parser(
         "build",
-        help="Fetch read-only Coinbase candles and write a MarketSnapshot JSON file",
+        help="Fetch read-only market candles and write a MarketSnapshot JSON file",
         description=(
-            "Fetch public Coinbase market candles, enforce point-in-time snapshot "
+            "Fetch public market candles, enforce point-in-time snapshot "
             "bounds, and write a JSON file accepted by ideas propose-baseline. "
-            "This command requires --from-coinbase and never reads accounts or "
-            "places, modifies, or cancels orders."
+            "This command requires --from-coinbase or --from-stooq and never "
+            "reads accounts or places, modifies, or cancels orders."
         ),
     )
     snapshot_build.add_argument(
@@ -321,16 +324,24 @@ def register(subparsers: Any) -> None:
         type=Path,
         help=argparse.SUPPRESS,
     )
-    snapshot_build.add_argument(
+    snapshot_build_venue = snapshot_build.add_mutually_exclusive_group(required=True)
+    snapshot_build_venue.add_argument(
         "--from-coinbase",
         action="store_true",
-        required=True,
         help="Explicitly fetch read-only public Coinbase market candles",
+    )
+    snapshot_build_venue.add_argument(
+        "--from-stooq",
+        action="store_true",
+        help="Explicitly fetch read-only public Stooq daily equity candles (ONE_DAY only)",
     )
     snapshot_build.add_argument(
         "--symbols",
         required=True,
-        help="Comma-separated Coinbase product ids, for example BTC-USD,ETH-USD",
+        help=(
+            "Comma-separated symbols: Coinbase product ids (BTC-USD,ETH-USD) "
+            "or plain equity tickers with --from-stooq (AAPL,SPY)"
+        ),
     )
     snapshot_build.add_argument(
         "--granularity",
@@ -355,13 +366,22 @@ def register(subparsers: Any) -> None:
     )
     snapshot_build.add_argument(
         "--source-label",
-        default=DEFAULT_SNAPSHOT_SOURCE_LABEL,
-        help="Source label stamped into snapshot metadata",
+        default=None,
+        help=(
+            "Source label stamped into snapshot metadata "
+            f"(default: {DEFAULT_SNAPSHOT_SOURCE_LABEL} or "
+            f"{DEFAULT_EQUITIES_SNAPSHOT_SOURCE_LABEL} per venue)"
+        ),
     )
     snapshot_build.add_argument(
         "--coinbase-base-url",
         default=DEFAULT_COINBASE_BASE_URL,
         help="Coinbase API base URL for market-data reads",
+    )
+    snapshot_build.add_argument(
+        "--stooq-base-url",
+        default=DEFAULT_STOOQ_BASE_URL,
+        help="Stooq endpoint base URL for daily equity candle reads",
     )
     snapshot_build.set_defaults(handler=_handle_snapshot_build, subcommand="snapshot build")
 
@@ -1949,7 +1969,10 @@ def _handle_snapshot_build(args: Namespace) -> CliResponse:
             lookback=args.lookback,
             as_of=_snapshot_as_of(args.as_of),
         )
-        snapshot = asyncio.run(_build_coinbase_market_snapshot(args, request))
+        if getattr(args, "from_stooq", False):
+            snapshot = asyncio.run(_build_equities_market_snapshot(args, request))
+        else:
+            snapshot = asyncio.run(_build_coinbase_market_snapshot(args, request))
         payload = market_snapshot_to_payload(snapshot)
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(
@@ -1978,7 +2001,19 @@ async def _build_coinbase_market_snapshot(
     return await build_coinbase_market_snapshot(
         request,
         base_url=args.coinbase_base_url,
-        source_label=args.source_label,
+        source_label=args.source_label or DEFAULT_SNAPSHOT_SOURCE_LABEL,
+    )
+
+
+async def _build_equities_market_snapshot(
+    args: Namespace,
+    request: MarketSnapshotBuildRequest,
+) -> MarketSnapshot:
+    # Snapshot production is recorder-owned; the CLI only adapts arguments.
+    return await build_equities_market_snapshot(
+        request,
+        base_url=args.stooq_base_url,
+        source_label=args.source_label or DEFAULT_EQUITIES_SNAPSHOT_SOURCE_LABEL,
     )
 
 

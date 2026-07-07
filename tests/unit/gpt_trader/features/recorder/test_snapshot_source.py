@@ -1,4 +1,4 @@
-"""Recorder-owned Coinbase snapshot source: transport wiring and cleanup."""
+"""Recorder-owned snapshot sources: transport wiring and cleanup."""
 
 from __future__ import annotations
 
@@ -9,7 +9,11 @@ import pytest
 
 from gpt_trader.core import Candle
 from gpt_trader.features.recorder import MarketSnapshotBuildRequest
-from gpt_trader.features.recorder.snapshot_source import build_coinbase_market_snapshot
+from gpt_trader.features.recorder.equities_candles import EquitiesCandleFeedError
+from gpt_trader.features.recorder.snapshot_source import (
+    build_coinbase_market_snapshot,
+    build_equities_market_snapshot,
+)
 
 AS_OF = datetime(2026, 6, 12, 12, 0, tzinfo=UTC)
 
@@ -123,3 +127,76 @@ async def test_build_closes_client_when_fetch_fails(
 
     assert len(clients) == 1
     assert clients[0].closed is True
+
+
+class FakeEquitiesFetcher:
+    base_urls: list[str] = []
+
+    def __init__(self, *, base_url: str) -> None:
+        FakeEquitiesFetcher.base_urls.append(base_url)
+
+    async def fetch_candles(
+        self,
+        *,
+        symbol: str,
+        granularity: str,
+        start: datetime,
+        end: datetime,
+    ) -> list[Candle]:
+        # Daily bars timestamped at US session close (20:00 UTC in June).
+        return [
+            Candle(
+                ts=datetime(2026, 6, day, 20, 0, tzinfo=UTC),
+                open=Decimal("100"),
+                high=Decimal("101"),
+                low=Decimal("99"),
+                close=Decimal("100.5"),
+                volume=Decimal("1000000"),
+            )
+            for day in (9, 10, 11)
+        ]
+
+
+@pytest.mark.asyncio
+async def test_build_equities_snapshot_labels_source_stooq(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    FakeEquitiesFetcher.base_urls = []
+    monkeypatch.setattr(
+        "gpt_trader.features.recorder.equities_candles.StooqDailyCandleFetcher",
+        FakeEquitiesFetcher,
+    )
+
+    snapshot = await build_equities_market_snapshot(
+        MarketSnapshotBuildRequest(
+            symbols=("AAPL",),
+            granularity="ONE_DAY",
+            lookback=2,
+            as_of=AS_OF,
+        )
+    )
+
+    assert FakeEquitiesFetcher.base_urls == ["https://stooq.com"]
+    assert snapshot.source.startswith("stooq:market-candles:granularity=ONE_DAY:lookback=2")
+    assert snapshot.symbols() == ("AAPL",)
+    # Only the 2026-06-10 session bar is both inside the lookback window and
+    # completed (ts + ONE_DAY <= as_of) before the 2026-06-12 12:00 as_of.
+    series = snapshot.series_for("AAPL")
+    assert series is not None
+    assert [candle.ts for candle in series.candles] == [
+        datetime(2026, 6, 10, 20, 0, tzinfo=UTC),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_build_equities_snapshot_rejects_intraday_granularity() -> None:
+    # Rejection happens before any transport call, so no network is touched.
+    with pytest.raises(EquitiesCandleFeedError, match="ONE_DAY candles only"):
+        await build_equities_market_snapshot(
+            MarketSnapshotBuildRequest(
+                symbols=("AAPL",),
+                granularity="ONE_HOUR",
+                lookback=2,
+                as_of=AS_OF,
+            )
+        )
