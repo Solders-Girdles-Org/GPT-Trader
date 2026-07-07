@@ -7,6 +7,7 @@ from unittest.mock import ANY, Mock
 import pytest
 
 import gpt_trader.features.live_trade.bot as bot_module
+from gpt_trader.features.live_trade.account_snapshot import AccountSnapshotService
 from gpt_trader.features.live_trade.bot import TradingBot
 
 
@@ -51,6 +52,8 @@ class TestTradingBotInitialization:
         assert bot.broker is mock_container.broker
         assert bot.risk_manager is mock_container.risk_manager
         assert bot.runtime_state is mock_container.runtime_state
+        # No broker means no snapshot provider (account-snapshot ADR Option A).
+        assert bot.account_telemetry is None
 
     def test_init_with_container(self, mock_config: Mock, engine_mock: Mock) -> None:
         """Test initialization with container."""
@@ -60,6 +63,10 @@ class TestTradingBotInitialization:
         bot = TradingBot(config=mock_config, container=mock_container)
 
         assert bot.container is mock_container
+        # A wired broker yields a working read-only snapshot provider
+        # (account-snapshot ADR Option A, #1121).
+        assert isinstance(bot.account_telemetry, AccountSnapshotService)
+        assert bot.account_telemetry.supports_snapshots() is True
 
     def test_init_creates_context(
         self,

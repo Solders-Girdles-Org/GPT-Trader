@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from gpt_trader.app.config import BotConfig
 from gpt_trader.app.runtime_ui_adapter import NullUIAdapter, RuntimeUIAdapter
+from gpt_trader.features.live_trade.account_snapshot import AccountSnapshotService
 from gpt_trader.features.live_trade.engines.base import CoordinatorContext
 from gpt_trader.features.live_trade.engines.strategy import TradingEngine
 from gpt_trader.features.live_trade.execution.status_codec import (
@@ -75,6 +76,12 @@ class TradingBot:
 
         # Get services directly from container (legacy registry removed)
         self.broker: BrokerProtocol | None = container.broker
+        # Read-only account snapshot provider (account-snapshot ADR Option A):
+        # `gpt-trader account snapshot` and the runbooks read the same broker
+        # surface the engine uses. No order authority.
+        self.account_telemetry: AccountSnapshotService | None = (
+            AccountSnapshotService(self.broker, config) if self.broker is not None else None
+        )
         self.risk_manager: RiskManagerProtocol | None = container.risk_manager
         self.runtime_state: RuntimeStateProtocol | None = getattr(container, "runtime_state", None)
 

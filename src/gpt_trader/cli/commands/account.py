@@ -49,18 +49,19 @@ def _handle_snapshot(args: Namespace) -> CliResponse | int:
         raise
 
     try:
-        # No container wiring provides account telemetry today; this command
-        # reports "not available" until a telemetry service is wired in via a
-        # fresh spec (see docs/decisions/remove-unwired-account-manager-and-strategy-lab.md).
+        # Wired by TradingBot from the container broker (account-snapshot ADR
+        # Option A, docs/decisions/account-snapshot-wire-or-remove.md); only a
+        # broker-less container leaves it unset.
         telemetry = getattr(bot, "account_telemetry", None)
         if telemetry is None or not telemetry.supports_snapshots():
+            message = "Account snapshot is unavailable: no broker is wired for this profile"
             if output_format == "json":
                 return CliResponse.error_response(
                     command=SNAPSHOT_COMMAND_NAME,
                     code=CliErrorCode.OPERATION_FAILED,
-                    message="Account snapshot telemetry is not available for this broker",
+                    message=message,
                 )
-            raise RuntimeError("Account snapshot telemetry is not available for this broker")
+            raise RuntimeError(message)
 
         snapshot = telemetry.collect_snapshot()
 
