@@ -65,6 +65,24 @@
     <td>{{ headroom.open_notional_headroom_pct | percent }} <span class="muted">({{ headroom.open_notional_headroom | money }})</span></td>
   </tr>
   <tr>
+    <td>Drawdown from peak</td>
+    <td>
+      {% if monitors.max_drawdown_from_peak_pct is not none %}{{ monitors.max_drawdown_from_peak_pct | percent }}
+      {% else %}<span class="muted">no limit set</span>{% endif %}
+    </td>
+    <td>
+      {% if monitors.drawdown_from_peak_pct is not none %}
+      <span class="{{ 'bad' if monitors.drawdown_breached }}">{{ monitors.drawdown_from_peak_pct | percent }}</span>
+      {% else %}<span class="muted">not yet measurable</span>{% endif %}
+    </td>
+    <td>
+      {% if monitors.drawdown_breached %}<span class="bad">breached — ratchets autonomy down</span>
+      {% elif monitors.max_drawdown_from_peak_pct is not none and monitors.drawdown_from_peak_pct is not none %}
+      {{ (monitors.max_drawdown_from_peak_pct - monitors.drawdown_from_peak_pct) | percent }}
+      {% else %}—{% endif %}
+    </td>
+  </tr>
+  <tr>
     <td>Concurrent approved tickets</td>
     <td>{{ budget.max_concurrent_approved_tickets }}</td>
     <td>{{ open_approved_count }}</td>

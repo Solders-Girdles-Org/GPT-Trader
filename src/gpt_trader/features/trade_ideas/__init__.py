@@ -6,6 +6,13 @@ records, humans approve them, and every state change lands in an append-only
 audit log. No module in this slice may submit orders.
 """
 
+from gpt_trader.features.trade_ideas.accounting import (
+    EquityLedgerPoint,
+    PaperAccountingSummary,
+    compute_paper_accounting,
+    equity_ledger,
+    max_drawdown_from_peak_percent,
+)
 from gpt_trader.features.trade_ideas.audit import (
     ActorType,
     AuditAction,
@@ -23,6 +30,7 @@ from gpt_trader.features.trade_ideas.autonomy import (
     AutonomyStateLog,
     autonomy_transition_violations,
     daily_loss_breach_evidence,
+    drawdown_from_peak_breach_evidence,
     resolve_autonomy,
 )
 from gpt_trader.features.trade_ideas.baseline import (
@@ -78,6 +86,10 @@ from gpt_trader.features.trade_ideas.models import (
     TradeDirection,
     TradeIdea,
     is_safe_decision_id,
+)
+from gpt_trader.features.trade_ideas.monitors import (
+    PortfolioMonitorSnapshot,
+    compute_portfolio_monitors,
 )
 from gpt_trader.features.trade_ideas.optimize_bridge import (
     REPLAY_OPTIMIZE_OBJECTIVES,
@@ -222,6 +234,7 @@ __all__ = [
     "Confidence",
     "ConfidenceLabel",
     "EntryZone",
+    "EquityLedgerPoint",
     "InvalidTransitionError",
     "KernelCheck",
     "KernelRuntime",
@@ -237,7 +250,9 @@ __all__ = [
     "PaperFillProfileError",
     "PaperFillReconciliationEntry",
     "PaperFillReconciliationReport",
+    "PaperAccountingSummary",
     "PaperFillReconciler",
+    "PortfolioMonitorSnapshot",
     "PreApprovalBrokerTicketError",
     "PolicyViolationError",
     "PositionSizerLike",
@@ -289,7 +304,11 @@ __all__ = [
     "build_trade_idea_track_record_report",
     "canonical_ticket_json",
     "create_trade_idea_service",
+    "compute_paper_accounting",
+    "compute_portfolio_monitors",
     "daily_loss_breach_evidence",
+    "drawdown_from_peak_breach_evidence",
+    "equity_ledger",
     "evaluate_eligibility",
     "extract_numeric_scoring_levels",
     "format_trade_idea_track_record_report",
@@ -297,6 +316,7 @@ __all__ = [
     "is_safe_decision_id",
     "load_optimize_baseline_candidates",
     "market_snapshot_to_payload",
+    "max_drawdown_from_peak_percent",
     "new_event_id",
     "optimize_replay_min_history",
     "paper_fill_events_from_store_events",

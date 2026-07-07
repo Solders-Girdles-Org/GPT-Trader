@@ -161,3 +161,56 @@ def test_accountant_marks_daily_loss_usage_incomplete_when_evidence_is_missing(
 
     assert response.status_code == 200
     assert "incomplete: 1 record without loss evidence" in response.text
+
+
+def _configure_drawdown_appetite(service: TradeIdeaService, limit: Decimal) -> None:
+    current = service.current_budget()
+    service.update_budget(
+        replace(
+            current,
+            version=current.version + 1,
+            max_drawdown_from_peak_pct=limit,
+            reason="Configure the drawdown-from-peak appetite",
+        ),
+        ActorType.HUMAN,
+        "rj",
+    )
+
+
+def test_accountant_monitor_row_shows_no_limit_until_configured(
+    service: TradeIdeaService, client: TestClient
+) -> None:
+    _record_closed_trade(service, Decimal("-400"))
+
+    response = client.get("/accountant")
+
+    assert response.status_code == 200
+    assert "Drawdown from peak" in response.text
+    assert "no limit set" in response.text
+    assert "breached" not in response.text
+
+
+def test_accountant_monitor_row_flags_drawdown_breach(
+    service: TradeIdeaService, client: TestClient
+) -> None:
+    _record_closed_trade(service, Decimal("-600"))  # 3% of the 20000 peak
+    _configure_drawdown_appetite(service, Decimal("2"))
+
+    response = client.get("/accountant")
+
+    assert response.status_code == 200
+    assert "3.00%" in response.text
+    assert "breached — ratchets autonomy down" in response.text
+
+
+def test_accountant_monitor_row_shows_headroom_within_appetite(
+    service: TradeIdeaService, client: TestClient
+) -> None:
+    _record_closed_trade(service, Decimal("-600"))  # 3% of the 20000 peak
+    _configure_drawdown_appetite(service, Decimal("10"))
+
+    response = client.get("/accountant")
+
+    assert response.status_code == 200
+    assert "breached" not in response.text
+    assert "7.00%" in response.text  # 10% appetite - 3% in use

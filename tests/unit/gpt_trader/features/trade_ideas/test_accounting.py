@@ -6,7 +6,11 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-from gpt_trader.features.trade_ideas.accounting import compute_paper_accounting
+from gpt_trader.features.trade_ideas.accounting import (
+    compute_paper_accounting,
+    equity_ledger,
+    max_drawdown_from_peak_percent,
+)
 from gpt_trader.features.trade_ideas.audit import ActorType
 from gpt_trader.features.trade_ideas.budget import DEFAULT_RISK_BUDGET, BudgetLogEntry
 from gpt_trader.features.trade_ideas.closeout import (
@@ -181,3 +185,71 @@ def test_closeout_before_first_attestation_counts_toward_total_only() -> None:
     assert summary.current_equity == Decimal("1000")
     assert summary.realized_profit_loss_total == Decimal("75")
     assert summary.realized_profit_loss_since_attestation == Decimal("0")
+
+
+def test_equity_ledger_tracks_every_move_with_running_peak() -> None:
+    entries = [_budget_entry(1, at=_START, equity=Decimal("1000"))]
+    closeouts = [
+        _closeout("trade-1", at=_START + timedelta(hours=1), amount=Decimal("200")),
+        _closeout("trade-2", at=_START + timedelta(hours=2), amount=Decimal("-300")),
+        _closeout("trade-3", at=_START + timedelta(hours=3), amount=None),
+    ]
+
+    points = equity_ledger(entries, closeouts)
+
+    # The attestation, then the two closeouts with amounts; the amount-less
+    # closeout cannot move the ledger and produces no point.
+    assert [(p.equity, p.high_water_mark) for p in points] == [
+        (Decimal("1000"), Decimal("1000")),
+        (Decimal("1200"), Decimal("1200")),
+        (Decimal("900"), Decimal("1200")),
+    ]
+    assert points[-1].drawdown_amount == Decimal("300")
+    assert points[-1].drawdown_percent == Decimal("300") / Decimal("1200") * Decimal("100")
+
+
+def test_equity_ledger_matches_summary_fold_semantics() -> None:
+    # Re-attestation moves the level but never erases the historical peak,
+    # and closeouts before the first attestation produce no ledger point.
+    entries = [
+        _budget_entry(1, at=_START + timedelta(hours=1), equity=Decimal("1000")),
+        _budget_entry(2, at=_START + timedelta(hours=3), equity=Decimal("700")),
+    ]
+    closeouts = [
+        _closeout("trade-0", at=_START, amount=Decimal("50")),
+        _closeout("trade-1", at=_START + timedelta(hours=2), amount=Decimal("100")),
+    ]
+
+    points = equity_ledger(entries, closeouts)
+    summary = compute_paper_accounting(entries, closeouts)
+
+    assert [(p.equity, p.high_water_mark) for p in points] == [
+        (Decimal("1000"), Decimal("1000")),
+        (Decimal("1100"), Decimal("1100")),
+        (Decimal("700"), Decimal("1100")),
+    ]
+    assert points[-1].equity == summary.current_equity
+    assert points[-1].high_water_mark == summary.high_water_mark
+    assert points[-1].drawdown_amount == summary.drawdown_amount
+    assert points[-1].drawdown_percent == summary.drawdown_percent
+
+
+def test_max_drawdown_over_window_reads_worst_point_inside_bounds() -> None:
+    entries = [_budget_entry(1, at=_START, equity=Decimal("1000"))]
+    closeouts = [
+        _closeout("trade-1", at=_START + timedelta(hours=1), amount=Decimal("-400")),
+        _closeout("trade-2", at=_START + timedelta(hours=2), amount=Decimal("300")),
+        _closeout("trade-3", at=_START + timedelta(hours=3), amount=Decimal("-100")),
+    ]
+
+    points = equity_ledger(entries, closeouts)
+
+    # Whole trail: the worst point is the hour-1 trough (400/1000 = 40%).
+    assert max_drawdown_from_peak_percent(points) == Decimal("40")
+    # A window that starts after the trough only sees the later, shallower
+    # drawdowns (hour-3: 200/1000 = 20%).
+    windowed = max_drawdown_from_peak_percent(points, window_start=_START + timedelta(hours=2))
+    assert windowed == Decimal("20")
+    # No points in the window: not measurable.
+    assert max_drawdown_from_peak_percent(points, window_start=_START + timedelta(days=2)) is None
+    assert max_drawdown_from_peak_percent([]) is None

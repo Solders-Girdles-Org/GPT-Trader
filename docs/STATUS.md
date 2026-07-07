@@ -71,6 +71,15 @@ enabled and the autonomy log still resolves to `bounded_autonomy` at execution
 time. The execution gate reuses the daily-loss ratchet, so a breach lowers the
 mode before remaining system-approved ideas can execute.
 
+**Portfolio-level risk is a continuous monitor** (#1192): HWM,
+drawdown-from-peak, and open exposure are derived from the attested-equity
+ledger and the open-idea trail (`features/trade_ideas/monitors.py`) and read
+through one library call (`TradeIdeaService.portfolio_monitors`) by both
+`gpt-trader ideas monitors` and the console accountant page. The
+drawdown-from-peak appetite is a budget lever (`max_drawdown_from_peak_pct`,
+unset by default); a breach at any decision boundary ratchets autonomy down
+through the same audited path as the daily-loss trigger.
+
 **The promotion gates are now measurable in one command** (`ideas scorecard`,
 #1193): the Stage 1 -> 2 gates of the
 [measured-outcome rubric](decisions/adopt-measured-outcome-rubric.md) score
@@ -79,8 +88,10 @@ pass/fail from the idea-level closeout/audit trail
 applied, never from the batch cycle's run artifacts (test-enforced).
 Replay-derived calibration/edge over recorded snapshot windows reports
 alongside -- labeled, never blended into -- the wall-clock gates.
-Drawdown-from-peak renders not-yet-measurable until the continuous portfolio
-monitors (#1192) land, so the scorecard cannot claim promotability yet.
+Drawdown-from-peak now scores from the same equity ledger the monitors read
+(#1192); it stays not-yet-measurable until an operator sets the
+`max_drawdown_from_peak_pct` budget lever, so the scorecard cannot claim
+promotability until that appetite is configured.
 
 **The in-process event-driven lane exists behind a default-off gate**
 (`event_driven_paper_lane_enabled`, #1191) and is **operator-enabled on the

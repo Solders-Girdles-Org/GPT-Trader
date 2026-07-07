@@ -166,6 +166,7 @@ BUDGET_FIELDS = (
     "allow_futures_leverage",
     "allow_naked_shorts",
     "account_equity",
+    "max_drawdown_from_peak_pct",
 )
 
 
@@ -1222,7 +1223,22 @@ def register(subparsers: Any) -> None:
             "max_open_notional_pct approval gate"
         ),
     )
+    budget_set.add_argument(
+        "--max-drawdown-from-peak-pct",
+        type=_non_negative_decimal_value,
+        help=(
+            "Drawdown-from-peak appetite for the continuous portfolio "
+            "monitors; breach ratchets autonomy down through the audited path"
+        ),
+    )
     budget_set.set_defaults(handler=_handle_budget_set, subcommand="budget set")
+
+    monitors = ideas_subparsers.add_parser(
+        "monitors",
+        help="Show continuous portfolio monitors (HWM, drawdown-from-peak, exposure)",
+    )
+    _add_common_options(monitors)
+    monitors.set_defaults(handler=_handle_monitors, subcommand="monitors")
 
     autonomy = ideas_subparsers.add_parser(
         "autonomy", help="Inspect or change the audited autonomy level"
@@ -2980,6 +2996,29 @@ def _handle_budget_show(args: Namespace) -> CliResponse:
     payload["headroom"] = budget_headroom
     text = _budget_text(payload)
     return _success(command, args, payload, text)
+
+
+def _handle_monitors(args: Namespace) -> CliResponse:
+    command = "ideas monitors"
+    try:
+        service = _service(args)
+        snapshot = service.portfolio_monitors()
+    except Exception as error:
+        return _mapped_error(command, args, error)
+    payload = snapshot.to_dict()
+    breaches = [
+        name
+        for name, breached in (
+            ("drawdown_from_peak", snapshot.drawdown_breached),
+            ("open_notional", snapshot.open_notional_breached),
+            ("daily_loss", snapshot.daily_loss_breached),
+        )
+        if breached
+    ]
+    detail = "breaches=" + (",".join(breaches) if breaches else "none")
+    lines = [_status_line(command, "OK", detail)]
+    lines.extend(f"{key}: {value}" for key, value in payload.items())
+    return _success(command, args, payload, "\n".join(lines))
 
 
 def _handle_budget_set(args: Namespace) -> CliResponse:

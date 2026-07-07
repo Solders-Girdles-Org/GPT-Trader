@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -201,3 +202,33 @@ def test_renegotiated_budget_becomes_current(budget_log: RiskBudgetLog) -> None:
 
     assert budget_log.current() == widened
     assert [entry.budget.version for entry in budget_log.history()] == [1, 2]
+
+
+def test_max_drawdown_from_peak_lever_round_trips_and_validates() -> None:
+    budget = replace(
+        DEFAULT_RISK_BUDGET,
+        max_drawdown_from_peak_pct=Decimal("20"),
+        reason="Configure the drawdown-from-peak appetite",
+    )
+
+    restored = RiskBudget.from_dict(budget.to_dict())
+    assert restored.max_drawdown_from_peak_pct == Decimal("20")
+
+    with pytest.raises(ValueError, match="max_drawdown_from_peak_pct"):
+        replace(DEFAULT_RISK_BUDGET, max_drawdown_from_peak_pct=Decimal("-1"))
+    with pytest.raises(ValueError, match="max_drawdown_from_peak_pct"):
+        replace(DEFAULT_RISK_BUDGET, max_drawdown_from_peak_pct=Decimal("NaN"))
+
+
+def test_budget_payload_without_drawdown_lever_still_loads() -> None:
+    # Budget logs written before the lever existed (#1192) must keep loading;
+    # an absent key means no drawdown limit is configured.
+    payload = {
+        key: value
+        for key, value in DEFAULT_RISK_BUDGET.to_dict().items()
+        if key != "max_drawdown_from_peak_pct"
+    }
+
+    restored = RiskBudget.from_dict(payload)
+
+    assert restored.max_drawdown_from_peak_pct is None

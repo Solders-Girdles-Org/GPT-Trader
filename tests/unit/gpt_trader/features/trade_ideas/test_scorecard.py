@@ -161,8 +161,9 @@ def test_scorecard_scores_gates_from_the_trail(tmp_path: Path) -> None:
     assert loop_health["attribution_coverage"]["status"] == "pass"
     assert loop_health["audit_integrity"]["status"] == "pass"
     overall = payload["overall"]
-    # Drawdown-from-peak stays unmeasurable until #1192, so the scorecard can
-    # never claim promotability from this trail yet.
+    # The drawdown gate measures from this trail but no
+    # max_drawdown_from_peak_pct is configured on the budget, so it stays
+    # not-yet-measurable and the scorecard cannot claim promotability.
     assert overall["promotable"] is False
     assert overall["gates_passed"] == 6
     assert overall["gates_not_yet_measurable"] == 1

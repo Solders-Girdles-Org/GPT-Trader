@@ -18,6 +18,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any
 
+from gpt_trader.features.trade_ideas.accounting import max_drawdown_from_peak_percent
 from gpt_trader.features.trade_ideas.artifacts import stable_artifact_id
 from gpt_trader.features.trade_ideas.audit import AuditAction
 from gpt_trader.features.trade_ideas.eligibility import evaluate_eligibility
@@ -106,12 +107,10 @@ def build_stage_promotion_scorecard(
         "risk_calibration": _risk_calibration_gate(closed_in_window, thresholds=tuned),
         "expectancy": _expectancy_gate(closed_in_window),
         "benchmark_edge": _benchmark_edge_gate(closed_in_window, thresholds=tuned),
-        "max_drawdown_from_peak": _gate(
-            GateStatus.NOT_YET_MEASURABLE,
-            measured={},
-            detail=(
-                "drawdown-from-peak input arrives with the continuous portfolio " "monitors (#1192)"
-            ),
+        "max_drawdown_from_peak": _drawdown_gate(
+            service,
+            window_start=window_start,
+            now=current_time,
         ),
     }
     loop_health = {
@@ -500,6 +499,52 @@ def _benchmark_edge_gate(
         detail=(
             f"candidate avg R {_quantized(candidate_avg)} - "
             f"baseline avg R {_quantized(baseline_avg)} = {_quantized(edge)}, need > 0"
+        ),
+    )
+
+
+def _drawdown_gate(
+    service: TradeIdeaService,
+    *,
+    window_start: datetime,
+    now: datetime,
+) -> dict[str, Any]:
+    """Score max drawdown-from-peak over the window from the equity ledger.
+
+    Reads the same trail-derived ledger as the continuous portfolio monitors
+    (#1192): the appetite is ``max_drawdown_from_peak_pct`` on the active risk
+    budget (one measurement, two consumers — this promotion gate and the
+    ratchet's down-ladder).
+    """
+    limit = service.peek_budget().max_drawdown_from_peak_pct
+    points = service.equity_ledger_points()
+    worst = max_drawdown_from_peak_percent(points, window_start=window_start, window_end=now)
+    if worst is None:
+        return _gate(
+            GateStatus.NOT_YET_MEASURABLE,
+            measured={"ledger_point_count": len(points)},
+            detail="no attested-equity ledger points in the observation window",
+        )
+    measured: dict[str, Any] = {
+        "max_drawdown_from_peak_pct": str(worst.quantize(_PERCENT_QUANT)),
+        "ledger_point_count": len(points),
+    }
+    if limit is None:
+        return _gate(
+            GateStatus.NOT_YET_MEASURABLE,
+            measured=measured,
+            detail=(
+                "no max_drawdown_from_peak_pct configured on the risk budget; "
+                "set the lever to make this gate scoreable"
+            ),
+        )
+    measured["max_drawdown_from_peak_limit_pct"] = str(limit)
+    return _gate(
+        GateStatus.PASS if worst <= limit else GateStatus.FAIL,
+        measured=measured,
+        detail=(
+            f"max drawdown-from-peak {worst.quantize(_PERCENT_QUANT)}% over the window, "
+            f"budget limit {limit}%"
         ),
     )
 
