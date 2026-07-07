@@ -22,6 +22,7 @@ from gpt_trader.features.trade_ideas.models import (
     Confidence,
     ConfidenceLabel,
     EntryZone,
+    ExitPlan,
     MaxLoss,
     ProductType,
     TimeHorizon,
@@ -214,6 +215,10 @@ class BaselineProposer:
                 f"Price has already moved above {entry_upper} before entry",
                 "The crossover has reversed on the most recent completed bar",
             ),
+            # Machine-readable levels so a filled position can be resolved
+            # against later marks (issue #1218); the same values the free-text
+            # invalidation/target_exit above describe.
+            exit_plan=ExitPlan(stop=stop_level, target=target),
         )
 
         gaps = evaluate_eligibility(idea)
