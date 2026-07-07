@@ -154,6 +154,48 @@ def test_scorecard_writes_output_dir_artifact(
     assert artifact["schema_version"] == "gpt-trader.trade_ideas.scorecard.v1"
 
 
+def test_scorecard_rejects_failure_envelope_replay_report(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # A failed 'ideas replay' run writes its error envelope to --output
+    # (data null, no reports); the scorecard must name the file instead of
+    # leaking a KeyError (#1226).
+    root = tmp_path / "ideas"
+    failed_path = tmp_path / "failed-tournament.json"
+    failed_path.write_text(
+        json.dumps(
+            {
+                "success": False,
+                "exit_code": 1,
+                "data": None,
+                "errors": [{"code": "VALIDATION_ERROR", "message": "boom"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = cli.main(
+        [
+            "ideas",
+            "scorecard",
+            "--ideas-root",
+            str(root),
+            "--replay-report",
+            str(failed_path),
+            "--format",
+            "json",
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code != 0
+    response = json.loads(output)
+    assert response["success"] is False
+    assert "not a replay artifact" in response["errors"][0]["message"]
+    assert "failed-tournament.json" in response["errors"][0]["message"]
+
+
 def test_scorecard_rejects_unreadable_replay_report(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

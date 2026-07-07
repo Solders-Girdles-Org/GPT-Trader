@@ -354,7 +354,10 @@ directory under `var/data/trade_ideas/replay_evidence/<UTC timestamp>/`:
 the snapshot, per-symbol tournament reports, and the durable scorecard
 artifact. Override `REPLAY_SYMBOLS`, `REPLAY_GRANULARITY`, `REPLAY_LOOKBACK`,
 `REPLAY_PROPOSERS`, or `REPLAY_EVIDENCE_DIR` per invocation; everything is
-broker-free and never reads accounts or places orders.
+broker-free and never reads accounts or places orders. A symbol whose
+tournament fails keeps its error envelope in the run directory as evidence
+but is excluded from the scorecard render; the turn only fails when every
+tournament fails.
 
 To attach replay evidence to any scorecard render by hand:
 

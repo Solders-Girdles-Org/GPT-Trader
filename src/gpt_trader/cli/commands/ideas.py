@@ -2293,7 +2293,13 @@ def _load_replay_report_payload(path: Path) -> Mapping[str, Any]:
     # 'ideas replay ... --format json --output <path>'.
     data = payload.get("data")
     if isinstance(data, Mapping) and "proposer_id" not in payload and "reports" not in payload:
-        return data
+        payload = data
+    if "proposer_id" not in payload and "reports" not in payload:
+        raise ValueError(
+            f"Replay report '{path}' is not a replay artifact (no proposer_id or "
+            "reports field); a failed 'ideas replay' run writes its error "
+            "envelope to --output, so check the run succeeded"
+        )
     return payload
 
 

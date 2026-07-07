@@ -47,14 +47,25 @@ REPORT_FLAGS=()
 IFS=',' read -r -a SYMBOLS <<<"${REPLAY_SYMBOLS}"
 for symbol in "${SYMBOLS[@]}"; do
   report="${RUN_DIR}/tournament_${symbol}.json"
-  uv run gpt-trader ideas replay tournament \
+  # A failed tournament writes its error envelope to the report path — kept
+  # as run evidence, excluded from the scorecard render. One symbol must not
+  # abort the turn: the other symbols' evidence still renders.
+  if ! uv run gpt-trader ideas replay tournament \
     --file "${RUN_DIR}/snapshot.json" \
     --symbol "${symbol}" \
     --granularity "${REPLAY_GRANULARITY}" \
     --proposers "${REPLAY_PROPOSERS}" \
     --format json \
-    --output "${report}"
+    --output "${report}"; then
+    echo "replay_evidence: tournament failed for ${symbol}; error envelope kept at ${report}" >&2
+    continue
+  fi
   REPORT_FLAGS+=(--replay-report "${report}")
 done
+
+if [ ${#REPORT_FLAGS[@]} -eq 0 ]; then
+  echo "replay_evidence: every tournament failed; no scorecard rendered (see ${RUN_DIR})" >&2
+  exit 1
+fi
 
 exec uv run gpt-trader ideas scorecard "${REPORT_FLAGS[@]}" --output-dir "${RUN_DIR}"

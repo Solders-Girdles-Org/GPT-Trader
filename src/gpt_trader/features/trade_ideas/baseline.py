@@ -134,6 +134,14 @@ class BaselineProposer:
         target = (close + config.reward_multiple * (close - stop_level)).quantize(
             config.price_precision
         )
+        # On low-priced symbols the price precision can round the stop, entry
+        # midpoint, and target into a set with no defined risk per unit (e.g.
+        # a $0.82 close within half a cent of the long average at 0.01
+        # precision). A trade whose stop is not strictly below the entry
+        # midpoint and target is not proposable.
+        entry_midpoint = (entry_lower + entry_upper) / 2
+        if not stop_level < entry_midpoint < target:
+            return None
         # Size against the worst permitted long entry (the top of the entry
         # zone): a fill at entry_upper is explicitly allowed, so the persisted
         # risk snapshot must not assume a cheaper fill at the last close.
