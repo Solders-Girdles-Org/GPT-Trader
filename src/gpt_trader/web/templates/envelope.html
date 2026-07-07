@@ -92,6 +92,9 @@
     <label>Attested account equity ($, blank = unverified)
       <input type="text" name="account_equity" value="{{ form.account_equity }}">
     </label>
+    <label>Max drawdown from peak (%, blank = no limit)
+      <input type="text" name="max_drawdown_from_peak_pct" value="{{ form.max_drawdown_from_peak_pct }}">
+    </label>
     <label class="check"><input type="checkbox" name="sizing_capped_by_budget" {{ "checked" if form.sizing_capped_by_budget }}> Sizing capped by budget</label>
     <label class="check"><input type="checkbox" name="allow_futures_leverage" {{ "checked" if form.allow_futures_leverage }}> Allow futures leverage</label>
     <label class="check"><input type="checkbox" name="allow_naked_shorts" {{ "checked" if form.allow_naked_shorts }}> Allow naked shorts</label>

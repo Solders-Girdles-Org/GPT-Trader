@@ -20,8 +20,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from gpt_trader.errors import ValidationError
-from gpt_trader.features.trade_ideas.accounting import compute_paper_accounting
-from gpt_trader.features.trade_ideas.audit import ActorType, AuditAction
+from gpt_trader.features.trade_ideas.audit import ActorType
 from gpt_trader.features.trade_ideas.autonomy import (
     AUTONOMY_SOURCE_FAIL_CLOSED,
     RATCHET_ACTOR_ID,
@@ -159,6 +158,7 @@ _BUDGET_LEVER_FIELDS = (
     "allow_futures_leverage",
     "allow_naked_shorts",
     "account_equity",
+    "max_drawdown_from_peak_pct",
 )
 
 
@@ -221,6 +221,16 @@ def _budget_from_form(
             raise ValueError(
                 f"account_equity must be a decimal number or blank, got {equity_raw!r}"
             ) from error
+    drawdown_raw = str(values["max_drawdown_from_peak_pct"]).strip()
+    max_drawdown_from_peak_pct: Decimal | None = None
+    if drawdown_raw:
+        try:
+            max_drawdown_from_peak_pct = Decimal(drawdown_raw)
+        except ArithmeticError as error:
+            raise ValueError(
+                "max_drawdown_from_peak_pct must be a decimal number or blank, "
+                f"got {drawdown_raw!r}"
+            ) from error
     return RiskBudget(
         version=base_version + 1,
         max_loss_per_idea_pct=_decimal("max_loss_per_idea_pct"),
@@ -234,6 +244,7 @@ def _budget_from_form(
         allow_naked_shorts=bool(values["allow_naked_shorts"]),
         reason=reason,
         account_equity=account_equity,
+        max_drawdown_from_peak_pct=max_drawdown_from_peak_pct,
     )
 
 
@@ -408,6 +419,7 @@ def create_app(
         allow_futures_leverage: bool = Form(False),
         allow_naked_shorts: bool = Form(False),
         account_equity: str = Form(""),
+        max_drawdown_from_peak_pct: str = Form(""),
     ) -> HTMLResponse | RedirectResponse:
         form_values: dict[str, str | bool] = {
             "max_loss_per_idea_pct": max_loss_per_idea_pct,
@@ -420,6 +432,7 @@ def create_app(
             "allow_futures_leverage": allow_futures_leverage,
             "allow_naked_shorts": allow_naked_shorts,
             "account_equity": account_equity,
+            "max_drawdown_from_peak_pct": max_drawdown_from_peak_pct,
         }
 
         def _form_error(message: str) -> HTMLResponse:
@@ -475,27 +488,16 @@ def create_app(
 
     @app.get("/accountant", response_class=HTMLResponse)
     def accountant(request: Request) -> HTMLResponse:
-        # Closeouts fold at their resolution time so a delayed attribution
-        # cannot re-apply P&L an intervening attestation already includes.
-        # Only non-FILLED terminal events are mapped: a FILLED audit event is
-        # the entry fill, not the later market close, so filled trades keep
-        # their attribution timestamp (the closest available evidence).
-        terminal_times = {
-            event.event_id: event.timestamp
-            for event in resolved_service.list_audit_events().items
-            if event.action is not AuditAction.FILLED
-        }
-        summary = compute_paper_accounting(
-            resolved_service.budget_log.history(),
-            resolved_service.query_closeout_records().items,
-            terminal_times=terminal_times,
-        )
+        # Both the summary and the monitor snapshot are the same service
+        # library calls the CLI reads (`ideas monitors`), so console and CLI
+        # can never disagree about HWM, drawdown-from-peak, or exposure.
         return templates.TemplateResponse(
             request=request,
             name="accountant.html",
             context={
                 "actor_id": resolved_actor,
-                "summary": summary,
+                "summary": resolved_service.paper_accounting(),
+                "monitors": resolved_service.portfolio_monitors(),
                 "budget": resolved_service.peek_budget(),
                 "headroom": resolved_service.budget_headroom(),
                 "open_approved_count": resolved_service.open_approved_count(),

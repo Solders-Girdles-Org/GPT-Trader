@@ -23,6 +23,12 @@ from gpt_trader.core.risk_units import (
     same_trading_day,
 )
 from gpt_trader.errors import ValidationError
+from gpt_trader.features.trade_ideas.accounting import (
+    EquityLedgerPoint,
+    PaperAccountingSummary,
+    compute_paper_accounting,
+    equity_ledger,
+)
 from gpt_trader.features.trade_ideas.audit import (
     ActorType,
     AuditAction,
@@ -44,6 +50,7 @@ from gpt_trader.features.trade_ideas.autonomy import (
     AutonomyStateLog,
     autonomy_transition_violations,
     daily_loss_breach_evidence,
+    drawdown_from_peak_breach_evidence,
     resolve_autonomy,
 )
 from gpt_trader.features.trade_ideas.broker_payloads import (
@@ -74,6 +81,10 @@ from gpt_trader.features.trade_ideas.models import (
     TicketStatus,
     TicketVenue,
     TradeIdea,
+)
+from gpt_trader.features.trade_ideas.monitors import (
+    PortfolioMonitorSnapshot,
+    compute_portfolio_monitors,
 )
 from gpt_trader.features.trade_ideas.policy import (
     ApprovalBudgetContext,
@@ -455,6 +466,26 @@ class TradeIdeaService:
             budget_version=active_budget.version,
             moment=now,
         )
+        reason = (
+            "Automatic ratchet-down: same-trading-day realized loss breached max_daily_loss_pct"
+        )
+        if evidence is None and active_budget.max_drawdown_from_peak_pct is not None:
+            # Continuous portfolio monitor (#1192): drawdown-from-peak is
+            # derived from the attested-equity ledger at every decision
+            # boundary, so a breach halts autonomy through the same audited
+            # ratchet as the daily-loss trigger — never a silent stop.
+            accounting = self.paper_accounting()
+            evidence = drawdown_from_peak_breach_evidence(
+                drawdown_from_peak_pct=accounting.drawdown_percent,
+                max_drawdown_from_peak_pct=active_budget.max_drawdown_from_peak_pct,
+                budget_version=active_budget.version,
+                high_water_mark=accounting.high_water_mark,
+                current_equity=accounting.current_equity,
+                moment=now,
+            )
+            reason = (
+                "Automatic ratchet-down: drawdown-from-peak breached max_drawdown_from_peak_pct"
+            )
         if evidence is None:
             return resolution
         entry = AutonomyStateEntry(
@@ -463,9 +494,7 @@ class TradeIdeaService:
             mode=AutonomyMode.HUMAN_APPROVED_EXECUTION,
             actor_type=ActorType.SYSTEM,
             actor_id=RATCHET_ACTOR_ID,
-            reason=(
-                "Automatic ratchet-down: same-trading-day realized loss breached max_daily_loss_pct"
-            ),
+            reason=reason,
             evidence=evidence,
         )
         self._autonomy_log.append(entry)
@@ -654,6 +683,51 @@ class TradeIdeaService:
                 state.value for state in OPEN_BUDGET_EXPOSURE_STATES
             ),
         }
+
+    def closeout_terminal_times(self) -> dict[str, datetime]:
+        """Map audit event ids to timestamps for folding closeouts at resolution time.
+
+        Only non-FILLED events are mapped: a FILLED audit event is the entry
+        fill, not the later market close, so filled trades keep their
+        attribution timestamp (the closest available evidence). A delayed
+        attribution therefore cannot re-apply P&L an intervening attestation
+        already includes.
+        """
+        return {
+            event.event_id: event.timestamp
+            for event in self.list_audit_events().items
+            if event.action is not AuditAction.FILLED
+        }
+
+    def paper_accounting(self) -> PaperAccountingSummary:
+        """Read-only paper equity / HWM / drawdown-from-peak from the trail."""
+        return compute_paper_accounting(
+            self.budget_log.history(),
+            self.query_closeout_records().items,
+            terminal_times=self.closeout_terminal_times(),
+        )
+
+    def equity_ledger_points(self) -> list[EquityLedgerPoint]:
+        """Read-only resolved equity/peak series for windowed monitor reads."""
+        return equity_ledger(
+            self.budget_log.history(),
+            self.query_closeout_records().items,
+            terminal_times=self.closeout_terminal_times(),
+        )
+
+    def portfolio_monitors(self, *, now: datetime | None = None) -> PortfolioMonitorSnapshot:
+        """One snapshot of the continuous portfolio monitors (#1192).
+
+        Non-mutating read shared by the CLI and the console; the ratchet acts
+        on the same measurements at decision boundaries (``decision_autonomy``).
+        """
+        evaluation_time = now or self._now()
+        return compute_portfolio_monitors(
+            now=evaluation_time,
+            budget=self.peek_budget(),
+            accounting=self.paper_accounting(),
+            exposure=self.approval_budget_context(now=evaluation_time),
+        )
 
     def validate_new_proposal(self, idea: TradeIdea) -> None:
         """Validate proposal lifecycle preconditions without writing state."""

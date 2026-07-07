@@ -17,6 +17,7 @@ from gpt_trader.features.trade_ideas import (
     AutonomyStateLog,
     autonomy_transition_violations,
     daily_loss_breach_evidence,
+    drawdown_from_peak_breach_evidence,
     resolve_autonomy,
 )
 from gpt_trader.features.trade_ideas.autonomy import (
@@ -315,3 +316,61 @@ def test_breach_evidence_pins_appetite_source_and_trading_day() -> None:
     assert "max_daily_loss_pct=10" in evidence[0]
     assert "risk budget version 3" in evidence[0]
     assert "trading_day=2026-07-03" in evidence[0]
+
+
+def test_drawdown_breach_evidence_requires_limit_and_measurement() -> None:
+    moment = datetime(2026, 7, 7, 12, 0, tzinfo=UTC)
+    # No limit configured: nothing to breach.
+    assert (
+        drawdown_from_peak_breach_evidence(
+            drawdown_from_peak_pct=Decimal("50"),
+            max_drawdown_from_peak_pct=None,
+            budget_version=1,
+            high_water_mark=Decimal("1000"),
+            current_equity=Decimal("500"),
+            moment=moment,
+        )
+        is None
+    )
+    # No measurable drawdown (no attested basis yet): nothing to breach.
+    assert (
+        drawdown_from_peak_breach_evidence(
+            drawdown_from_peak_pct=None,
+            max_drawdown_from_peak_pct=Decimal("10"),
+            budget_version=1,
+            high_water_mark=None,
+            current_equity=None,
+            moment=moment,
+        )
+        is None
+    )
+    # Within appetite: no breach.
+    assert (
+        drawdown_from_peak_breach_evidence(
+            drawdown_from_peak_pct=Decimal("10"),
+            max_drawdown_from_peak_pct=Decimal("10"),
+            budget_version=1,
+            high_water_mark=Decimal("1000"),
+            current_equity=Decimal("900"),
+            moment=moment,
+        )
+        is None
+    )
+
+
+def test_drawdown_breach_evidence_pins_appetite_source_and_ledger_levels() -> None:
+    evidence = drawdown_from_peak_breach_evidence(
+        drawdown_from_peak_pct=Decimal("15"),
+        max_drawdown_from_peak_pct=Decimal("10"),
+        budget_version=4,
+        high_water_mark=Decimal("2000"),
+        current_equity=Decimal("1700"),
+        moment=datetime(2026, 7, 7, 12, 0, tzinfo=UTC),
+    )
+
+    assert evidence is not None
+    assert "drawdown_from_peak_pct=15" in evidence[0]
+    assert "max_drawdown_from_peak_pct=10" in evidence[0]
+    assert "version 4" in evidence[0]
+    assert "high_water_mark=2000" in evidence[0]
+    assert "current_equity=1700" in evidence[0]

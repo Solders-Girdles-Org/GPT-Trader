@@ -46,6 +46,11 @@ def _lever_form(service: TradeIdeaService, **overrides: str) -> dict[str, str]:
         "max_review_latency_hours": str(budget.max_review_latency_hours),
         "gain_retention_floor_pct": str(budget.gain_retention_floor_pct),
         "account_equity": "" if budget.account_equity is None else str(budget.account_equity),
+        "max_drawdown_from_peak_pct": (
+            ""
+            if budget.max_drawdown_from_peak_pct is None
+            else str(budget.max_drawdown_from_peak_pct)
+        ),
     }
     if budget.sizing_capped_by_budget:
         payload["sizing_capped_by_budget"] = "on"
@@ -261,3 +266,56 @@ def test_exception_framing_separates_violations_from_inside_envelope(
     assert "max_loss_per_idea_pct" in response.text  # violation text on the exception
     assert "Inside the envelope:" in response.text
     assert "trade-20260612-001" in response.text
+
+
+def test_drawdown_lever_can_be_set_and_cleared_through_the_form(
+    service: TradeIdeaService, client: TestClient
+) -> None:
+    response = client.post(
+        "/envelope/budget",
+        data=_lever_form(
+            service,
+            max_drawdown_from_peak_pct="15",
+            reason="Configure the drawdown-from-peak appetite",
+        ),
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    enacted = service.budget_log.history()[-1].budget
+    assert enacted.max_drawdown_from_peak_pct == Decimal("15")
+
+    # Blank clears the limit (no drawdown appetite configured).
+    response = client.post(
+        "/envelope/budget",
+        data=_lever_form(
+            service,
+            max_drawdown_from_peak_pct="",
+            reason="Remove the drawdown limit",
+        ),
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert service.budget_log.history()[-1].budget.max_drawdown_from_peak_pct is None
+    rendered = client.get("/envelope")
+    assert "max_drawdown_from_peak_pct: 15 → None" in rendered.text
+
+
+def test_non_numeric_drawdown_lever_re_renders_with_field_named_error(
+    service: TradeIdeaService, client: TestClient
+) -> None:
+    response = client.post(
+        "/envelope/budget",
+        data=_lever_form(
+            service,
+            max_drawdown_from_peak_pct="not-a-number",
+            reason="Bad drawdown input",
+        ),
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 400
+    assert "max_drawdown_from_peak_pct must be a decimal number or blank" in response.text
+    # The rejected submission must not have enacted anything.
+    assert service.budget_log.history() == []

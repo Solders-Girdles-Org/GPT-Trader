@@ -77,12 +77,21 @@ class RiskBudget:
     # supply its own denominator. None means notional exposure cannot be
     # verified from the budget alone.
     account_equity: Decimal | None = None
+    # Drawdown-from-peak appetite for the continuous portfolio monitors
+    # (#1192): breach ratchets autonomy down through the audited path.
+    # None means no drawdown limit is configured — nothing to breach.
+    max_drawdown_from_peak_pct: Decimal | None = None
 
     def __post_init__(self) -> None:
         if self.account_equity is not None:
             _require_finite_decimal(self.account_equity, "account_equity")
             if self.account_equity <= 0:
                 raise ValueError("account_equity must be positive")
+        if self.max_drawdown_from_peak_pct is not None:
+            _require_finite_decimal(self.max_drawdown_from_peak_pct, "max_drawdown_from_peak_pct")
+            _require_non_negative_decimal(
+                self.max_drawdown_from_peak_pct, "max_drawdown_from_peak_pct"
+            )
         _require_finite_decimal(self.max_loss_per_idea_pct, "max_loss_per_idea_pct")
         _require_finite_decimal(self.max_daily_loss_pct, "max_daily_loss_pct")
         _require_finite_decimal(self.max_open_notional_pct, "max_open_notional_pct")
@@ -110,6 +119,11 @@ class RiskBudget:
             "allow_naked_shorts": self.allow_naked_shorts,
             "reason": self.reason,
             "account_equity": str(self.account_equity) if self.account_equity is not None else None,
+            "max_drawdown_from_peak_pct": (
+                str(self.max_drawdown_from_peak_pct)
+                if self.max_drawdown_from_peak_pct is not None
+                else None
+            ),
         }
 
     @classmethod
@@ -135,6 +149,13 @@ class RiskBudget:
             account_equity=(
                 Decimal(str(payload["account_equity"]))
                 if payload.get("account_equity") is not None
+                else None
+            ),
+            # Optional lever added after logs already existed (#1192); absent
+            # in older entries means no drawdown limit was configured.
+            max_drawdown_from_peak_pct=(
+                Decimal(str(payload["max_drawdown_from_peak_pct"]))
+                if payload.get("max_drawdown_from_peak_pct") is not None
                 else None
             ),
         )

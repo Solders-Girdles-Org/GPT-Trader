@@ -270,6 +270,37 @@ def daily_loss_breach_evidence(
     )
 
 
+def drawdown_from_peak_breach_evidence(
+    *,
+    drawdown_from_peak_pct: Decimal | None,
+    max_drawdown_from_peak_pct: Decimal | None,
+    budget_version: int,
+    high_water_mark: Decimal | None,
+    current_equity: Decimal | None,
+    moment: datetime,
+) -> tuple[str, ...] | None:
+    """Return ratchet evidence when drawdown-from-peak breaches the budget cap.
+
+    Continuous-portfolio-monitor trigger (#1192), defined against the same
+    unified vocabulary as ``daily_loss_breach_evidence``: one appetite source
+    (``max_drawdown_from_peak_pct`` on the active ``RiskBudget``) and one
+    measurement (drawdown-from-peak derived from the attested-equity ledger,
+    the charter's "realized gains are not principal"). Returns ``None`` when
+    no limit is configured, the drawdown is not yet measurable, or there is
+    no breach.
+    """
+    if max_drawdown_from_peak_pct is None or drawdown_from_peak_pct is None:
+        return None
+    if drawdown_from_peak_pct <= max_drawdown_from_peak_pct:
+        return None
+    return (
+        f"drawdown_from_peak_pct={drawdown_from_peak_pct} exceeds "
+        f"max_drawdown_from_peak_pct={max_drawdown_from_peak_pct} from risk budget "
+        f"version {budget_version} at {moment.isoformat()} "
+        f"(high_water_mark={high_water_mark}, current_equity={current_equity})",
+    )
+
+
 __all__ = [
     "AUTONOMY_RANK",
     "AUTONOMY_SOURCE_FAIL_CLOSED",
@@ -284,5 +315,6 @@ __all__ = [
     "RATCHET_ACTOR_ID",
     "autonomy_transition_violations",
     "daily_loss_breach_evidence",
+    "drawdown_from_peak_breach_evidence",
     "resolve_autonomy",
 ]

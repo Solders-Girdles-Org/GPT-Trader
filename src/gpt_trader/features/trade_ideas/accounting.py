@@ -53,6 +53,24 @@ class EquityAttestation:
 
 
 @dataclass(frozen=True, slots=True)
+class EquityLedgerPoint:
+    """One resolved equity level in the paper ledger, with its running peak.
+
+    Points exist only once an attested basis exists: attestations and the
+    closeouts that adjust an attested level each produce a point. Drawdown is
+    measured from the historical peak of the whole ledger (never reset by a
+    re-attestation). ``drawdown_percent`` is ``None`` only when the peak is
+    non-positive (percent-of-peak is undefined).
+    """
+
+    timestamp: datetime
+    equity: Decimal
+    high_water_mark: Decimal
+    drawdown_amount: Decimal
+    drawdown_percent: Decimal | None
+
+
+@dataclass(frozen=True, slots=True)
 class PaperAccountingSummary:
     """Paper equity ledger totals; ``None`` means no attested basis exists."""
 
@@ -85,18 +103,13 @@ def _attestations(entries: Iterable[BudgetLogEntry]) -> list[EquityAttestation]:
     return attestations
 
 
-def compute_paper_accounting(
+def _merged_ledger_events(
     budget_entries: Iterable[BudgetLogEntry],
     closeouts: Iterable[CloseoutAttribution],
-    *,
-    terminal_times: Mapping[str, datetime] | None = None,
-) -> PaperAccountingSummary:
-    """Fold attestations and closeout amounts into the paper equity ledger.
-
-    ``terminal_times`` maps a closeout's ``terminal_event_id`` to the audit
-    timestamp of that terminal event; a closeout without a mapping falls back
-    to its attribution timestamp.
-    """
+    terminal_times: Mapping[str, datetime] | None,
+) -> tuple[
+    list[EquityAttestation], list[tuple[datetime, int, EquityAttestation | CloseoutAttribution]]
+]:
     attestations = _attestations(budget_entries)
     resolved_terminal_times = terminal_times or {}
 
@@ -109,6 +122,95 @@ def compute_paper_accounting(
         (attestation.timestamp, 0, attestation) for attestation in attestations
     ] + [(_closeout_time(record), 1, record) for record in closeouts]
     events.sort(key=lambda event: (event[0], event[1]))
+    return attestations, events
+
+
+def equity_ledger(
+    budget_entries: Iterable[BudgetLogEntry],
+    closeouts: Iterable[CloseoutAttribution],
+    *,
+    terminal_times: Mapping[str, datetime] | None = None,
+) -> list[EquityLedgerPoint]:
+    """Fold the trail into the resolved equity/peak series, one point per move.
+
+    Same fold as ``compute_paper_accounting`` (same merge order, same
+    pre-attestation and amount-unavailable rules) but keeps every intermediate
+    level so windowed questions — e.g. max drawdown-from-peak over the
+    scorecard's observation window — read from the trail, not from any stored
+    monitor state.
+    """
+    _attestation_list, events = _merged_ledger_events(budget_entries, closeouts, terminal_times)
+    points: list[EquityLedgerPoint] = []
+    equity: Decimal | None = None
+    high_water_mark: Decimal | None = None
+
+    def _point(timestamp: datetime) -> EquityLedgerPoint:
+        assert equity is not None and high_water_mark is not None
+        drawdown_amount = max(high_water_mark - equity, Decimal("0"))
+        drawdown_percent = (
+            drawdown_amount / high_water_mark * Decimal("100") if high_water_mark > 0 else None
+        )
+        return EquityLedgerPoint(
+            timestamp=timestamp,
+            equity=equity,
+            high_water_mark=high_water_mark,
+            drawdown_amount=drawdown_amount,
+            drawdown_percent=drawdown_percent,
+        )
+
+    for timestamp, _order, event in events:
+        if isinstance(event, EquityAttestation):
+            equity = event.equity
+            high_water_mark = equity if high_water_mark is None else max(high_water_mark, equity)
+            points.append(_point(timestamp))
+            continue
+        amount = event.realized_profit_loss_amount
+        if amount is None or equity is None:
+            continue
+        equity += amount
+        if high_water_mark is not None:
+            high_water_mark = max(high_water_mark, equity)
+        points.append(_point(timestamp))
+    return points
+
+
+def max_drawdown_from_peak_percent(
+    points: Iterable[EquityLedgerPoint],
+    *,
+    window_start: datetime | None = None,
+    window_end: datetime | None = None,
+) -> Decimal | None:
+    """Worst drawdown-from-peak percent among ledger points inside the window.
+
+    ``None`` bounds are open. Returns ``None`` when no point in the window has
+    a measurable percent — no attested basis, or a non-positive peak.
+    """
+    worst: Decimal | None = None
+    for point in points:
+        if window_start is not None and point.timestamp < window_start:
+            continue
+        if window_end is not None and point.timestamp > window_end:
+            continue
+        if point.drawdown_percent is None:
+            continue
+        if worst is None or point.drawdown_percent > worst:
+            worst = point.drawdown_percent
+    return worst
+
+
+def compute_paper_accounting(
+    budget_entries: Iterable[BudgetLogEntry],
+    closeouts: Iterable[CloseoutAttribution],
+    *,
+    terminal_times: Mapping[str, datetime] | None = None,
+) -> PaperAccountingSummary:
+    """Fold attestations and closeout amounts into the paper equity ledger.
+
+    ``terminal_times`` maps a closeout's ``terminal_event_id`` to the audit
+    timestamp of that terminal event; a closeout without a mapping falls back
+    to its attribution timestamp.
+    """
+    attestations, events = _merged_ledger_events(budget_entries, closeouts, terminal_times)
 
     equity: Decimal | None = None
     high_water_mark: Decimal | None = None
