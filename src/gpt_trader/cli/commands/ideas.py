@@ -810,9 +810,10 @@ def register(subparsers: Any) -> None:
         "--proposers",
         required=True,
         help=(
-            "Comma-separated proposer ids: baseline-ma-<short>-<long> or "
+            "Comma-separated proposer ids: baseline-ma-<short>-<long>, "
+            "regime-aware-ma-<short>-<long>, or "
             f"strategy-backed ids ({', '.join(STRATEGY_BACKED_PROPOSER_IDS)}), "
-            "for example baseline-ma-2-4,strategy-baseline-spot"
+            "for example baseline-ma-10-50,regime-aware-ma-10-50"
         ),
     )
     tournament.add_argument(
@@ -1689,29 +1690,45 @@ def _tournament_entries(args: Namespace) -> list[tuple[Proposer, int]]:
                     _strategy_replay_floor(strategy_name)[0],
                 )
             )
+        elif proposer_id.startswith("regime-aware-ma-"):
+            config = _ma_config_from_proposer_id(args, proposer_id, prefix="regime-aware-ma")
+            regime_config = RegimeConfig()
+            entries.append(
+                (
+                    RegimeAwareProposer(
+                        RegimeAwareProposerConfig(
+                            baseline_config=config,
+                            regime_config=regime_config,
+                        ),
+                    ),
+                    _default_regime_replay_min_history(config, regime_config),
+                )
+            )
         else:
-            config = _baseline_config_from_proposer_id(args, proposer_id)
+            config = _ma_config_from_proposer_id(args, proposer_id, prefix="baseline-ma")
             entries.append((BaselineProposer(config), _default_replay_min_history(config)))
     return entries
 
 
-def _baseline_config_from_proposer_id(
+def _ma_config_from_proposer_id(
     args: Namespace,
     proposer_id: str,
+    *,
+    prefix: str,
 ) -> BaselineProposerConfig:
-    parts = proposer_id.split("-")
-    if len(parts) != 4 or parts[0] != "baseline" or parts[1] != "ma":
+    parts = proposer_id.removeprefix(f"{prefix}-").split("-")
+    if not proposer_id.startswith(f"{prefix}-") or len(parts) != 2:
         raise CandleInputError(
             (
                 f"Unsupported proposer id '{proposer_id}'; expected "
-                "baseline-ma-<short>-<long> or one of "
+                "baseline-ma-<short>-<long>, regime-aware-ma-<short>-<long>, or one of "
                 f"{', '.join(STRATEGY_BACKED_PROPOSER_IDS)}"
             ),
             field="proposers",
         )
     try:
-        short_window = int(parts[2])
-        long_window = int(parts[3])
+        short_window = int(parts[0])
+        long_window = int(parts[1])
     except ValueError as error:
         raise CandleInputError(
             (f"Unsupported proposer id '{proposer_id}'; expected numeric MA windows"),
