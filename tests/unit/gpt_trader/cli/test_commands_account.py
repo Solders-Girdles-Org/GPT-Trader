@@ -64,7 +64,7 @@ def test_account_snapshot_prints_result(monkeypatch, capsys):
 
 def test_account_snapshot_raises_when_unavailable(monkeypatch):
     class StubBot:
-        """Bot without an account_telemetry attribute (production shape)."""
+        """Bot without an account_telemetry attribute (broker-less container)."""
 
         async def shutdown(self):
             StubBot.shutdown_called = True
