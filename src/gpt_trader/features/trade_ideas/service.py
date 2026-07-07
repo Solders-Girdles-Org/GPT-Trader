@@ -1169,6 +1169,46 @@ class TradeIdeaService:
         )
         return self._closeouts.append(record)
 
+    def auto_attribute_expired_ideas(
+        self,
+        *,
+        actor_id: str = "closeout-auto",
+        reason: str = (
+            "Idea expired unexecuted; no position was opened, so realized "
+            "profit/loss is not applicable"
+        ),
+        evidence: tuple[str, ...] = (),
+    ) -> list[CloseoutAttribution]:
+        """Attribute every ``EXPIRED`` idea that still lacks a closeout.
+
+        An ``EXPIRED`` idea can only be reached from a pre-fill state
+        (``SUBMITTED`` cannot transition to ``EXPIRED``), so no position was ever
+        opened and realized profit/loss is genuinely unavailable. Recording an
+        ``EXPIRY`` closeout with an unavailable reason keeps ``attribution_coverage``
+        honest at 100% without inventing a market outcome, and lets unattended
+        operation self-heal every turn instead of relying on a manual
+        ``ideas closeout record`` for each expiry. Filled ideas are left alone:
+        their realized profit/loss needs an exit model (issue #1218).
+
+        Idempotent: ideas that already carry a closeout attribution (human or a
+        prior auto run) are skipped, so a human's judgment stays authoritative.
+        """
+        recorded: list[CloseoutAttribution] = []
+        for view in self.list_views(TradeIdeaState.EXPIRED):
+            if view.closeout_attribution is not None:
+                continue
+            recorded.append(
+                self.record_closeout_attribution(
+                    view.idea.decision_id,
+                    actor_id=actor_id,
+                    actor_type=ActorType.SYSTEM,
+                    resolution=CloseoutResolution.EXPIRY,
+                    realized_profit_loss_unavailable_reason=reason,
+                    evidence=evidence,
+                )
+            )
+        return recorded
+
     def get_closeout_attribution(self, decision_id: str) -> CloseoutAttribution | None:
         return self.get(decision_id).closeout_attribution
 

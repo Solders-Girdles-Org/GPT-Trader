@@ -136,6 +136,7 @@ class PaperCycleResult:
     finished_at: datetime
     snapshot: dict[str, Any]
     expired_decision_ids: tuple[str, ...]
+    attributed_decision_ids: tuple[str, ...]
     proposer_turns: tuple[ProposerTurn, ...]
     execution: ExecutionTurn
     queue: dict[str, Any] = field(default_factory=dict)
@@ -149,6 +150,7 @@ class PaperCycleResult:
             "outcome": "completed",
             "snapshot": self.snapshot,
             "expired_decision_ids": list(self.expired_decision_ids),
+            "attributed_decision_ids": list(self.attributed_decision_ids),
             "proposers": [turn.to_dict() for turn in self.proposer_turns],
             "execution": self.execution.to_dict(),
             "queue": self.queue,
@@ -246,6 +248,17 @@ class PaperCycleRunner:
         expired_decision_ids = tuple(view.idea.decision_id for view in expired_views)
         row["expired_decision_ids"] = list(expired_decision_ids)
 
+        # Attribute every expired-unexecuted idea so the closeout trail self-heals
+        # each turn instead of waiting for a manual `ideas closeout record`. An
+        # EXPIRED idea never opened a position (SUBMITTED cannot expire), so this
+        # records an EXPIRY closeout with realized P&L unavailable — keeping
+        # attribution coverage honest at 100% without inventing an outcome. Also
+        # backfills any pre-existing unattributed expiries (issue #1214). Filled
+        # ideas need an exit model and are left for issue #1218.
+        attributed = self._service.auto_attribute_expired_ideas()
+        attributed_decision_ids = tuple(record.decision_id for record in attributed)
+        row["attributed_decision_ids"] = list(attributed_decision_ids)
+
         # Capture the execution candidates before any slow turn work — the
         # snapshot fetch is a network call and the approval CLI does not take
         # the cycle lock, so an approval landing anywhere inside the turn must
@@ -297,6 +310,7 @@ class PaperCycleRunner:
             finished_at=self._now_factory(),
             snapshot=snapshot_info,
             expired_decision_ids=expired_decision_ids,
+            attributed_decision_ids=attributed_decision_ids,
             proposer_turns=tuple(proposer_turns),
             execution=execution,
             queue=queue_summary,
