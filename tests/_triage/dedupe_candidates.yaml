@@ -8,24 +8,26 @@
 # Priorities: high | medium | low
 #
 version: 1
-generated_at: '2026-07-03T12:30:59.632850+00:00'
+generated_at: '2026-07-07T14:50:36.233744+00:00'
 summary:
-  total_clusters: 208
+  total_clusters: 214
   by_priority:
-    high: 26
-    medium: 62
-    low: 120
+    high: 27
+    medium: 66
+    low: 121
   by_decision:
     delete: 0
-    merge: 208
+    merge: 214
     modernize: 0
 clusters:
-  d40b6d8b2e3b:
+  000447bd241a:
     type: source_fanout
-    description: 27 test files import gpt_trader
+    description: 33 test files import gpt_trader
     files:
     - tests/unit/gpt_trader/cli/commands/test_ideas_approval_preview_integrity.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_audit_ordering.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_auto_approval.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_autonomy.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_budget.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_closeout.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_closeout_evidence_integrity.py
@@ -37,34 +39,40 @@ clusters:
     - tests/unit/gpt_trader/cli/commands/test_ideas_lifecycle.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_manual_records.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_max_loss_validation.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_monitors.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_paper_reconciliation.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_propose_baseline.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_propose_integrity.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_propose_strategy.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_queries.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_queue_status.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_regime_aware.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_replay_baseline.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_replay_optimize.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_replay_strategy.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_replay_tournament.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_report.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_resubmit_integrity.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_review_latency.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_scorecard.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_short_budget.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_snapshot_build.py
     source_modules:
     - gpt_trader
     decision: merge
     target_location: tests/unit/gpt_trader/cli/commands/test_gpt_trader.py
-    expected_file_delta: -26
+    expected_file_delta: -32
     priority: high
-    rationale: Consolidate 27 test files into single parametrized file
+    rationale: Consolidate 33 test files into single parametrized file
     status: pending
-    added: '2026-07-03'
-  97238590c0c2:
+    added: '2026-07-07'
+  3722163bd561:
     type: source_fanout
-    description: 24 test files import gpt_trader.cli.response
+    description: 28 test files import gpt_trader.cli.response
     files:
     - tests/unit/gpt_trader/cli/commands/optimize/test_commands_execution.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_auto_approval.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_autonomy.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_budget.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_closeout.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_export_ticket.py
@@ -73,16 +81,18 @@ clusters:
     - tests/unit/gpt_trader/cli/commands/test_ideas_max_loss_validation.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_propose_baseline.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_propose_integrity.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_propose_strategy.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_queries.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_regime_aware.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_replay_baseline.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_replay_strategy.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_replay_tournament.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_resubmit_integrity.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_review_latency.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_short_budget.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_snapshot_build.py
     - tests/unit/gpt_trader/cli/commands/test_strategy_profile_diff.py
-    - tests/unit/gpt_trader/cli/test_commands_orders_history.py
+    - tests/unit/gpt_trader/cli/test_commands_orders.py
     - tests/unit/gpt_trader/cli/test_commands_report.py
     - tests/unit/gpt_trader/cli/test_response_cli_response.py
     - tests/unit/gpt_trader/cli/test_response_envelope_contract.py
@@ -92,14 +102,14 @@ clusters:
     - gpt_trader.cli.response
     decision: merge
     target_location: tests/unit/gpt_trader/cli/commands/optimize/test_response.py
-    expected_file_delta: -23
+    expected_file_delta: -27
     priority: high
-    rationale: Consolidate 24 test files into single parametrized file
+    rationale: Consolidate 28 test files into single parametrized file
     status: pending
-    added: '2026-07-03'
-  11e0da39b690:
+    added: '2026-07-07'
+  e8f7c8d6875d:
     type: source_fanout
-    description: 21 test files import gpt_trader.errors
+    description: 22 test files import gpt_trader.errors
     files:
     - tests/unit/gpt_trader/errors/test_base_specific_errors.py
     - tests/unit/gpt_trader/errors/test_base_trading_and_hierarchy.py
@@ -107,6 +117,7 @@ clusters:
     - tests/unit/gpt_trader/errors/test_handler.py
     - tests/unit/gpt_trader/features/brokerages/coinbase/rest/test_base_build.py
     - tests/unit/gpt_trader/features/brokerages/coinbase/rest/test_base_execute_order_payload.py
+    - tests/unit/gpt_trader/features/strategy_tools/test_snapshot_proposer.py
     - tests/unit/gpt_trader/features/strategy_tools/test_trade_idea_adapter.py
     - tests/unit/gpt_trader/features/trade_ideas/test_broker_payloads.py
     - tests/unit/gpt_trader/features/trade_ideas/test_service_query.py
@@ -126,24 +137,26 @@ clusters:
     - gpt_trader.errors
     decision: merge
     target_location: tests/unit/gpt_trader/errors/test_errors.py
-    expected_file_delta: -20
+    expected_file_delta: -21
     priority: high
-    rationale: Consolidate 21 test files into single parametrized file
+    rationale: Consolidate 22 test files into single parametrized file
     status: pending
-    added: '2026-07-03'
-  3a7802a4dc3a:
+    added: '2026-07-07'
+  039013ccd25d:
     type: source_fanout
-    description: 18 test files import gpt_trader.features.live_trade.strategies.baseline
+    description: 21 test files import gpt_trader.features.live_trade.strategies.baseline
     files:
     - tests/unit/gpt_trader/app/config/test_bot_config.py
     - tests/unit/gpt_trader/app/containers/test_risk_validation_kill_switch.py
     - tests/unit/gpt_trader/config/test_bot_config.py
     - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_chaos.py
+    - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_event_lane.py
     - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_health.py
     - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_orders.py
     - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_proposals.py
     - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_sizing.py
     - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_state.py
+    - tests/unit/gpt_trader/features/live_trade/strategies/mean_reversion/test_cooldown_state.py
     - tests/unit/gpt_trader/features/live_trade/strategies/mean_reversion/test_strategy_exit_logic_and_cooldown.py
     - tests/unit/gpt_trader/features/live_trade/strategies/mean_reversion/test_strategy_safety_and_recovery.py
     - tests/unit/gpt_trader/features/live_trade/strategies/mean_reversion/test_strategy_sizing_and_trend_filter.py
@@ -153,15 +166,16 @@ clusters:
     - tests/unit/gpt_trader/features/live_trade/strategies/test_regime_switcher.py
     - tests/unit/gpt_trader/features/live_trade/test_state_recovery.py
     - tests/unit/gpt_trader/features/live_trade/test_trading_engine.py
+    - tests/unit/gpt_trader/features/strategy_tools/test_snapshot_proposer.py
     source_modules:
     - gpt_trader.features.live_trade.strategies.baseline
     decision: merge
     target_location: tests/unit/gpt_trader/app/config/test_baseline.py
-    expected_file_delta: -17
+    expected_file_delta: -20
     priority: high
-    rationale: Consolidate 18 test files into single parametrized file
+    rationale: Consolidate 21 test files into single parametrized file
     status: pending
-    added: '2026-07-03'
+    added: '2026-07-07'
   ff3afeb0c471:
     type: source_fanout
     description: 18 test files import gpt_trader.backtesting.types
@@ -193,6 +207,34 @@ clusters:
     rationale: Consolidate 18 test files into single parametrized file
     status: pending
     added: '2026-07-01'
+  959272b387c6:
+    type: source_fanout
+    description: 15 test files import gpt_trader.features.trade_ideas.service
+    files:
+    - tests/unit/gpt_trader/cli/commands/test_ideas_audit_ordering.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_closeout_evidence_integrity.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_evidence_exports.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_report_windows.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_auto_approval.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_autonomy.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_batch_rollback.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_budget_gates.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_budget_versions.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_monitors.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_notional_budget.py
+    - tests/unit/gpt_trader/web/test_console_accountant.py
+    - tests/unit/gpt_trader/web/test_console_activity.py
+    - tests/unit/gpt_trader/web/test_console_app.py
+    - tests/unit/gpt_trader/web/test_console_envelope.py
+    source_modules:
+    - gpt_trader.features.trade_ideas.service
+    decision: merge
+    target_location: tests/unit/gpt_trader/cli/commands/test_service.py
+    expected_file_delta: -14
+    priority: high
+    rationale: Consolidate 15 test files into single parametrized file
+    status: pending
+    added: '2026-07-07'
   67ba01807cab:
     type: source_fanout
     description: 14 test files import gpt_trader.features.brokerages.coinbase.client.base
@@ -350,12 +392,12 @@ clusters:
     rationale: Consolidate 12 test files into single parametrized file
     status: pending
     added: '2026-07-01'
-  7c8f10f8ba2d:
+  51d9e2c66f39:
     type: source_fanout
     description: 12 test files import gpt_trader.persistence.orders_store
     files:
     - tests/unit/gpt_trader/app/test_application_container_resources.py
-    - tests/unit/gpt_trader/cli/test_commands_orders_history.py
+    - tests/unit/gpt_trader/cli/test_commands_orders.py
     - tests/unit/gpt_trader/features/brokerages/coinbase/test_user_event_handler.py
     - tests/unit/gpt_trader/features/live_trade/engines/test_order_record_mapping.py
     - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_reconciliation.py
@@ -374,7 +416,7 @@ clusters:
     priority: high
     rationale: Consolidate 12 test files into single parametrized file
     status: pending
-    added: '2026-07-01'
+    added: '2026-07-07'
   ff826326d0d1:
     type: source_fanout
     description: 12 test files import gpt_trader.backtesting.metrics.risk
@@ -538,6 +580,26 @@ clusters:
     rationale: Consolidate 9 test files into single parametrized file
     status: pending
     added: '2026-07-01'
+  157033c354db:
+    type: similar_names
+    description: 8 test files match pattern test_strategy_engine_* in tests/unit/gpt_trader/features/live_trade/engines
+    files:
+    - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_chaos.py
+    - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_event_lane.py
+    - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_health.py
+    - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_orders.py
+    - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_proposals.py
+    - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_reconciliation.py
+    - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_sizing.py
+    - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_state.py
+    source_modules: []
+    decision: merge
+    target_location: tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine.py
+    expected_file_delta: -7
+    priority: medium
+    rationale: Consolidate 8 test files into single parametrized file
+    status: pending
+    added: '2026-07-07'
   '26228568e515':
     type: source_fanout
     description: 8 test files import gpt_trader.features.brokerages.coinbase.client
@@ -685,46 +747,6 @@ clusters:
     rationale: Consolidate 8 test files into single parametrized file
     status: pending
     added: '2026-01-21'
-  a1951f39db8c:
-    type: source_fanout
-    description: 8 test files import gpt_trader.features.trade_ideas.service
-    files:
-    - tests/unit/gpt_trader/cli/commands/test_ideas_audit_ordering.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_closeout_evidence_integrity.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_evidence_exports.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_report_windows.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_service_batch_rollback.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_service_budget_gates.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_service_budget_versions.py
-    - tests/unit/gpt_trader/features/trade_ideas/test_service_notional_budget.py
-    source_modules:
-    - gpt_trader.features.trade_ideas.service
-    decision: merge
-    target_location: tests/unit/gpt_trader/cli/commands/test_service.py
-    expected_file_delta: -7
-    priority: medium
-    rationale: Consolidate 8 test files into single parametrized file
-    status: pending
-    added: '2026-07-03'
-  52a37af1e4a7:
-    type: similar_names
-    description: 7 test files match pattern test_strategy_engine_* in tests/unit/gpt_trader/features/live_trade/engines
-    files:
-    - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_chaos.py
-    - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_health.py
-    - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_orders.py
-    - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_proposals.py
-    - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_reconciliation.py
-    - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_sizing.py
-    - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_state.py
-    source_modules: []
-    decision: merge
-    target_location: tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine.py
-    expected_file_delta: -6
-    priority: medium
-    rationale: Consolidate 7 test files into single parametrized file
-    status: pending
-    added: '2026-07-01'
   582004a85380:
     type: similar_names
     description: 7 test files match pattern test_funding_tracker_* in tests/unit/gpt_trader/backtesting/simulation
@@ -944,6 +966,26 @@ clusters:
     rationale: Consolidate 7 test files into single parametrized file
     status: pending
     added: '2026-07-01'
+  fbb4b043c2d6:
+    type: source_fanout
+    description: 7 test files import gpt_trader.features.idea_execution
+    files:
+    - tests/unit/gpt_trader/features/idea_execution/test_cycle.py
+    - tests/unit/gpt_trader/features/idea_execution/test_cycle_auto_approval.py
+    - tests/unit/gpt_trader/features/idea_execution/test_cycle_evidence.py
+    - tests/unit/gpt_trader/features/idea_execution/test_event_lane.py
+    - tests/unit/gpt_trader/features/idea_execution/test_executor.py
+    - tests/unit/gpt_trader/features/idea_execution/test_executor_auto_execution.py
+    - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_event_lane.py
+    source_modules:
+    - gpt_trader.features.idea_execution
+    decision: merge
+    target_location: tests/unit/gpt_trader/features/idea_execution/test_idea_execution.py
+    expected_file_delta: -6
+    priority: medium
+    rationale: Consolidate 7 test files into single parametrized file
+    status: pending
+    added: '2026-07-07'
   257be60db787:
     type: similar_names
     description: 6 test files match pattern test_order_submission_* in tests/unit/gpt_trader/features/live_trade/execution
@@ -1073,6 +1115,25 @@ clusters:
     rationale: Consolidate 6 test files into single parametrized file
     status: pending
     added: '2026-07-01'
+  2f27ea3d72e7:
+    type: source_fanout
+    description: 6 test files import gpt_trader.features.live_trade.engines.strategy
+    files:
+    - tests/unit/gpt_trader/features/live_trade/engines/test_runtime_start_event.py
+    - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_event_lane.py
+    - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_proposals.py
+    - tests/unit/gpt_trader/features/live_trade/test_state_recovery.py
+    - tests/unit/gpt_trader/features/live_trade/test_state_recovery_rehydration.py
+    - tests/unit/gpt_trader/features/live_trade/test_trading_engine.py
+    source_modules:
+    - gpt_trader.features.live_trade.engines.strategy
+    decision: merge
+    target_location: tests/unit/gpt_trader/features/live_trade/engines/test_strategy.py
+    expected_file_delta: -5
+    priority: medium
+    rationale: Consolidate 6 test files into single parametrized file
+    status: pending
+    added: '2026-07-07'
   43f27b5cad8e:
     type: source_fanout
     description: 6 test files import gpt_trader.features.live_trade.execution.order_event_recorder
@@ -1111,9 +1172,66 @@ clusters:
     rationale: Consolidate 6 test files into single parametrized file
     status: pending
     added: '2026-07-01'
-  1819d650bc6c:
+  cad2bd0800cd:
     type: source_fanout
-    description: 85 test files import gpt_trader.core
+    description: 6 test files import gpt_trader.features.live_trade.strategies.mean_reversion
+    files:
+    - tests/unit/gpt_trader/features/live_trade/strategies/mean_reversion/test_cooldown_state.py
+    - tests/unit/gpt_trader/features/live_trade/strategies/mean_reversion/test_strategy_exit_logic_and_cooldown.py
+    - tests/unit/gpt_trader/features/live_trade/strategies/mean_reversion/test_strategy_safety_and_recovery.py
+    - tests/unit/gpt_trader/features/live_trade/strategies/mean_reversion/test_strategy_sizing_and_trend_filter.py
+    - tests/unit/gpt_trader/features/live_trade/strategies/mean_reversion/test_strategy_zscore_and_signals.py
+    - tests/unit/gpt_trader/features/strategy_tools/test_snapshot_proposer.py
+    source_modules:
+    - gpt_trader.features.live_trade.strategies.mean_reversion
+    decision: merge
+    target_location: tests/unit/gpt_trader/features/live_trade/strategies/mean_reversion/test_mean_reversion.py
+    expected_file_delta: -5
+    priority: medium
+    rationale: Consolidate 6 test files into single parametrized file
+    status: pending
+    added: '2026-07-07'
+  cd02ec9dc448:
+    type: source_fanout
+    description: 6 test files import gpt_trader.features.trade_ideas.autonomy
+    files:
+    - tests/unit/gpt_trader/features/idea_execution/test_cycle_auto_approval.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_autonomy.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_auto_approval.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_autonomy.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_monitors.py
+    - tests/unit/gpt_trader/web/test_console_envelope.py
+    source_modules:
+    - gpt_trader.features.trade_ideas.autonomy
+    decision: merge
+    target_location: tests/unit/gpt_trader/features/idea_execution/test_autonomy.py
+    expected_file_delta: -5
+    priority: medium
+    rationale: Consolidate 6 test files into single parametrized file
+    status: pending
+    added: '2026-07-07'
+  d55f1e2c4c55:
+    type: source_fanout
+    description: 6 test files import gpt_trader.features.trade_ideas.audit
+    files:
+    - tests/unit/gpt_trader/app/test_risk_budget_seed.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_accounting.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_monitors.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_review_metrics.py
+    - tests/unit/gpt_trader/web/test_console_accountant.py
+    - tests/unit/gpt_trader/web/test_console_envelope.py
+    source_modules:
+    - gpt_trader.features.trade_ideas.audit
+    decision: merge
+    target_location: tests/unit/gpt_trader/app/test_audit.py
+    expected_file_delta: -5
+    priority: medium
+    rationale: Consolidate 6 test files into single parametrized file
+    status: pending
+    added: '2026-07-07'
+  d62f821b690f:
+    type: source_fanout
+    description: 87 test files import gpt_trader.core
     files:
     - tests/unit/gpt_trader/backtesting/simulation/test_accounting.py
     - tests/unit/gpt_trader/backtesting/simulation/test_fill_model.py
@@ -1187,12 +1305,14 @@ clusters:
     - tests/unit/gpt_trader/features/live_trade/execution/test_validation_flow.py
     - tests/unit/gpt_trader/features/live_trade/execution/test_validation_metrics_and_escalation.py
     - tests/unit/gpt_trader/features/live_trade/execution/test_validation_preview.py
+    - tests/unit/gpt_trader/features/live_trade/test_account_snapshot.py
     - tests/unit/gpt_trader/features/live_trade/test_bot_flatten_and_stop.py
     - tests/unit/gpt_trader/features/live_trade/test_bot_flatten_and_stop_audit.py
     - tests/unit/gpt_trader/features/live_trade/test_risk.py
     - tests/unit/gpt_trader/features/live_trade/test_risk_time_windows.py
     - tests/unit/gpt_trader/features/recorder/test_snapshot_builder.py
     - tests/unit/gpt_trader/features/recorder/test_snapshot_source.py
+    - tests/unit/gpt_trader/features/strategy_tools/test_snapshot_proposer.py
     - tests/unit/gpt_trader/features/trade_ideas/test_baseline_proposer.py
     - tests/unit/gpt_trader/features/trade_ideas/test_optimize_bridge.py
     - tests/unit/gpt_trader/features/trade_ideas/test_regime_proposer.py
@@ -1204,17 +1324,18 @@ clusters:
     - gpt_trader.core
     decision: merge
     target_location: tests/unit/gpt_trader/backtesting/simulation/test_core.py
-    expected_file_delta: -84
+    expected_file_delta: -86
     priority: low
-    rationale: Consolidate 85 test files into single parametrized file
+    rationale: Consolidate 87 test files into single parametrized file
     status: pending
-    added: '2026-07-03'
-  09c973a62ae5:
+    added: '2026-07-07'
+  32fbc1d6d945:
     type: source_fanout
-    description: 61 test files import gpt_trader.features.trade_ideas
+    description: 77 test files import gpt_trader.features.trade_ideas
     files:
     - tests/unit/gpt_trader/cli/commands/test_ideas_approval_preview_integrity.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_audit_ordering.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_auto_approval.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_budget.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_closeout.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_closeout_evidence_integrity.py
@@ -1226,9 +1347,11 @@ clusters:
     - tests/unit/gpt_trader/cli/commands/test_ideas_lifecycle.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_manual_records.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_max_loss_validation.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_monitors.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_paper_reconciliation.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_propose_baseline.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_propose_integrity.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_propose_strategy.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_queries.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_queue_status.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_report.py
@@ -1238,16 +1361,24 @@ clusters:
     - tests/unit/gpt_trader/cli/commands/test_ideas_short_budget.py
     - tests/unit/gpt_trader/cli/commands/test_ideas_snapshot_build.py
     - tests/unit/gpt_trader/features/idea_execution/test_cycle.py
+    - tests/unit/gpt_trader/features/idea_execution/test_cycle_auto_approval.py
     - tests/unit/gpt_trader/features/idea_execution/test_cycle_evidence.py
+    - tests/unit/gpt_trader/features/idea_execution/test_event_lane.py
     - tests/unit/gpt_trader/features/idea_execution/test_executor.py
+    - tests/unit/gpt_trader/features/idea_execution/test_executor_auto_execution.py
+    - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_event_lane.py
     - tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_proposals.py
     - tests/unit/gpt_trader/features/recorder/test_snapshot_builder.py
+    - tests/unit/gpt_trader/features/strategy_tools/test_snapshot_proposer.py
     - tests/unit/gpt_trader/features/strategy_tools/test_trade_idea_adapter.py
     - tests/unit/gpt_trader/features/trade_ideas/test_audit.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_autonomy.py
     - tests/unit/gpt_trader/features/trade_ideas/test_baseline_proposer.py
     - tests/unit/gpt_trader/features/trade_ideas/test_broker_payloads.py
     - tests/unit/gpt_trader/features/trade_ideas/test_budget.py
     - tests/unit/gpt_trader/features/trade_ideas/test_eligibility.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_eligibility_split.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_kernel.py
     - tests/unit/gpt_trader/features/trade_ideas/test_models.py
     - tests/unit/gpt_trader/features/trade_ideas/test_optimize_bridge.py
     - tests/unit/gpt_trader/features/trade_ideas/test_paper_reconciliation.py
@@ -1258,14 +1389,19 @@ clusters:
     - tests/unit/gpt_trader/features/trade_ideas/test_replay.py
     - tests/unit/gpt_trader/features/trade_ideas/test_replay_level_extraction.py
     - tests/unit/gpt_trader/features/trade_ideas/test_replay_runner.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_scorecard.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_scorecard_drawdown_gate.py
     - tests/unit/gpt_trader/features/trade_ideas/test_service.py
     - tests/unit/gpt_trader/features/trade_ideas/test_service_audit_integrity.py
     - tests/unit/gpt_trader/features/trade_ideas/test_service_audit_query.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_auto_approval.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_autonomy.py
     - tests/unit/gpt_trader/features/trade_ideas/test_service_batch_rollback.py
     - tests/unit/gpt_trader/features/trade_ideas/test_service_budget_gates.py
     - tests/unit/gpt_trader/features/trade_ideas/test_service_budget_versions.py
     - tests/unit/gpt_trader/features/trade_ideas/test_service_closeout.py
     - tests/unit/gpt_trader/features/trade_ideas/test_service_closeout_query.py
+    - tests/unit/gpt_trader/features/trade_ideas/test_service_monitors.py
     - tests/unit/gpt_trader/features/trade_ideas/test_service_notional_budget.py
     - tests/unit/gpt_trader/features/trade_ideas/test_service_preapproval_broker_ticket.py
     - tests/unit/gpt_trader/features/trade_ideas/test_service_query.py
@@ -1278,14 +1414,14 @@ clusters:
     - gpt_trader.features.trade_ideas
     decision: merge
     target_location: tests/unit/gpt_trader/cli/commands/test_trade_ideas.py
-    expected_file_delta: -60
+    expected_file_delta: -76
     priority: low
-    rationale: Consolidate 61 test files into single parametrized file
+    rationale: Consolidate 77 test files into single parametrized file
     status: pending
-    added: '2026-07-03'
-  83d5bc54ea89:
+    added: '2026-07-07'
+  c12f5993ccd5:
     type: source_fanout
-    description: 30 test files import gpt_trader.app.config
+    description: 34 test files import gpt_trader.app.config
     files:
     - tests/unit/gpt_trader/app/config/test_bot_config.py
     - tests/unit/gpt_trader/app/config/test_bot_config_loading.py
@@ -1297,6 +1433,7 @@ clusters:
     - tests/unit/gpt_trader/app/test_application_container_resources.py
     - tests/unit/gpt_trader/app/test_bootstrap.py
     - tests/unit/gpt_trader/app/test_bootstrap_profile_loading.py
+    - tests/unit/gpt_trader/app/test_risk_budget_seed.py
     - tests/unit/gpt_trader/backtesting/test_guarded_backtest_flow.py
     - tests/unit/gpt_trader/backtesting/validation/test_guarded_execution.py
     - tests/unit/gpt_trader/cli/test_services.py
@@ -1305,27 +1442,30 @@ clusters:
     - tests/unit/gpt_trader/features/brokerages/test_read_only_broker.py
     - tests/unit/gpt_trader/features/live_trade/engines/test_runtime_start_event.py
     - tests/unit/gpt_trader/features/live_trade/execution/test_get_validation_metrics.py
+    - tests/unit/gpt_trader/features/live_trade/strategies/mean_reversion/test_cooldown_state.py
     - tests/unit/gpt_trader/features/live_trade/strategies/mean_reversion/test_strategy_exit_logic_and_cooldown.py
     - tests/unit/gpt_trader/features/live_trade/strategies/mean_reversion/test_strategy_safety_and_recovery.py
     - tests/unit/gpt_trader/features/live_trade/strategies/mean_reversion/test_strategy_sizing_and_trend_filter.py
     - tests/unit/gpt_trader/features/live_trade/strategies/mean_reversion/test_strategy_zscore_and_signals.py
+    - tests/unit/gpt_trader/features/live_trade/test_account_snapshot.py
     - tests/unit/gpt_trader/features/live_trade/test_bot_flatten_and_stop.py
     - tests/unit/gpt_trader/features/live_trade/test_bot_flatten_and_stop_audit.py
     - tests/unit/gpt_trader/features/live_trade/test_bot_flatten_and_stop_run_race.py
     - tests/unit/gpt_trader/features/live_trade/test_strategy_factory.py
     - tests/unit/gpt_trader/features/live_trade/test_symbols.py
     - tests/unit/gpt_trader/features/live_trade/test_trading_engine.py
+    - tests/unit/gpt_trader/features/strategy_tools/test_snapshot_proposer.py
     - tests/unit/gpt_trader/preflight/test_checks_simulation.py
     - tests/unit/gpt_trader/security/secrets_manager/test_file_basic.py
     source_modules:
     - gpt_trader.app.config
     decision: merge
     target_location: tests/unit/gpt_trader/app/config/test_config.py
-    expected_file_delta: -29
+    expected_file_delta: -33
     priority: low
-    rationale: Consolidate 30 test files into single parametrized file
+    rationale: Consolidate 34 test files into single parametrized file
     status: pending
-    added: '2026-07-02'
+    added: '2026-07-07'
   3b0b64d9e707:
     type: source_fanout
     description: 14 test files import gpt_trader.utilities.datetime_helpers
@@ -1447,6 +1587,22 @@ clusters:
     rationale: Consolidate 4 test files into single parametrized file
     status: pending
     added: '2026-07-01'
+  766a12d9396c:
+    type: similar_names
+    description: 4 test files match pattern test_ideas_replay_* in tests/unit/gpt_trader/cli/commands
+    files:
+    - tests/unit/gpt_trader/cli/commands/test_ideas_replay_baseline.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_replay_optimize.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_replay_strategy.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_replay_tournament.py
+    source_modules: []
+    decision: merge
+    target_location: tests/unit/gpt_trader/cli/commands/test_ideas_replay.py
+    expected_file_delta: -3
+    priority: low
+    rationale: Consolidate 4 test files into single parametrized file
+    status: pending
+    added: '2026-07-07'
   b38d52dc68f4:
     type: similar_names
     description: 4 test files match pattern test_status_reporter_* in tests/unit/gpt_trader/monitoring
@@ -1574,6 +1730,21 @@ clusters:
     rationale: Consolidate 3 test files into single parametrized file
     status: pending
     added: '2026-07-01'
+  31b9c8df1a2a:
+    type: similar_names
+    description: 3 test files match pattern test_ideas_propose_* in tests/unit/gpt_trader/cli/commands
+    files:
+    - tests/unit/gpt_trader/cli/commands/test_ideas_propose_baseline.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_propose_integrity.py
+    - tests/unit/gpt_trader/cli/commands/test_ideas_propose_strategy.py
+    source_modules: []
+    decision: merge
+    target_location: tests/unit/gpt_trader/cli/commands/test_ideas_propose.py
+    expected_file_delta: -2
+    priority: low
+    rationale: Consolidate 3 test files into single parametrized file
+    status: pending
+    added: '2026-07-07'
   33c2f1967743:
     type: similar_names
     description: 3 test files match pattern test_runtime_engine_* in tests/unit/gpt_trader/features/live_trade/engines
@@ -1599,36 +1770,6 @@ clusters:
     source_modules: []
     decision: merge
     target_location: tests/unit/gpt_trader/backtesting/engine/test_bar_runner.py
-    expected_file_delta: -2
-    priority: low
-    rationale: Consolidate 3 test files into single parametrized file
-    status: pending
-    added: '2026-07-01'
-  513b56b80653:
-    type: similar_names
-    description: 3 test files match pattern test_ideas_replay_* in tests/unit/gpt_trader/cli/commands
-    files:
-    - tests/unit/gpt_trader/cli/commands/test_ideas_replay_baseline.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_replay_optimize.py
-    - tests/unit/gpt_trader/cli/commands/test_ideas_replay_tournament.py
-    source_modules: []
-    decision: merge
-    target_location: tests/unit/gpt_trader/cli/commands/test_ideas_replay.py
-    expected_file_delta: -2
-    priority: low
-    rationale: Consolidate 3 test files into single parametrized file
-    status: pending
-    added: '2026-07-03'
-  65e34284f981:
-    type: similar_names
-    description: 3 test files match pattern test_commands_orders_* in tests/unit/gpt_trader/cli
-    files:
-    - tests/unit/gpt_trader/cli/test_commands_orders.py
-    - tests/unit/gpt_trader/cli/test_commands_orders_editing.py
-    - tests/unit/gpt_trader/cli/test_commands_orders_history.py
-    source_modules: []
-    decision: merge
-    target_location: tests/unit/gpt_trader/cli/test_commands_orders.py
     expected_file_delta: -2
     priority: low
     rationale: Consolidate 3 test files into single parametrized file
@@ -2850,6 +2991,26 @@ clusters:
     owner: codex
     pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/368
     added: '2026-01-20'
+  65e34284f981:
+    type: similar_names
+    description: 3 test files match pattern test_commands_orders_* in tests/unit/gpt_trader/cli
+    files:
+    - tests/unit/gpt_trader/cli/test_commands_orders.py
+    - tests/unit/gpt_trader/cli/test_commands_orders_editing.py
+    - tests/unit/gpt_trader/cli/test_commands_orders_history.py
+    source_modules: []
+    decision: merge
+    target_location: tests/unit/gpt_trader/cli/test_commands_orders.py
+    expected_file_delta: -2
+    priority: low
+    rationale: Consolidated editing and history coverage into test_commands_orders.py
+      (370 lines, within the hygiene cap); all three shared the orders_command_test_helpers
+      boundary doubles.
+    status: done
+    owner: claude
+    pr_url: https://github.com/Solders-Girdles-Org/GPT-Trader/pull/1211
+    added: '2026-07-01'
+    completed: '2026-07-07'
   678535a285b3:
     type: source_fanout
     description: 6 test files import gpt_trader.features.live_trade

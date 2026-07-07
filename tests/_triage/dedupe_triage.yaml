@@ -26,6 +26,14 @@ clusters:
     updated: '2026-01-21'
     reason: 'False positive: source_fanout mixing app container test with secrets
       manager tests - completely unrelated modules.'
+  257be60db787:
+    state: rejected
+    owner: claude
+    updated: '2026-07-07'
+    reason: 'Merging 6 test_order_submission_* files (1523 lines total) into one
+      module violates the 400-line test-hygiene cap, and the two observability
+      halves carry conflicting autouse fixture setups; the per-concern split is
+      hygiene-mandated organization, not duplication.'
   46ca5ed2c6a3:
     state: rejected
     owner: claude
@@ -38,6 +46,14 @@ clusters:
     updated: '2026-01-21'
     reason: 'False positive: source_fanout mixing equity_calculator with degradation
       tests. Use similar_names cluster for degradation tests instead.'
+  52a37af1e4a7:
+    state: rejected
+    owner: claude
+    updated: '2026-07-07'
+    reason: 'Merging 7 test_strategy_engine_* files (2283 lines total) into one
+      module violates the 400-line test-hygiene cap; the per-concern split
+      (orders/health/chaos/proposals/reconciliation/sizing/state) is the
+      hygiene-mandated organization, not duplication.'
   6004380ab8e4:
     state: rejected
     owner: claude
