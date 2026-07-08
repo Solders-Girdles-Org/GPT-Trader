@@ -382,6 +382,12 @@ baseline-ma-…` lines are the replay read on benchmark edge. When the replay
 artifact carries sizing (`capital_weighted_avg_r=… (n=…)`), that row is the
 only aggregate that can see the sizing channel — proposers with identical
 levels but different notional commitment separate there and nowhere else.
+Overlay proposers additionally print a `counterfactuals:` line (candidates
+vs emitted, UNKNOWN skips, suppressions by regime, exit plans adjusted, and
+the emitted-ideas regime distribution) so a decision channel that never
+fires is visible in every run instead of requiring a manual audit — the M5
+diagnosis found regime suppression had fired 0/84 times with nothing
+reporting it.
 
 ## Readiness Evidence Inputs
 

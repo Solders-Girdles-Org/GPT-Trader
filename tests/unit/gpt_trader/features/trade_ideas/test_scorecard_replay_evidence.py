@@ -154,3 +154,55 @@ def test_replay_evidence_renders_pre_weighted_artifacts_without_the_weighted_cla
     rendered = "\n".join(_replay_evidence_lines(evidence))
     assert "capital_weighted" not in rendered
     assert "avg_r=0.2" in rendered
+
+
+def test_replay_evidence_renders_proposer_counterfactuals_when_present() -> None:
+    payload = {
+        "symbol": "BTC-USD",
+        "granularity": "ONE_HOUR",
+        "source": "fixture:candles",
+        "snapshots_evaluated": 240,
+        "rankings": [],
+        "reports": [
+            {
+                "proposer_id": "baseline-ma-10-50",
+                "ideas_proposed": 12,
+                "resolved_ideas": 10,
+                "target_hit_rate": "0.4",
+                "stop_hit_rate": "0.6",
+                "average_return_r": "0.05",
+                "eligibility_pass_rate": "1",
+            },
+            {
+                "proposer_id": "regime-aware-ma-10-50",
+                "ideas_proposed": 8,
+                "resolved_ideas": 8,
+                "target_hit_rate": "0.5",
+                "stop_hit_rate": "0.5",
+                "average_return_r": "0.15",
+                "eligibility_pass_rate": "1",
+                "proposer_diagnostics": {
+                    "candidate_ideas": 12,
+                    "emitted_ideas": 8,
+                    "unknown_skipped": 1,
+                    "suppressed_by_regime": {"BEAR_VOLATILE": 2, "CRISIS": 1},
+                    "exit_plans_adjusted": 4,
+                    "emitted_by_regime": {"BULL_QUIET": 5, "BULL_VOLATILE": 3},
+                },
+            },
+        ],
+    }
+
+    evidence = build_replay_evidence(payload)
+
+    rows = {row["proposer_id"]: row for row in evidence["calibration"]}
+    assert rows["baseline-ma-10-50"]["proposer_diagnostics"] is None
+    assert rows["regime-aware-ma-10-50"]["proposer_diagnostics"]["emitted_ideas"] == 8
+    rendered = "\n".join(_replay_evidence_lines(evidence))
+    assert (
+        "regime-aware-ma-10-50 counterfactuals: candidates=12, emitted=8, "
+        "unknown_skipped=1, suppressed={BEAR_VOLATILE:2, CRISIS:1}, "
+        "exit_plans_adjusted=4, emitted_by_regime={BULL_QUIET:5, BULL_VOLATILE:3}"
+    ) in rendered
+    # No counterfactual line for proposers without diagnostics.
+    assert "baseline-ma-10-50 counterfactuals" not in rendered

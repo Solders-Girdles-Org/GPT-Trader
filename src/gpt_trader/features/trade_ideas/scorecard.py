@@ -186,6 +186,9 @@ def build_replay_evidence(
             "capital_weighted_average_return_r": report.get("capital_weighted_average_return_r"),
             "capital_weighted_sample": report.get("capital_weighted_sample"),
             "eligibility_pass_rate": report.get("eligibility_pass_rate"),
+            # Overlay counterfactual counts (#1243); absent for proposers
+            # that expose no diagnostics and on pre-#1243 artifacts.
+            "proposer_diagnostics": report.get("proposer_diagnostics"),
         }
         for report in reports
     ]
@@ -260,6 +263,9 @@ def _replay_evidence_lines(evidence: Mapping[str, Any]) -> list[str]:
                 f" (n={row.get('capital_weighted_sample')})"
             )
         lines.append(line)
+        diagnostics = row.get("proposer_diagnostics")
+        if diagnostics:
+            lines.append(_proposer_diagnostics_line(row["proposer_id"], diagnostics))
     edge = evidence["benchmark_edge"]
     if edge["comparisons"]:
         for comparison in edge["comparisons"]:
@@ -272,6 +278,28 @@ def _replay_evidence_lines(evidence: Mapping[str, Any]) -> list[str]:
     else:
         lines.append(f"edge: {edge['detail']}")
     return lines
+
+
+def _proposer_diagnostics_line(proposer_id: str, diagnostics: Mapping[str, Any]) -> str:
+    """Render overlay counterfactuals so a dead channel is visible per run."""
+    suppressed = diagnostics.get("suppressed_by_regime") or {}
+    emitted_by_regime = diagnostics.get("emitted_by_regime") or {}
+    return (
+        f"{proposer_id} counterfactuals: "
+        f"candidates={diagnostics.get('candidate_ideas')}, "
+        f"emitted={diagnostics.get('emitted_ideas')}, "
+        f"unknown_skipped={diagnostics.get('unknown_skipped')}, "
+        f"suppressed={_regime_counts(suppressed)}, "
+        f"exit_plans_adjusted={diagnostics.get('exit_plans_adjusted')}, "
+        f"emitted_by_regime={_regime_counts(emitted_by_regime)}"
+    )
+
+
+def _regime_counts(counts: Mapping[str, Any]) -> str:
+    if not counts:
+        return "none"
+    body = ", ".join(f"{name}:{count}" for name, count in sorted(counts.items()))
+    return "{" + body + "}"
 
 
 def _gate_line(name: str, verdict: Mapping[str, Any]) -> str:
