@@ -159,6 +159,7 @@ _BUDGET_LEVER_FIELDS = (
     "allow_naked_shorts",
     "account_equity",
     "max_drawdown_from_peak_pct",
+    "max_equity_buying_power_pct",
 )
 
 
@@ -231,6 +232,16 @@ def _budget_from_form(
                 "max_drawdown_from_peak_pct must be a decimal number or blank, "
                 f"got {drawdown_raw!r}"
             ) from error
+    buying_power_raw = str(values["max_equity_buying_power_pct"]).strip()
+    max_equity_buying_power_pct: Decimal | None = None
+    if buying_power_raw:
+        try:
+            max_equity_buying_power_pct = Decimal(buying_power_raw)
+        except ArithmeticError as error:
+            raise ValueError(
+                "max_equity_buying_power_pct must be a decimal number or blank, "
+                f"got {buying_power_raw!r}"
+            ) from error
     return RiskBudget(
         version=base_version + 1,
         max_loss_per_idea_pct=_decimal("max_loss_per_idea_pct"),
@@ -245,6 +256,7 @@ def _budget_from_form(
         reason=reason,
         account_equity=account_equity,
         max_drawdown_from_peak_pct=max_drawdown_from_peak_pct,
+        max_equity_buying_power_pct=max_equity_buying_power_pct,
     )
 
 
@@ -420,6 +432,7 @@ def create_app(
         allow_naked_shorts: bool = Form(False),
         account_equity: str = Form(""),
         max_drawdown_from_peak_pct: str = Form(""),
+        max_equity_buying_power_pct: str = Form(""),
     ) -> HTMLResponse | RedirectResponse:
         form_values: dict[str, str | bool] = {
             "max_loss_per_idea_pct": max_loss_per_idea_pct,
@@ -433,6 +446,7 @@ def create_app(
             "allow_naked_shorts": allow_naked_shorts,
             "account_equity": account_equity,
             "max_drawdown_from_peak_pct": max_drawdown_from_peak_pct,
+            "max_equity_buying_power_pct": max_equity_buying_power_pct,
         }
 
         def _form_error(message: str) -> HTMLResponse:

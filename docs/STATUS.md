@@ -86,6 +86,20 @@ owner of this lever is the agent, which renegotiates it through the same
 audited budget workflow as track record accumulates (the Stage 2 -> 3
 "budget renegotiation exercised" gate).
 
+**The budget vocabulary carries a cash-account buying-power dimension**
+(#1231): the `max_equity_buying_power_pct` lever (unset by default; 100 =
+cash-account fidelity) caps projected equity buying-power usage — open equity
+notional, the candidate idea, and equity sale proceeds still inside their
+settlement window — as a percent of the attested `account_equity`, enforced at
+approval time beside the notional check (`features/trade_ideas/policy.py`).
+Settlement lag is data derived from `Instrument.asset_class`
+(`core/instruments.py`: crypto spot settles immediately, equities T+1), so
+crypto-spot approval outcomes are unchanged (test-pinned) and no product
+boolean was added. With the lever configured, anything the check cannot verify
+— an unclassifiable instrument, missing notional, unattested equity — refuses
+the approval loudly. Margin, pattern-day-trading, and the options defined-risk
+half stay deferred; equity executor/cycle wiring is #1232.
+
 **The promotion gates are now measurable in one command** (`ideas scorecard`,
 #1193): the Stage 1 -> 2 gates of the
 [measured-outcome rubric](decisions/adopt-measured-outcome-rubric.md) score

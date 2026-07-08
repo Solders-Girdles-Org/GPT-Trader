@@ -81,6 +81,15 @@ class RiskBudget:
     # (#1192): breach ratchets autonomy down through the audited path.
     # None means no drawdown limit is configured — nothing to breach.
     max_drawdown_from_peak_pct: Decimal | None = None
+    # Cash-account buying-power cap for equity-asset-class instruments
+    # (#1231), in percent points of the attested account_equity: projected
+    # open equity notional plus the candidate plus same-settlement-window
+    # (T+1) unsettled equity sale proceeds may not exceed this share of the
+    # attested equity. Crypto spot settles immediately and is never checked
+    # against it — max_open_notional_pct remains its complete story. None
+    # means the buying-power dimension is not configured; the existing
+    # notional check still applies unchanged.
+    max_equity_buying_power_pct: Decimal | None = None
 
     def __post_init__(self) -> None:
         if self.account_equity is not None:
@@ -91,6 +100,11 @@ class RiskBudget:
             _require_finite_decimal(self.max_drawdown_from_peak_pct, "max_drawdown_from_peak_pct")
             _require_non_negative_decimal(
                 self.max_drawdown_from_peak_pct, "max_drawdown_from_peak_pct"
+            )
+        if self.max_equity_buying_power_pct is not None:
+            _require_finite_decimal(self.max_equity_buying_power_pct, "max_equity_buying_power_pct")
+            _require_non_negative_decimal(
+                self.max_equity_buying_power_pct, "max_equity_buying_power_pct"
             )
         _require_finite_decimal(self.max_loss_per_idea_pct, "max_loss_per_idea_pct")
         _require_finite_decimal(self.max_daily_loss_pct, "max_daily_loss_pct")
@@ -122,6 +136,11 @@ class RiskBudget:
             "max_drawdown_from_peak_pct": (
                 str(self.max_drawdown_from_peak_pct)
                 if self.max_drawdown_from_peak_pct is not None
+                else None
+            ),
+            "max_equity_buying_power_pct": (
+                str(self.max_equity_buying_power_pct)
+                if self.max_equity_buying_power_pct is not None
                 else None
             ),
         }
@@ -158,6 +177,13 @@ class RiskBudget:
                 if payload.get("max_drawdown_from_peak_pct") is not None
                 else None
             ),
+            # Optional lever added after logs already existed (#1231); absent
+            # in older entries means no buying-power cap was configured.
+            max_equity_buying_power_pct=(
+                Decimal(str(payload["max_equity_buying_power_pct"]))
+                if payload.get("max_equity_buying_power_pct") is not None
+                else None
+            ),
         )
 
 
@@ -176,6 +202,10 @@ DEFAULT_RISK_BUDGET = RiskBudget(
         "Seeded aggressive defaults accepted 2026-06-11: principal fully at risk, "
         "gain-retention floor defends 50% of peak gains above the high-water mark"
     ),
+    # max_equity_buying_power_pct stays unconfigured in the seeded default:
+    # configuring it here would newly refuse ideas whose instrument cannot be
+    # classified (test-pinned: crypto approval outcomes are unchanged until
+    # an operator versions the lever in — 100 = cash-account fidelity).
 )
 
 

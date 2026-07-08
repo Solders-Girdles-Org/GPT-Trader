@@ -17,6 +17,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, cast
 
+from gpt_trader.core.instruments import AssetClass, InstrumentParseError
 from gpt_trader.core.risk_units import (
     fraction_to_pct_points,
     pct_points_to_fraction,
@@ -233,6 +234,51 @@ def _absolute_notional(idea: TradeIdea) -> Decimal | None:
     if notional is None:
         return None
     return abs(notional)
+
+
+def _open_equity_notional(idea: TradeIdea) -> tuple[Decimal, int]:
+    """(equity notional, unavailable count) one open idea adds to buying power.
+
+    Crypto-spot exposure contributes nothing — it settles immediately and
+    stays governed solely by the notional check. An instrument that cannot be
+    classified, or an equity idea without a notional, counts as unavailable
+    so the buying-power check refuses loudly instead of skipping it (#1231).
+    """
+    try:
+        instrument = idea.instrument_info
+    except InstrumentParseError:
+        return Decimal("0"), 1
+    if instrument.asset_class is not AssetClass.EQUITY:
+        return Decimal("0"), 0
+    notional = _absolute_notional(idea)
+    if notional is None:
+        return Decimal("0"), 1
+    return notional, 0
+
+
+def _unsettled_equity_proceeds(
+    idea: TradeIdea,
+    closeout: CloseoutAttribution,
+) -> tuple[Decimal, int]:
+    """(unsettled proceeds, unavailable count) one same-day closeout holds back.
+
+    Callers pass only same-trading-day closeouts, which is exactly the T+1
+    settlement window (`Instrument.settlement_days` is 0 or 1 today; a class
+    settling later than T+1 would need a wider window than the caller's
+    same-day filter). Proceeds are entry notional plus realized profit/loss;
+    when either is unrecorded the proceeds count as unavailable rather than
+    zero (#1231).
+    """
+    try:
+        instrument = idea.instrument_info
+    except InstrumentParseError:
+        return Decimal("0"), 1
+    if instrument.settlement_days <= 0:
+        return Decimal("0"), 0
+    notional = _absolute_notional(idea)
+    if notional is None or closeout.realized_profit_loss_amount is None:
+        return Decimal("0"), 1
+    return max(notional + closeout.realized_profit_loss_amount, Decimal("0")), 0
 
 
 def _page_items(
@@ -574,7 +620,7 @@ class TradeIdeaService:
         evaluation_time = now or self._now()
         latest_events = self._latest_audit_events_by_decision_id()
         open_ideas: list[TradeIdea] = []
-        closeouts: list[CloseoutAttribution] = []
+        same_day_closeouts: list[tuple[TradeIdea, CloseoutAttribution]] = []
         for decision_id, event in latest_events.items():
             if event.after_state in OPEN_BUDGET_EXPOSURE_STATES:
                 if decision_id == exclude_decision_id:
@@ -598,7 +644,8 @@ class TradeIdeaService:
                     event.after_state is TradeIdeaState.FILLED
                     or _closeout_has_realized_profit_loss(closeout)
                 ):
-                    closeouts.append(closeout)
+                    same_day_closeouts.append((idea, closeout))
+        closeouts = [closeout for _, closeout in same_day_closeouts]
         account_equity_snapshot = self._account_equity_snapshot(
             # Non-mutating read: building a budget context (e.g. during a
             # render-only ticket export) must not seed risk_budget.jsonl.
@@ -627,6 +674,10 @@ class TradeIdeaService:
             (notional for notional in open_notionals if notional is not None), Decimal("0")
         )
         open_notional_unavailable_count = sum(1 for notional in open_notionals if notional is None)
+        equity_notionals = tuple(_open_equity_notional(idea) for idea in open_ideas)
+        unsettled_proceeds = tuple(
+            _unsettled_equity_proceeds(idea, closeout) for idea, closeout in same_day_closeouts
+        )
         return ApprovalBudgetContext(
             same_day_realized_loss_pct=same_day_realized_loss_pct,
             same_day_realized_loss_unavailable_count=(same_day_realized_loss_unavailable_count),
@@ -635,6 +686,14 @@ class TradeIdeaService:
             open_notional=open_notional,
             open_notional_unavailable_count=open_notional_unavailable_count,
             account_equity_snapshot=account_equity_snapshot,
+            open_equity_notional=sum((amount for amount, _ in equity_notionals), Decimal("0")),
+            open_equity_notional_unavailable_count=sum(count for _, count in equity_notionals),
+            unsettled_equity_proceeds=sum(
+                (amount for amount, _ in unsettled_proceeds), Decimal("0")
+            ),
+            unsettled_equity_proceeds_unavailable_count=sum(
+                count for _, count in unsettled_proceeds
+            ),
         )
 
     def budget_headroom(self, *, now: datetime | None = None) -> dict[str, object]:

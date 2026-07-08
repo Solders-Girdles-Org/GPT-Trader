@@ -626,7 +626,9 @@ Thin wrappers over `service.reject` / `service.request_changes` /
   `--max-open-notional-pct`, `--max-concurrent-approved-tickets`,
   `--max-review-latency-hours`, `--sizing-capped-by-budget {true,false}`,
   `--gain-retention-floor-pct`, `--allow-futures-leverage {true,false}`,
-  `--allow-naked-shorts {true,false}`), plus required `--reason`. Build the
+  `--allow-naked-shorts {true,false}`, `--account-equity`,
+  `--max-drawdown-from-peak-pct`, `--max-equity-buying-power-pct`),
+  plus required `--reason`. Build the
   new `RiskBudget` by copying the current one with overrides and
   `version = current.version + 1`; call
   `service.update_budget(budget, ActorType.HUMAN, actor_id)`.

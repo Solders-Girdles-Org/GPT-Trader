@@ -232,3 +232,41 @@ def test_budget_payload_without_drawdown_lever_still_loads() -> None:
     restored = RiskBudget.from_dict(payload)
 
     assert restored.max_drawdown_from_peak_pct is None
+
+
+def test_equity_buying_power_lever_round_trips_and_validates() -> None:
+    budget = replace(
+        DEFAULT_RISK_BUDGET,
+        max_equity_buying_power_pct=Decimal("100"),
+        reason="Configure cash-account buying power for equities",
+    )
+
+    restored = RiskBudget.from_dict(budget.to_dict())
+    assert restored.max_equity_buying_power_pct == Decimal("100")
+
+    with pytest.raises(ValueError, match="max_equity_buying_power_pct"):
+        replace(DEFAULT_RISK_BUDGET, max_equity_buying_power_pct=Decimal("-1"))
+    with pytest.raises(ValueError, match="max_equity_buying_power_pct"):
+        replace(DEFAULT_RISK_BUDGET, max_equity_buying_power_pct=Decimal("NaN"))
+
+
+def test_equity_buying_power_lever_is_unconfigured_by_default() -> None:
+    # The seeded default keeps the lever off (#1231): configuring it changes
+    # what an unclassifiable instrument does at approval time, and crypto
+    # approval outcomes are pinned unchanged until an operator versions the
+    # lever in (100 = cash-account fidelity).
+    assert DEFAULT_RISK_BUDGET.max_equity_buying_power_pct is None
+
+
+def test_budget_payload_without_buying_power_lever_still_loads() -> None:
+    # Budget logs written before the lever existed (#1231) must keep loading;
+    # an absent key means the buying-power dimension is not configured.
+    payload = {
+        key: value
+        for key, value in DEFAULT_RISK_BUDGET.to_dict().items()
+        if key != "max_equity_buying_power_pct"
+    }
+
+    restored = RiskBudget.from_dict(payload)
+
+    assert restored.max_equity_buying_power_pct is None
