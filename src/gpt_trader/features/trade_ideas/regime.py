@@ -13,7 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Protocol
+from typing import Any, Protocol
 
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.intelligence.regime import (
@@ -38,7 +38,17 @@ from gpt_trader.features.trade_ideas.sizing import TradeIdeaPositionSizingBridge
 from gpt_trader.features.trade_ideas.snapshot import MarketSnapshot, SymbolSeries
 
 REGIME_DETECTOR_VERSION = "market-regime-detector-v1"
-DEFAULT_SUPPRESSED_REGIMES = (RegimeType.CRISIS, RegimeType.BEAR_VOLATILE)
+# CRISIS/BEAR_VOLATILE are risk posture (replay cannot price crisis slippage
+# or gap risk). BULL_VOLATILE is measured (#1243): the long crossover's
+# expectancy there was negative in all four readings across two
+# non-overlapping 2026 windows and both exit variants (12d: -0.17/-0.22,
+# 30d: -0.47/-0.20, n~80 combined), the only regime consistently negative;
+# denying it improved total pooled R on both windows.
+DEFAULT_SUPPRESSED_REGIMES = (
+    RegimeType.CRISIS,
+    RegimeType.BEAR_VOLATILE,
+    RegimeType.BULL_VOLATILE,
+)
 
 
 class RegimeDetector(Protocol):
@@ -85,6 +95,34 @@ class RegimeAwareProposerConfig:
             )
 
 
+@dataclass
+class RegimeProposalDiagnostics:
+    """Counterfactual counts for regime-overlay decisions (#1243).
+
+    Cumulative since proposer construction, so a replay run over many
+    snapshots aggregates naturally. These counts exist to make a dead
+    decision channel visible in evidence output — the M5 diagnosis found
+    suppression had fired 0/84 times and nothing reported it.
+    """
+
+    candidate_ideas: int = 0
+    emitted_ideas: int = 0
+    unknown_skipped: int = 0
+    suppressed_by_regime: dict[str, int] = field(default_factory=dict)
+    exit_plans_adjusted: int = 0
+    emitted_by_regime: dict[str, int] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "candidate_ideas": self.candidate_ideas,
+            "emitted_ideas": self.emitted_ideas,
+            "unknown_skipped": self.unknown_skipped,
+            "suppressed_by_regime": dict(sorted(self.suppressed_by_regime.items())),
+            "exit_plans_adjusted": self.exit_plans_adjusted,
+            "emitted_by_regime": dict(sorted(self.emitted_by_regime.items())),
+        }
+
+
 class RegimeAwareProposer:
     """MA-crossover proposer enriched with MarketRegimeDetector state."""
 
@@ -103,6 +141,11 @@ class RegimeAwareProposer:
         self._detector_factory = detector_factory
         self._config_fingerprint = _regime_config_fingerprint(self._config.regime_config)
         self._identity_fingerprint = _proposer_config_fingerprint(self._config)
+        self._diagnostics = RegimeProposalDiagnostics()
+
+    def replay_diagnostics(self) -> dict[str, Any]:
+        """Counterfactual counts accumulated across every ``propose`` call."""
+        return self._diagnostics.to_dict()
 
     @property
     def proposer_id(self) -> str:
@@ -123,23 +166,36 @@ class RegimeAwareProposer:
 
         def overlay_exit(symbol: str, close: Decimal, levels: ExitLevels) -> ExitLevels:
             state = states.get(symbol, RegimeState.unknown())
-            return _regime_exit_levels(levels, close=close, state=state, config=self._config)
+            adjusted = _regime_exit_levels(levels, close=close, state=state, config=self._config)
+            if adjusted != levels:
+                diagnostics.exit_plans_adjusted += 1
+            return adjusted
 
+        diagnostics = self._diagnostics
         ideas: list[TradeIdea] = []
         for idea in self._baseline.propose(
             snapshot,
             confidence_overlay=overlay_label,
             exit_overlay=overlay_exit,
         ):
+            diagnostics.candidate_ideas += 1
             state = states.get(idea.instrument, RegimeState.unknown())
             # UNKNOWN means the detector has not warmed up (long EMA plus
             # persistence ticks); a "regime-aware" idea with a 0.0-confidence
             # overlay would be self-contradictory, so treat it as unready
             # rather than persisting a proposal.
             if state.regime is RegimeType.UNKNOWN:
+                diagnostics.unknown_skipped += 1
                 continue
             if state.regime in self._config.suppressed_regimes:
+                name = state.regime.name
+                diagnostics.suppressed_by_regime[name] = (
+                    diagnostics.suppressed_by_regime.get(name, 0) + 1
+                )
                 continue
+            diagnostics.emitted_ideas += 1
+            name = state.regime.name
+            diagnostics.emitted_by_regime[name] = diagnostics.emitted_by_regime.get(name, 0) + 1
             ideas.append(self._enrich_idea(snapshot, idea, state))
         return ideas
 
@@ -341,4 +397,5 @@ __all__ = [
     "RegimeAwareProposerConfig",
     "RegimeDetector",
     "RegimeDetectorFactory",
+    "RegimeProposalDiagnostics",
 ]

@@ -8,12 +8,12 @@ subsequent candles using only the plan already written on the trade idea.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 from enum import Enum
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from gpt_trader.core import Candle
 from gpt_trader.errors import ValidationError
@@ -103,6 +103,20 @@ class ReplayResult:
         }
 
 
+@runtime_checkable
+class DiagnosticsProposer(Protocol):
+    """Optional proposer surface exposing counterfactual decision counts.
+
+    A proposer that filters or rewrites another proposer's output (the
+    regime overlay) can report how often each channel fired; the replay
+    runner attaches those counts to the report so a dead channel is visible
+    in evidence output instead of requiring a manual audit (#1243). Counts
+    are cumulative since proposer construction.
+    """
+
+    def replay_diagnostics(self) -> Mapping[str, Any]: ...
+
+
 @dataclass(frozen=True, slots=True)
 class ReplayReport:
     """Aggregate calibration report for a proposer replay run."""
@@ -115,6 +129,7 @@ class ReplayReport:
     ideas: tuple[ReplayResult, ...]
     eligibility_checked: int = 0
     eligibility_passed: int = 0
+    proposer_diagnostics: Mapping[str, Any] | None = None
 
     @property
     def ideas_proposed(self) -> int:
@@ -226,6 +241,9 @@ class ReplayReport:
             "eligibility_checked": self.eligibility_checked,
             "eligibility_passed": self.eligibility_passed,
             "eligibility_pass_rate": str(self.eligibility_pass_rate),
+            "proposer_diagnostics": (
+                dict(self.proposer_diagnostics) if self.proposer_diagnostics is not None else None
+            ),
             "ideas": [idea.to_dict() for idea in self.ideas],
         }
 
@@ -559,6 +577,11 @@ class TradeIdeaReplayRunner:
             ideas=tuple(results),
             eligibility_checked=eligibility_checked,
             eligibility_passed=eligibility_passed,
+            proposer_diagnostics=(
+                dict(self._proposer.replay_diagnostics())
+                if isinstance(self._proposer, DiagnosticsProposer)
+                else None
+            ),
         )
 
 
