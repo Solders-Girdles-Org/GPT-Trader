@@ -25,6 +25,7 @@ from gpt_trader.features.intelligence.regime import (
 from gpt_trader.features.trade_ideas.baseline import (
     BaselineProposer,
     BaselineProposerConfig,
+    ExitLevels,
 )
 from gpt_trader.features.trade_ideas.eligibility import evaluate_eligibility
 from gpt_trader.features.trade_ideas.models import (
@@ -55,11 +56,33 @@ RegimeDetectorFactory = Callable[[RegimeConfig], RegimeDetector]
 
 @dataclass(frozen=True, slots=True)
 class RegimeAwareProposerConfig:
-    """Configuration for the regime-aware MA proposer."""
+    """Configuration for the regime-aware MA proposer.
+
+    ``volatile_stop_distance_multiplier`` widens the baseline stop distance
+    (anchored at the last close) when the detected regime is volatile, and
+    ``volatile_reward_multiple`` optionally replaces the baseline reward
+    multiple there — the regime overlay's replay-visible decision channel
+    (#1242). A multiplier of 1 with no reward override reproduces baseline
+    levels exactly.
+    """
 
     baseline_config: BaselineProposerConfig = field(default_factory=BaselineProposerConfig)
     regime_config: RegimeConfig = field(default_factory=RegimeConfig)
     suppressed_regimes: tuple[RegimeType, ...] = DEFAULT_SUPPRESSED_REGIMES
+    volatile_stop_distance_multiplier: Decimal = Decimal("1.5")
+    volatile_reward_multiple: Decimal | None = None
+
+    def __post_init__(self) -> None:
+        if self.volatile_stop_distance_multiplier <= 0:
+            raise ValidationError(
+                "volatile_stop_distance_multiplier must be positive",
+                field="volatile_stop_distance_multiplier",
+            )
+        if self.volatile_reward_multiple is not None and self.volatile_reward_multiple <= 0:
+            raise ValidationError(
+                "volatile_reward_multiple must be positive",
+                field="volatile_reward_multiple",
+            )
 
 
 class RegimeAwareProposer:
@@ -98,8 +121,16 @@ class RegimeAwareProposer:
                 rationale=confidence.rationale,
             )
 
+        def overlay_exit(symbol: str, close: Decimal, levels: ExitLevels) -> ExitLevels:
+            state = states.get(symbol, RegimeState.unknown())
+            return _regime_exit_levels(levels, close=close, state=state, config=self._config)
+
         ideas: list[TradeIdea] = []
-        for idea in self._baseline.propose(snapshot, confidence_overlay=overlay_label):
+        for idea in self._baseline.propose(
+            snapshot,
+            confidence_overlay=overlay_label,
+            exit_overlay=overlay_exit,
+        ):
             state = states.get(idea.instrument, RegimeState.unknown())
             # UNKNOWN means the detector has not warmed up (long EMA plus
             # persistence ticks); a "regime-aware" idea with a 0.0-confidence
@@ -173,6 +204,38 @@ def _detect_series_regime(detector: RegimeDetector, series: SymbolSeries) -> Reg
     return state
 
 
+def _regime_exit_levels(
+    levels: ExitLevels,
+    *,
+    close: Decimal,
+    state: RegimeState,
+    config: RegimeAwareProposerConfig,
+) -> ExitLevels:
+    """Widen the stop distance (anchored at the close) in volatile regimes.
+
+    UNKNOWN and quiet regimes pass baseline levels through untouched, so any
+    level difference from baseline is attributable to a volatile
+    classification at proposal time.
+    """
+    if state.regime is RegimeType.UNKNOWN or not state.is_volatile():
+        return levels
+    multiplier = config.volatile_stop_distance_multiplier
+    reward_multiple = (
+        config.volatile_reward_multiple
+        if config.volatile_reward_multiple is not None
+        else levels.reward_multiple
+    )
+    if multiplier == 1 and reward_multiple == levels.reward_multiple:
+        return levels
+    return ExitLevels(
+        stop_level=close - multiplier * (close - levels.stop_level),
+        reward_multiple=reward_multiple,
+        stop_basis=(
+            f"the volatility-adjusted stop ({multiplier}x the distance to " f"{levels.stop_basis})"
+        ),
+    )
+
+
 def _regime_config_fingerprint(config: RegimeConfig) -> str:
     payload = json.dumps(config.to_dict(), sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
@@ -185,6 +248,12 @@ def _proposer_config_fingerprint(config: RegimeAwareProposerConfig) -> str:
             "baseline": {spec.name: str(getattr(baseline, spec.name)) for spec in fields(baseline)},
             "regime": config.regime_config.to_dict(),
             "suppressed_regimes": [regime.name for regime in config.suppressed_regimes],
+            "volatile_stop_distance_multiplier": str(config.volatile_stop_distance_multiplier),
+            "volatile_reward_multiple": (
+                str(config.volatile_reward_multiple)
+                if config.volatile_reward_multiple is not None
+                else None
+            ),
         },
         sort_keys=True,
         separators=(",", ":"),

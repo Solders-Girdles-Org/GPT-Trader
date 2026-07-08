@@ -41,6 +41,28 @@ ConfidenceOverlay = Callable[[str, Confidence], Confidence]
 
 
 @dataclass(frozen=True, slots=True)
+class ExitLevels:
+    """Stop/target inputs a wrapping proposer may adjust before an idea is built.
+
+    ``stop_basis`` is the prose clause the invalidation text uses to describe
+    what the stop level is ("the 50-bar average" by default), so adjusted
+    levels and their written rationale cannot drift apart.
+    """
+
+    stop_level: Decimal
+    reward_multiple: Decimal
+    stop_basis: str
+
+
+# Per-run hook letting wrapping proposers adjust exit levels (symbol, close,
+# proposed levels) before validation, sizing, and prose are built. The
+# baseline re-quantizes and re-validates the result, so an adjustment that
+# breaks stop < entry < target ordering skips the idea instead of emitting an
+# inconsistent record.
+ExitLevelsOverlay = Callable[[str, Decimal, ExitLevels], ExitLevels]
+
+
+@dataclass(frozen=True, slots=True)
 class BaselineProposerConfig:
     short_window: int = 10
     long_window: int = 50
@@ -88,10 +110,16 @@ class BaselineProposer:
         snapshot: MarketSnapshot,
         *,
         confidence_overlay: ConfidenceOverlay | None = None,
+        exit_overlay: ExitLevelsOverlay | None = None,
     ) -> list[TradeIdea]:
         ideas: list[TradeIdea] = []
         for series in snapshot.series:
-            idea = self._propose_for_series(snapshot, series, confidence_overlay=confidence_overlay)
+            idea = self._propose_for_series(
+                snapshot,
+                series,
+                confidence_overlay=confidence_overlay,
+                exit_overlay=exit_overlay,
+            )
             if idea is not None:
                 ideas.append(idea)
         return ideas
@@ -102,6 +130,7 @@ class BaselineProposer:
         series: SymbolSeries,
         *,
         confidence_overlay: ConfidenceOverlay | None = None,
+        exit_overlay: ExitLevelsOverlay | None = None,
     ) -> TradeIdea | None:
         config = self._config
         as_of = _utc_aware(snapshot.as_of)
@@ -125,13 +154,21 @@ class BaselineProposer:
             return None
 
         close = closes[-1]
-        stop_level = long_now.quantize(config.price_precision)
-        if close <= stop_level:
+        long_level = long_now.quantize(config.price_precision)
+        levels = ExitLevels(
+            stop_level=long_level,
+            reward_multiple=config.reward_multiple,
+            stop_basis=f"the {config.long_window}-bar average",
+        )
+        if exit_overlay is not None:
+            levels = exit_overlay(series.symbol, close, levels)
+        stop_level = levels.stop_level.quantize(config.price_precision)
+        if stop_level <= 0 or close <= stop_level:
             return None
 
         entry_lower = (close * (1 - config.entry_band_pct / 100)).quantize(config.price_precision)
         entry_upper = (close * (1 + config.entry_band_pct / 100)).quantize(config.price_precision)
-        target = (close + config.reward_multiple * (close - stop_level)).quantize(
+        target = (close + levels.reward_multiple * (close - stop_level)).quantize(
             config.price_precision
         )
         # On low-priced symbols the price precision can round the stop, entry
@@ -183,15 +220,15 @@ class BaselineProposer:
                 f"{series.symbol} {config.short_window}-bar average crossed above the "
                 f"{config.long_window}-bar average within the last "
                 f"{config.crossover_lookback} bars and closed at {close} above the "
-                f"long-term average {stop_level}, signalling upward momentum"
+                f"long-term average {long_level}, signalling upward momentum"
             ),
             instrument=series.symbol,
             product_type=ProductType.SPOT,
             direction=TradeDirection.LONG,
             entry_zone=EntryZone(lower=entry_lower, upper=entry_upper),
-            invalidation=f"Close below the {config.long_window}-bar average ({stop_level})",
+            invalidation=f"Close below {levels.stop_basis} ({stop_level})",
             target_exit=(
-                f"Take profit near {target} ({config.reward_multiple}R) or exit at expiry"
+                f"Take profit near {target} ({levels.reward_multiple}R) or exit at expiry"
             ),
             max_loss=MaxLoss(
                 amount=sizing.estimated_loss_amount,
