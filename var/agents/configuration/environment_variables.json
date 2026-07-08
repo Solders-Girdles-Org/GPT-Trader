@@ -1,11 +1,43 @@
 {
   "env_template_path": "config/environments/.env.template",
   "summary": {
-    "code_only": 125,
+    "code_only": 127,
     "template_only": 0,
-    "total": 176
+    "total": 178
   },
   "variables": [
+    {
+      "code_paths": [
+        "src/gpt_trader/features/recorder/equities_candles.py"
+      ],
+      "code_references": [
+        {
+          "line": 78,
+          "path": "src/gpt_trader/features/recorder/equities_candles.py",
+          "reader": "os.getenv"
+        }
+      ],
+      "in_env_template": false,
+      "name": "ALPACA_API_KEY_ID",
+      "template_default": "",
+      "template_references": []
+    },
+    {
+      "code_paths": [
+        "src/gpt_trader/features/recorder/equities_candles.py"
+      ],
+      "code_references": [
+        {
+          "line": 79,
+          "path": "src/gpt_trader/features/recorder/equities_candles.py",
+          "reader": "os.getenv"
+        }
+      ],
+      "in_env_template": false,
+      "name": "ALPACA_API_SECRET_KEY",
+      "template_default": "",
+      "template_references": []
+    },
     {
       "code_paths": [
         "src/gpt_trader/app/config/profile_loader.py"

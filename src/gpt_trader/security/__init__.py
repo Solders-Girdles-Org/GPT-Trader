@@ -13,6 +13,8 @@ Environment Variables
 - ``COINBASE_CREDENTIALS_FILE``: Path to CDP JSON key file (preferred)
 - ``COINBASE_CDP_API_KEY``: CDP key name (organizations/.../apiKeys/...)
 - ``COINBASE_CDP_PRIVATE_KEY``: CDP private key PEM
+- ``ALPACA_API_KEY_ID`` / ``ALPACA_API_SECRET_KEY``: Alpaca market-data keys
+  (read-only equities daily candles; no order authority)
 
 Security Best Practices
 -----------------------
