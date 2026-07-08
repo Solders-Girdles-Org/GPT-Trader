@@ -288,3 +288,89 @@ def test_replay_runner_config_rejects_non_positive_min_history() -> None:
         assert exc.context["field"] == "min_history"
     else:  # pragma: no cover - defensive assertion
         raise AssertionError("ReplayRunnerConfig should reject min_history=0")
+
+
+def test_tournament_capital_weighted_average_sees_sizing_differences() -> None:
+    # Two proposers with identical entries/exits but different notional
+    # commitment must rank identically on per-idea avg R while their
+    # capital-weighted rows diverge (#1244) — the sizing channel is invisible
+    # to every other replay aggregate.
+    from gpt_trader.features.trade_ideas import SizingRecommendation
+
+    class SizedProposer:
+        def __init__(self, proposer_id: str, notionals: list[str]) -> None:
+            self.proposer_id = proposer_id
+            self._notionals = list(notionals)
+            self._calls = 0
+
+        def propose(self, snapshot: MarketSnapshot) -> list[TradeIdea]:
+            notional = Decimal(self._notionals[self._calls])
+            self._calls += 1
+            return [
+                scoreable_idea(
+                    sizing_recommendation=SizingRecommendation(
+                        quantity=notional / Decimal("101"),
+                        notional=notional,
+                        rationale="scripted sizing for the weighted-replay test",
+                    ),
+                )
+            ]
+
+    candles = (
+        candle(0),
+        # Snapshot 1 idea: fills here, targets on the next candle (+2R).
+        candle(1),
+        # Snapshot 2 idea: fills here (favorable exit deferred on the entry
+        # candle), stops on the next candle (-1R).
+        candle(2, high="113"),
+        # Snapshot 3 idea: fills and stops in-candle (-1R).
+        candle(3, low="94"),
+    )
+    flat_sizer = SizedProposer("flat-sizing", ["1000", "1000", "1000"])
+    conviction_sizer = SizedProposer("conviction-sizing", ["3000", "1000", "1000"])
+
+    report = TradeIdeaReplayTournamentRunner(
+        (flat_sizer, conviction_sizer),
+        config=ReplayRunnerConfig(source="fixture:candles", min_history=1),
+    ).run_series(symbol="BTC-USD", granularity="ONE_HOUR", candles=candles)
+
+    rows = {ranking.proposer_id: ranking for ranking in report.rankings}
+    flat = rows["flat-sizing"]
+    conviction = rows["conviction-sizing"]
+    # Identical levels: same resolved count and per-idea average R (0.0000).
+    assert flat.resolved_ideas == conviction.resolved_ideas == 3
+    assert flat.average_return_r == conviction.average_return_r == Decimal("0")
+    # The weighted view separates them: the conviction sizer commits 3x on
+    # the winner, so (2*3000 - 1000 - 1000) / 5000 = 0.8 vs flat 0.
+    assert flat.capital_weighted_average_return_r == Decimal("0")
+    assert conviction.capital_weighted_average_return_r == Decimal("0.8")
+    assert flat.capital_weighted_sample == conviction.capital_weighted_sample == 3
+    ranking_payload = report.to_dict()["rankings"]
+    assert {row["capital_weighted_average_return_r"] for row in ranking_payload} == {"0", "0.8"}
+
+
+def test_replay_result_carries_sized_notional() -> None:
+    class OneShotProposer:
+        proposer_id = "one-shot"
+
+        def __init__(self) -> None:
+            self._fired = False
+
+        def propose(self, snapshot: MarketSnapshot) -> list[TradeIdea]:
+            if self._fired:
+                return []
+            self._fired = True
+            return [scoreable_idea()]
+
+    report = TradeIdeaReplayRunner(
+        OneShotProposer(),
+        config=ReplayRunnerConfig(source="fixture:candles", min_history=1),
+    ).run_series(
+        symbol="BTC-USD",
+        granularity="ONE_HOUR",
+        candles=(candle(0), candle(1), candle(2, high="113")),
+    )
+
+    assert report.ideas[0].sized_notional == Decimal("6075")
+    assert report.to_dict()["ideas"][0]["sized_notional"] == "6075"
+    assert report.capital_weighted_sample == 1
