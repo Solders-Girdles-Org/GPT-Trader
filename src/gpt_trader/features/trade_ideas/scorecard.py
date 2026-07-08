@@ -181,6 +181,10 @@ def build_replay_evidence(
             "target_hit_rate": report.get("target_hit_rate"),
             "stop_hit_rate": report.get("stop_hit_rate"),
             "average_return_r": report.get("average_return_r"),
+            # Sizing-visible aggregate (#1244); absent on pre-#1244 replay
+            # artifacts, which still render with the per-idea metrics alone.
+            "capital_weighted_average_return_r": report.get("capital_weighted_average_return_r"),
+            "capital_weighted_sample": report.get("capital_weighted_sample"),
             "eligibility_pass_rate": report.get("eligibility_pass_rate"),
         }
         for report in reports
@@ -243,13 +247,19 @@ def _replay_evidence_lines(evidence: Mapping[str, Any]) -> list[str]:
         ),
     ]
     for row in evidence["calibration"]:
-        lines.append(
+        line = (
             f"{row['proposer_id']}: resolved={row['resolved_ideas']}, "
             f"target_hit_rate={row['target_hit_rate']}, "
             f"stop_hit_rate={row['stop_hit_rate']}, "
             f"avg_r={row['average_return_r']}, "
             f"eligibility_pass_rate={row['eligibility_pass_rate']}"
         )
+        if row.get("capital_weighted_average_return_r") is not None:
+            line += (
+                f", capital_weighted_avg_r={row['capital_weighted_average_return_r']}"
+                f" (n={row.get('capital_weighted_sample')})"
+            )
+        lines.append(line)
     edge = evidence["benchmark_edge"]
     if edge["comparisons"]:
         for comparison in edge["comparisons"]:

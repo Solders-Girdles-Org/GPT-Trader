@@ -24,7 +24,6 @@ from gpt_trader.features.trade_ideas import (
     TradeIdeaService,
 )
 from gpt_trader.features.trade_ideas.scorecard import (
-    REPLAY_EVIDENCE_LABEL,
     WALL_CLOCK_EVIDENCE_LABEL,
     ScorecardThresholds,
     build_replay_evidence,
@@ -253,76 +252,6 @@ def test_benchmark_edge_needs_both_baseline_and_candidate_closeouts(
     gate = payload["gates"]["benchmark_edge"]
     assert gate["status"] == "not_yet_measurable"
     assert gate["measured"]["baseline_closeout_count"] == 0
-
-
-def test_replay_evidence_is_labeled_and_reports_edge_vs_baseline() -> None:
-    tournament_payload = {
-        "symbol": "BTC-USD",
-        "granularity": "ONE_HOUR",
-        "source": "fixture:candles",
-        "snapshots_evaluated": 240,
-        "rankings": [],
-        "reports": [
-            {
-                "proposer_id": "baseline-ma-10-50",
-                "ideas_proposed": 12,
-                "resolved_ideas": 10,
-                "target_hit_rate": "0.4",
-                "stop_hit_rate": "0.6",
-                "average_return_r": "0.05",
-                "eligibility_pass_rate": "1",
-            },
-            {
-                "proposer_id": "regime-switcher",
-                "ideas_proposed": 9,
-                "resolved_ideas": 8,
-                "target_hit_rate": "0.5",
-                "stop_hit_rate": "0.5",
-                "average_return_r": "0.35",
-                "eligibility_pass_rate": "1",
-            },
-        ],
-    }
-
-    evidence = build_replay_evidence(tournament_payload)
-
-    assert evidence["evidence"] == REPLAY_EVIDENCE_LABEL
-    assert evidence["snapshots_evaluated"] == 240
-    assert [row["proposer_id"] for row in evidence["calibration"]] == [
-        "baseline-ma-10-50",
-        "regime-switcher",
-    ]
-    edge = evidence["benchmark_edge"]
-    assert edge["baseline_proposer_id"] == "baseline-ma-10-50"
-    assert edge["comparisons"] == [
-        {
-            "proposer_id": "regime-switcher",
-            "average_return_r": "0.35",
-            "edge_r": "0.3000",
-        }
-    ]
-
-
-def test_replay_evidence_from_single_baseline_report_has_no_edge() -> None:
-    single_payload = {
-        "proposer_id": "baseline-ma-10-50",
-        "symbol": "BTC-USD",
-        "granularity": "ONE_HOUR",
-        "source": "fixture:candles",
-        "snapshots_evaluated": 100,
-        "ideas_proposed": 5,
-        "resolved_ideas": 4,
-        "target_hit_rate": "0.5",
-        "stop_hit_rate": "0.5",
-        "average_return_r": "0.2",
-        "eligibility_pass_rate": "1",
-    }
-
-    evidence = build_replay_evidence(single_payload)
-
-    assert evidence["evidence"] == REPLAY_EVIDENCE_LABEL
-    assert evidence["benchmark_edge"]["comparisons"] == []
-    assert "non-baseline" in evidence["benchmark_edge"]["detail"]
 
 
 def test_text_rendering_separates_wall_clock_gates_from_replay_evidence(

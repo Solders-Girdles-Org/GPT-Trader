@@ -70,6 +70,10 @@ class ReplayResult:
     return_r: Decimal | None = None
     return_pct: Decimal | None = None
     bars_evaluated: int = 0
+    # Notional the idea's sizing recommendation would have deployed; carries
+    # the sizing channel into replay so capital-weighted aggregates can rank
+    # proposers that differ only in how much they commit (#1244).
+    sized_notional: Decimal | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -93,6 +97,9 @@ class ReplayResult:
             "return_r": str(self.return_r) if self.return_r is not None else None,
             "return_pct": str(self.return_pct) if self.return_pct is not None else None,
             "bars_evaluated": self.bars_evaluated,
+            "sized_notional": (
+                str(self.sized_notional) if self.sized_notional is not None else None
+            ),
         }
 
 
@@ -157,6 +164,35 @@ class ReplayReport:
         return sum(returns, Decimal("0")) / Decimal(len(returns))
 
     @property
+    def capital_weighted_average_return_r(self) -> Decimal | None:
+        """Average R weighted by each idea's sized notional.
+
+        Reported alongside — never replacing — the per-idea average: it is
+        the only replay aggregate that can see the sizing channel, where two
+        proposers with identical levels differ in how much they commit.
+        """
+        weighted = self._capital_weighted_returns()
+        if not weighted:
+            return None
+        total_notional = sum((notional for _, notional in weighted), Decimal("0"))
+        weighted_sum = sum((value * notional for value, notional in weighted), Decimal("0"))
+        return weighted_sum / total_notional
+
+    @property
+    def capital_weighted_sample(self) -> int:
+        """Resolved ideas that carry a positive sized notional."""
+        return len(self._capital_weighted_returns())
+
+    def _capital_weighted_returns(self) -> list[tuple[Decimal, Decimal]]:
+        return [
+            (idea.return_r, idea.sized_notional)
+            for idea in self.ideas
+            if idea.return_r is not None
+            and idea.sized_notional is not None
+            and idea.sized_notional > 0
+        ]
+
+    @property
     def eligibility_pass_rate(self) -> Decimal:
         if self.eligibility_checked == 0:
             return Decimal("0")
@@ -181,6 +217,12 @@ class ReplayReport:
             "average_return_r": (
                 str(self.average_return_r) if self.average_return_r is not None else None
             ),
+            "capital_weighted_average_return_r": (
+                str(self.capital_weighted_average_return_r)
+                if self.capital_weighted_average_return_r is not None
+                else None
+            ),
+            "capital_weighted_sample": self.capital_weighted_sample,
             "eligibility_checked": self.eligibility_checked,
             "eligibility_passed": self.eligibility_passed,
             "eligibility_pass_rate": str(self.eligibility_pass_rate),
@@ -193,7 +235,12 @@ class ReplayReport:
 
 @dataclass(frozen=True, slots=True)
 class ReplayTournamentRanking:
-    """One ranked proposer row in a replay tournament."""
+    """One ranked proposer row in a replay tournament.
+
+    Ranking order stays on the per-idea metrics; the capital-weighted average
+    is reported beside them so the sizing channel is visible without changing
+    what the tournament optimizes.
+    """
 
     rank: int
     proposer_id: str
@@ -203,6 +250,8 @@ class ReplayTournamentRanking:
     stop_hit_rate: Decimal
     average_return_r: Decimal | None
     eligibility_pass_rate: Decimal
+    capital_weighted_average_return_r: Decimal | None = None
+    capital_weighted_sample: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -216,6 +265,12 @@ class ReplayTournamentRanking:
                 str(self.average_return_r) if self.average_return_r is not None else None
             ),
             "eligibility_pass_rate": str(self.eligibility_pass_rate),
+            "capital_weighted_average_return_r": (
+                str(self.capital_weighted_average_return_r)
+                if self.capital_weighted_average_return_r is not None
+                else None
+            ),
+            "capital_weighted_sample": self.capital_weighted_sample,
         }
 
 
@@ -585,6 +640,8 @@ def _rank_tournament_reports(
             stop_hit_rate=report.stop_hit_rate,
             average_return_r=report.average_return_r,
             eligibility_pass_rate=report.eligibility_pass_rate,
+            capital_weighted_average_return_r=report.capital_weighted_average_return_r,
+            capital_weighted_sample=report.capital_weighted_sample,
         )
         for index, report in enumerate(ordered, start=1)
     )
@@ -863,4 +920,5 @@ def _result(
         return_r=return_r,
         return_pct=return_pct,
         bars_evaluated=bars_evaluated,
+        sized_notional=idea.sizing_recommendation.notional,
     )

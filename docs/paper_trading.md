@@ -371,7 +371,10 @@ Both raw replay artifacts and the CliResponse envelope written by
 `--format json --output <path>` are accepted. Interpretation: per-proposer
 `target_hit_rate` / `stop_hit_rate` are the replay read on risk calibration,
 `average_return_r` is the replay read on expectancy, and the `edge vs
-baseline-ma-…` lines are the replay read on benchmark edge.
+baseline-ma-…` lines are the replay read on benchmark edge. When the replay
+artifact carries sizing (`capital_weighted_avg_r=… (n=…)`), that row is the
+only aggregate that can see the sizing channel — proposers with identical
+levels but different notional commitment separate there and nowhere else.
 
 ## Readiness Evidence Inputs
 
