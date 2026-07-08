@@ -245,3 +245,83 @@ def test_decision_ids_are_distinct_per_symbol(symbol: str) -> None:
     ]
 
     assert symbol.lower().replace("-", "") in idea.decision_id
+
+
+def test_exit_overlay_adjusts_levels_prose_and_sizing() -> None:
+    from gpt_trader.features.trade_ideas.baseline import ExitLevels
+
+    def widen(symbol: str, close: Decimal, levels: ExitLevels) -> ExitLevels:
+        return ExitLevels(
+            stop_level=close - 2 * (close - levels.stop_level),
+            reward_multiple=Decimal("3"),
+            stop_basis="the widened stop",
+        )
+
+    snapshot = snapshot_of(make_series(GOLDEN_CROSS))
+    baseline_idea = BaselineProposer(CONFIG).propose(snapshot)[0]
+    idea = BaselineProposer(CONFIG).propose(snapshot, exit_overlay=widen)[0]
+
+    # close 104, baseline stop 100.30 -> widened stop 96.60, 3R target 126.20.
+    assert idea.exit_plan is not None
+    assert idea.exit_plan.stop == Decimal("96.60")
+    assert idea.exit_plan.target == Decimal("126.20")
+    assert idea.invalidation == "Close below the widened stop (96.60)"
+    assert "(3R)" in idea.target_exit
+    assert str(idea.exit_plan.target) in idea.target_exit
+    assert idea.entry_zone == baseline_idea.entry_zone
+    # Sizing and its written risk snapshot must follow the adjusted stop
+    # distance: (105.04 - 96.60) / 105.04 = 8.04%, not the baseline's 4.51%.
+    assert any("stop distance is 8.04% from there" in item for item in idea.max_loss.assumptions)
+    assert any(
+        "stop distance is 4.51% from there" in item for item in baseline_idea.max_loss.assumptions
+    )
+    assert evaluate_eligibility(idea) == []
+
+
+def test_exit_overlay_without_adjustment_reproduces_baseline_record() -> None:
+    from gpt_trader.features.trade_ideas.baseline import ExitLevels
+
+    def passthrough(symbol: str, close: Decimal, levels: ExitLevels) -> ExitLevels:
+        return levels
+
+    snapshot = snapshot_of(make_series(GOLDEN_CROSS))
+    baseline_idea = BaselineProposer(CONFIG).propose(snapshot)[0]
+    idea = BaselineProposer(CONFIG).propose(snapshot, exit_overlay=passthrough)[0]
+
+    assert idea == baseline_idea
+
+
+def test_exit_overlay_that_breaks_level_ordering_skips_idea() -> None:
+    from gpt_trader.features.trade_ideas.baseline import ExitLevels
+
+    def stop_above_close(symbol: str, close: Decimal, levels: ExitLevels) -> ExitLevels:
+        return ExitLevels(
+            stop_level=close + 1,
+            reward_multiple=levels.reward_multiple,
+            stop_basis=levels.stop_basis,
+        )
+
+    assert (
+        BaselineProposer(CONFIG).propose(
+            snapshot_of(make_series(GOLDEN_CROSS)), exit_overlay=stop_above_close
+        )
+        == []
+    )
+
+
+def test_exit_overlay_that_produces_non_positive_stop_skips_idea() -> None:
+    from gpt_trader.features.trade_ideas.baseline import ExitLevels
+
+    def negative_stop(symbol: str, close: Decimal, levels: ExitLevels) -> ExitLevels:
+        return ExitLevels(
+            stop_level=Decimal("-1"),
+            reward_multiple=levels.reward_multiple,
+            stop_basis=levels.stop_basis,
+        )
+
+    assert (
+        BaselineProposer(CONFIG).propose(
+            snapshot_of(make_series(GOLDEN_CROSS)), exit_overlay=negative_stop
+        )
+        == []
+    )
