@@ -267,8 +267,6 @@ def _close_coinbase_access(access: Any) -> None:
         close = getattr(access, "close", None)
         if callable(close):
             close()
-        else:
-            access.client.close()
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Failed to close Coinbase account access",

@@ -23,7 +23,7 @@ pytestmark = [
 
 def _stable_account_state(access: CoinbaseReadPreviewAccess) -> dict[str, Any]:
     observation = access.reader.read_account()
-    orders = access.client.list_all_orders().get("orders", [])
+    order_history = access.read_order_history()
     return {
         "balances": tuple(
             (item.asset, item.total, item.available, item.hold) for item in observation.balances
@@ -31,21 +31,8 @@ def _stable_account_state(access: CoinbaseReadPreviewAccess) -> dict[str, Any]:
         "positions": tuple(
             (item.instrument, item.quantity, item.average_cost) for item in observation.positions
         ),
-        "orders": tuple(
-            sorted(
-                (
-                    str(item.get("order_id") or ""),
-                    str(item.get("product_id") or ""),
-                    str(item.get("side") or ""),
-                    str(item.get("status") or ""),
-                    str(item.get("filled_size") or ""),
-                    str(item.get("filled_value") or ""),
-                    str(item.get("outstanding_hold_amount") or ""),
-                    repr(item.get("order_configuration") or {}),
-                )
-                for item in orders
-            )
-        ),
+        "order_identity_fingerprint": order_history.identity_fingerprint,
+        "orders": order_history.orders,
     }
 
 

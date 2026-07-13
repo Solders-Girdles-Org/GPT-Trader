@@ -228,14 +228,14 @@ class TestReadPathPassthrough:
         assert broker.calls == [("list_products", ())]
 
     @pytest.mark.parametrize("method_name", ["preview_order", "edit_order_preview"])
-    def test_provider_previews_pass_through_read_only_allowlist(self, method_name: str) -> None:
+    def test_provider_previews_stay_outside_read_only_broker(self, method_name: str) -> None:
         broker = StubBroker()
         wrapper = _make_wrapper(broker=broker)
 
-        result = getattr(wrapper, method_name)("BTC-USD")
+        with pytest.raises(ReadOnlyViolation, match=method_name):
+            getattr(wrapper, method_name)("BTC-USD")
 
-        assert result == {"symbol": "BTC-USD", "status": "previewed"}
-        assert broker.calls == [(method_name, ("BTC-USD",))]
+        assert broker.calls == []
 
     @pytest.mark.parametrize(
         ("method_name", "args"),
@@ -317,13 +317,6 @@ class TestFailClosedDelegation:
 
         with pytest.raises(ReadOnlyViolation, match="set_mark"):
             wrapper.set_mark("BTC-USD", Decimal("61000"))
-
-    def test_preview_is_explicitly_allowed_without_suppression_event(self) -> None:
-        event_store = RecordingEventStore()
-        wrapper = _make_wrapper(event_store=event_store)
-
-        assert wrapper.preview_order("BTC-USD")["status"] == "previewed"
-        assert event_store.events == []
 
 
 class TestCancelOrderSuppression:

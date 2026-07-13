@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import re
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import parse_qsl, quote, urlsplit
+
+import requests
 
 from gpt_trader.features.brokerages.coinbase.client.base import CoinbaseClientBase
+from gpt_trader.features.brokerages.coinbase.client.constants import BASE_URL
 from gpt_trader.features.brokerages.coinbase.errors import (
     InvalidRequestError,
     PermissionDeniedError,
@@ -32,6 +35,19 @@ class CoinbaseReadPreviewClient(CoinbaseClientBase):
         }
     )
     _PRODUCT_ROUTE = re.compile(r"^/api/v3/brokerage/products/[^/?]+$")
+    _PAGINATED_ROUTES = frozenset(
+        {
+            "/api/v3/brokerage/accounts",
+            "/api/v3/brokerage/orders/historical/batch",
+        }
+    )
+
+    def __init__(self, base_url: str = BASE_URL, **kwargs: Any) -> None:
+        if base_url != BASE_URL:
+            raise PermissionDeniedError(
+                "Coinbase read/preview access requires the canonical API URL"
+            )
+        super().__init__(base_url=base_url, **kwargs)
 
     def _request(
         self,
@@ -40,7 +56,7 @@ class CoinbaseReadPreviewClient(CoinbaseClientBase):
         payload: dict | None = None,
     ) -> dict:
         normalized_method = method.upper()
-        normalized_path = self._normalize_path(path).split("?", 1)[0]
+        normalized_path = self._validate_target(normalized_method, path, absolute=False)
         route = (normalized_method, normalized_path)
         product_read = normalized_method == "GET" and self._PRODUCT_ROUTE.fullmatch(normalized_path)
         if route not in self._STATIC_ROUTES and not product_read:
@@ -48,6 +64,63 @@ class CoinbaseReadPreviewClient(CoinbaseClientBase):
                 f"Coinbase read/preview client blocked {normalized_method} {normalized_path}"
             )
         return super()._request(normalized_method, path, payload)
+
+    def _perform_request(
+        self,
+        method: str,
+        url: str,
+        headers: dict[str, str],
+        payload: dict | None,
+    ) -> requests.Response:
+        self._validate_target(method.upper(), url, absolute=True)
+        if self._transport:
+            return super()._perform_request(method, url, headers, payload)
+
+        response = self.session.request(
+            method,
+            url,
+            json=payload,
+            headers=headers,
+            timeout=self.timeout,
+            allow_redirects=False,
+        )
+        if 300 <= response.status_code < 400:
+            raise PermissionDeniedError("Coinbase read/preview redirects are disabled")
+        self._validate_target(method.upper(), response.url, absolute=True)
+        return response
+
+    def _validate_target(self, method: str, target: str, *, absolute: bool) -> str:
+        parsed = urlsplit(target)
+        if parsed.fragment or parsed.username is not None or parsed.password is not None:
+            raise PermissionDeniedError("Coinbase read/preview URL is not canonical")
+
+        if absolute:
+            if parsed.scheme != "https" or parsed.netloc != "api.coinbase.com":
+                raise PermissionDeniedError("Coinbase read/preview URL is not canonical")
+        elif parsed.scheme or parsed.netloc or not parsed.path.startswith("/"):
+            raise PermissionDeniedError("Coinbase read/preview paths must be relative API paths")
+
+        path = parsed.path
+        route = (method, path)
+        product_read = method == "GET" and self._PRODUCT_ROUTE.fullmatch(path)
+        if route not in self._STATIC_ROUTES and not product_read:
+            raise PermissionDeniedError(f"Coinbase read/preview client blocked {method} {path}")
+
+        try:
+            query_items = parse_qsl(parsed.query, keep_blank_values=True, strict_parsing=True)
+        except ValueError as exc:
+            raise PermissionDeniedError("Coinbase read/preview query is malformed") from exc
+        query = dict(query_items)
+        if len(query) != len(query_items):
+            raise PermissionDeniedError("Coinbase read/preview query keys must be unique")
+        if path in self._PAGINATED_ROUTES:
+            if query.get("limit") != "250" or not set(query).issubset({"limit", "cursor"}):
+                raise PermissionDeniedError("Coinbase pagination query is not allowlisted")
+            if "cursor" in query and not query["cursor"]:
+                raise PermissionDeniedError("Coinbase pagination cursor is empty")
+        elif query:
+            raise PermissionDeniedError("Coinbase read/preview query is not allowlisted")
+        return path
 
     def get(self, path: str, params: dict[str, Any] | None = None) -> Any:
         raise PermissionDeniedError("generic Coinbase GET access is disabled")

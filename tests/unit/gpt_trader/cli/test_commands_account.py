@@ -158,16 +158,13 @@ def test_coinbase_observe_uses_attested_account_reader(monkeypatch):
             self.closed = True
 
     client = Client()
-    monkeypatch.setattr(
-        account_cmd,
-        "_build_coinbase_access",
-        lambda config, **_: SimpleNamespace(
-            client=client,
-            reader=Reader(),
-            preview_provider=None,
-            warnings=(),
-        ),
+    access = SimpleNamespace(
+        reader=Reader(),
+        preview_provider=None,
+        warnings=(),
+        close=client.close,
     )
+    monkeypatch.setattr(account_cmd, "_build_coinbase_access", lambda config, **_: access)
 
     response = account_cmd._handle_observe(
         Namespace(
@@ -205,16 +202,13 @@ def test_coinbase_preview_command_returns_non_binding_result(monkeypatch):
             self.closed = True
 
     client = Client()
-    monkeypatch.setattr(
-        account_cmd,
-        "_build_coinbase_access",
-        lambda config, **_: SimpleNamespace(
-            client=client,
-            reader=None,
-            preview_provider=PreviewProvider(),
-            warnings=(),
-        ),
+    access = SimpleNamespace(
+        reader=None,
+        preview_provider=PreviewProvider(),
+        warnings=(),
+        close=client.close,
     )
+    monkeypatch.setattr(account_cmd, "_build_coinbase_access", lambda config, **_: access)
 
     response = account_cmd._handle_preview(
         Namespace(

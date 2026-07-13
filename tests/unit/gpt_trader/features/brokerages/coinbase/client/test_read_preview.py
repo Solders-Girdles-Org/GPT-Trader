@@ -5,6 +5,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+import requests
 
 from gpt_trader.features.brokerages.coinbase.client.read_preview import (
     CoinbaseReadPreviewClient,
@@ -67,6 +68,105 @@ def test_direct_transport_escape_is_denied(method: str, path: str) -> None:
         client._request(method, path)
 
     assert calls == []
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        "https://api.coinbase.com/api/v3/brokerage/accounts?limit=250",
+        "https://evil.example/api/v3/brokerage/accounts?limit=250",
+        "//api.coinbase.com/api/v3/brokerage/accounts?limit=250",
+    ],
+)
+def test_request_rejects_absolute_or_network_paths(target: str) -> None:
+    client, calls = _client(lambda *_: {})
+
+    with pytest.raises(PermissionDeniedError, match="relative API paths"):
+        client._request("GET", target)
+
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "http://api.coinbase.com",
+        "https://api.coinbase.com:443",
+        "https://evil.example",
+    ],
+)
+def test_client_rejects_noncanonical_base_url(base_url: str) -> None:
+    with pytest.raises(PermissionDeniedError, match="canonical API URL"):
+        CoinbaseReadPreviewClient(base_url=base_url)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v3/brokerage/accounts?limit=250&unexpected=1",
+        "/api/v3/brokerage/accounts?limit=100",
+        "/api/v3/brokerage/accounts?limit=250&limit=250",
+        "/api/v3/brokerage/key_permissions?cursor=unexpected",
+    ],
+)
+def test_request_rejects_unallowlisted_query(path: str) -> None:
+    client, calls = _client(lambda *_: {})
+
+    with pytest.raises(PermissionDeniedError, match="query|pagination"):
+        client._request("GET", path)
+
+    assert calls == []
+
+
+def test_low_level_request_revalidates_method_and_absolute_url() -> None:
+    client, calls = _client(lambda *_: {})
+
+    with pytest.raises(PermissionDeniedError, match="blocked"):
+        client._perform_request(
+            "POST",
+            "https://api.coinbase.com/api/v3/brokerage/orders",
+            {},
+            None,
+        )
+
+    assert calls == []
+
+
+def test_real_transport_disables_and_rejects_redirects(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = CoinbaseReadPreviewClient(enable_response_cache=False)
+    request_kwargs: dict[str, Any] = {}
+
+    def request(*args: Any, **kwargs: Any) -> requests.Response:
+        del args
+        request_kwargs.update(kwargs)
+        response = requests.Response()
+        response.status_code = 302
+        response.url = "https://api.coinbase.com/api/v3/brokerage/accounts?limit=250"
+        response.headers["Location"] = "https://evil.example/collect"
+        return response
+
+    monkeypatch.setattr(client.session, "request", request)
+
+    with pytest.raises(PermissionDeniedError, match="redirects are disabled"):
+        client.list_all_accounts()
+
+    assert request_kwargs["allow_redirects"] is False
+
+
+def test_real_transport_rejects_final_url_drift(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = CoinbaseReadPreviewClient(enable_response_cache=False)
+
+    def request(*args: Any, **kwargs: Any) -> requests.Response:
+        del args, kwargs
+        response = requests.Response()
+        response.status_code = 200
+        response.url = "https://evil.example/api/v3/brokerage/accounts?limit=250"
+        return response
+
+    monkeypatch.setattr(client.session, "request", request)
+
+    with pytest.raises(PermissionDeniedError, match="URL is not canonical"):
+        client.list_all_accounts()
 
 
 def test_generic_http_helpers_are_denied() -> None:

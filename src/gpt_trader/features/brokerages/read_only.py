@@ -63,8 +63,6 @@ class ReadOnlyBroker(BrokerProtocol):
             "list_fills",
             "list_orders",
             "list_products",
-            "preview_order",
-            "edit_order_preview",
             "stream_orderbook",
             "stream_trades",
         }

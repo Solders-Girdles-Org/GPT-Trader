@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import Any
 
 from gpt_trader.app.config import BotConfig
 from gpt_trader.features.brokerages.coinbase.account_access import CoinbaseAccountReader
@@ -20,13 +22,36 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+@dataclass(frozen=True, slots=True, order=True)
+class CoinbaseOrderEvidence:
+    """Stable immutable evidence for one previously submitted Coinbase order."""
+
+    order_id: str
+    product_id: str
+    side: str
+    status: str
+    filled_size: str
+    filled_value: str
+    outstanding_hold_amount: str
+    order_configuration: str
+
+
+@dataclass(frozen=True, slots=True)
+class CoinbaseOrderHistoryEvidence:
+    """Identity-bound immutable Coinbase order-history evidence."""
+
+    identity_fingerprint: str
+    orders: tuple[CoinbaseOrderEvidence, ...]
+
+
 @dataclass(frozen=True, slots=True)
 class CoinbaseReadPreviewAccess:
     """Own one narrow client and the adapters that share its attestation."""
 
-    client: CoinbaseReadPreviewClient
     reader: CoinbaseAccountReader
     preview_provider: CoinbasePreviewProvider
+    _close_client: Callable[[], None] = field(repr=False, compare=False)
+    _list_orders: Callable[[], dict[str, Any]] = field(repr=False, compare=False)
     warnings: tuple[str, ...] = ()
 
     @classmethod
@@ -80,14 +105,57 @@ class CoinbaseReadPreviewAccess:
             raise
 
         return cls(
-            client=client,
             reader=reader,
             preview_provider=preview_provider,
+            _close_client=client.close,
+            _list_orders=client.list_all_orders,
             warnings=tuple(credentials.warnings),
         )
 
+    def read_order_history(self) -> CoinbaseOrderHistoryEvidence:
+        """Return typed order evidence after re-attesting the configured identity."""
+        identity = self.reader.observe_identity()
+        payload = self._list_orders()
+        if not isinstance(payload, dict) or not isinstance(payload.get("orders"), list):
+            raise ValueError("Coinbase orders response is malformed")
+
+        orders: list[CoinbaseOrderEvidence] = []
+        for row in payload["orders"]:
+            if not isinstance(row, dict):
+                raise ValueError("Coinbase orders response is malformed")
+            order_id = str(row.get("order_id") or "")
+            if not order_id:
+                raise ValueError("Coinbase order ID is missing")
+            configuration = row.get("order_configuration")
+            if not isinstance(configuration, dict):
+                raise ValueError("Coinbase order configuration is malformed")
+            try:
+                configuration_json = json.dumps(
+                    configuration,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Coinbase order configuration is malformed") from exc
+            orders.append(
+                CoinbaseOrderEvidence(
+                    order_id=order_id,
+                    product_id=str(row.get("product_id") or ""),
+                    side=str(row.get("side") or ""),
+                    status=str(row.get("status") or ""),
+                    filled_size=str(row.get("filled_size") or ""),
+                    filled_value=str(row.get("filled_value") or ""),
+                    outstanding_hold_amount=str(row.get("outstanding_hold_amount") or ""),
+                    order_configuration=configuration_json,
+                )
+            )
+        return CoinbaseOrderHistoryEvidence(
+            identity_fingerprint=identity.fingerprint,
+            orders=tuple(sorted(orders)),
+        )
+
     def close(self) -> None:
-        self.client.close()
+        self._close_client()
 
     def __enter__(self) -> CoinbaseReadPreviewAccess:
         return self
@@ -96,4 +164,8 @@ class CoinbaseReadPreviewAccess:
         self.close()
 
 
-__all__ = ["CoinbaseReadPreviewAccess"]
+__all__ = [
+    "CoinbaseOrderEvidence",
+    "CoinbaseOrderHistoryEvidence",
+    "CoinbaseReadPreviewAccess",
+]
