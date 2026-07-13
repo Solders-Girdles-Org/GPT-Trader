@@ -79,6 +79,7 @@ class CoinbaseClientBase:
         rate_limit_per_minute: int | None = None,
         enable_throttle: bool = True,
         enable_keep_alive: bool = True,
+        enable_response_cache: bool | None = None,
         **kwargs: Any,
     ) -> None:
         self.base_url = base_url.rstrip("/")
@@ -106,7 +107,10 @@ class CoinbaseClientBase:
 
         # API resilience components (feature-flagged)
         self._response_cache: ResponseCache | None = None
-        if CACHE_ENABLED:
+        response_cache_enabled = (
+            CACHE_ENABLED if enable_response_cache is None else enable_response_cache
+        )
+        if response_cache_enabled:
             self._response_cache = ResponseCache(
                 default_ttl=CACHE_DEFAULT_TTL,
                 max_size=CACHE_MAX_SIZE,

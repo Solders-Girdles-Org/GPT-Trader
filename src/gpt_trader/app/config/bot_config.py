@@ -242,6 +242,8 @@ class BotConfig:
 
     # Broker / Exchange Settings
     coinbase_default_quote: str = "USD"
+    coinbase_expected_portfolio_uuid: str | None = None
+    coinbase_expected_account_uuids: list[str] = field(default_factory=list)
     coinbase_us_futures_enabled: bool = False
     # Derivatives venue type. INTX perpetuals are removed; CFM US futures is the
     # only supported derivatives lane (see docs/decisions/intx-default-derivatives-venue.md).
@@ -452,6 +454,12 @@ class BotConfig:
             derivatives_enabled=derivatives_enabled,
             # Inherited from RuntimeSettings
             coinbase_default_quote=os.getenv("COINBASE_DEFAULT_QUOTE", "USD"),
+            coinbase_expected_portfolio_uuid=(
+                os.getenv("COINBASE_EXPECTED_PORTFOLIO_UUID", "").strip() or None
+            ),
+            coinbase_expected_account_uuids=parse_list_env(
+                "COINBASE_EXPECTED_ACCOUNT_UUIDS", str, default=[]
+            ),
             coinbase_us_futures_enabled=parse_bool_env(
                 "COINBASE_US_FUTURES_ENABLED", default=False
             ),

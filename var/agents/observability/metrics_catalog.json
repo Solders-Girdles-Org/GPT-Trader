@@ -4,7 +4,7 @@
       "label_keys": [],
       "locations": [
         {
-          "line": 685,
+          "line": 689,
           "path": "src/gpt_trader/features/brokerages/coinbase/client/base.py"
         }
       ],
@@ -20,7 +20,7 @@
       ],
       "locations": [
         {
-          "line": 519,
+          "line": 523,
           "path": "src/gpt_trader/features/brokerages/coinbase/client/base.py"
         }
       ],
@@ -36,7 +36,7 @@
       ],
       "locations": [
         {
-          "line": 524,
+          "line": 528,
           "path": "src/gpt_trader/features/brokerages/coinbase/client/base.py"
         }
       ],
@@ -52,7 +52,7 @@
       ],
       "locations": [
         {
-          "line": 440,
+          "line": 444,
           "path": "src/gpt_trader/features/brokerages/coinbase/client/base.py"
         }
       ],
@@ -84,7 +84,7 @@
       ],
       "locations": [
         {
-          "line": 694,
+          "line": 698,
           "path": "src/gpt_trader/features/brokerages/coinbase/client/base.py"
         }
       ],
@@ -336,7 +336,7 @@
       "label_keys": [],
       "locations": [
         {
-          "line": 681,
+          "line": 685,
           "path": "src/gpt_trader/features/brokerages/coinbase/client/base.py"
         }
       ],

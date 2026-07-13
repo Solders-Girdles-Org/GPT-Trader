@@ -143,6 +143,17 @@
       "type": "string",
       "default": "USD"
     },
+    "coinbase_expected_portfolio_uuid": {
+      "type": "string",
+      "nullable": true
+    },
+    "coinbase_expected_account_uuids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
     "coinbase_us_futures_enabled": {
       "type": "boolean",
       "default": false

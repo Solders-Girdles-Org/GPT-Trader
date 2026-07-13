@@ -3,10 +3,21 @@ from __future__ import annotations
 import argparse
 import json
 from argparse import Namespace
+from datetime import UTC, datetime
+from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 
 import gpt_trader.cli.commands.account as account_cmd
+from gpt_trader.features.brokerages.accounts import (
+    AccountIdentity,
+    AccountObservation,
+    AccountProvider,
+    PreviewKind,
+    PreviewRequest,
+    PreviewResult,
+)
 
 
 def test_account_snapshot_inherits_parent_profile() -> None:
@@ -20,6 +31,43 @@ def test_account_snapshot_inherits_parent_profile() -> None:
 
     snapshot_profile_args = parser.parse_args(["account", "snapshot", "--profile", "prod"])
     assert snapshot_profile_args.profile == "prod"
+
+
+def test_account_provider_commands_parse() -> None:
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    account_cmd.register(subparsers)
+
+    observe = parser.parse_args(["account", "observe", "--provider", "coinbase"])
+    preview = parser.parse_args(
+        [
+            "account",
+            "preview",
+            "--provider",
+            "coinbase",
+            "--instrument",
+            "BTC-USD",
+            "--side",
+            "buy",
+            "--quantity",
+            "0.01",
+            "--order-type",
+            "market",
+        ]
+    )
+
+    assert observe.provider == "coinbase"
+    assert preview.provider == "coinbase"
+    assert preview.quantity == Decimal("0.01")
+
+
+def test_legacy_snapshot_rejects_provider_override() -> None:
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    account_cmd.register(subparsers)
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["account", "snapshot", "--provider", "coinbase"])
 
 
 def test_account_snapshot_prints_result(monkeypatch, capsys):
@@ -86,3 +134,112 @@ def test_account_snapshot_raises_when_unavailable(monkeypatch):
         account_cmd._handle_snapshot(Namespace(profile="dev", account_command="snapshot"))
 
     assert StubBot.shutdown_called is True
+
+
+def test_coinbase_observe_uses_attested_account_reader(monkeypatch):
+    identity = AccountIdentity(
+        provider=AccountProvider.COINBASE,
+        account_id="portfolio-1",
+        portfolio_id="portfolio-1",
+        interface="advanced-trade-v3",
+    )
+
+    class Reader:
+        def read_account(self) -> AccountObservation:
+            return AccountObservation(
+                identity=identity,
+                generated_at=datetime(2026, 7, 12, tzinfo=UTC),
+            )
+
+    class Client:
+        closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    client = Client()
+    monkeypatch.setattr(
+        account_cmd,
+        "_build_coinbase_access",
+        lambda config, **_: SimpleNamespace(
+            client=client,
+            reader=Reader(),
+            preview_provider=None,
+            warnings=(),
+        ),
+    )
+
+    response = account_cmd._handle_observe(
+        Namespace(
+            provider="coinbase",
+            output_format="json",
+            account_command="observe",
+        )
+    )
+
+    assert response.success is True
+    assert response.data["schema_version"] == "gpt-trader.account-observation.v1"
+    assert response.data["identity"]["account_id"] == "*******io-1"
+    assert client.closed is True
+
+
+def test_coinbase_preview_command_returns_non_binding_result(monkeypatch):
+    request_seen: list[PreviewRequest] = []
+
+    class PreviewProvider:
+        def preview(self, request: PreviewRequest) -> PreviewResult:
+            request_seen.append(request)
+            return PreviewResult(
+                provider=AccountProvider.COINBASE,
+                kind=PreviewKind.PROVIDER_SIMULATION,
+                generated_at=datetime(2026, 7, 12, tzinfo=UTC),
+                identity_fingerprint="fingerprint",
+                request=request,
+                estimated_total=Decimal("1000"),
+            )
+
+    class Client:
+        closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    client = Client()
+    monkeypatch.setattr(
+        account_cmd,
+        "_build_coinbase_access",
+        lambda config, **_: SimpleNamespace(
+            client=client,
+            reader=None,
+            preview_provider=PreviewProvider(),
+            warnings=(),
+        ),
+    )
+
+    response = account_cmd._handle_preview(
+        Namespace(
+            provider="coinbase",
+            output_format="json",
+            instrument="BTC-USD",
+            side="buy",
+            quantity=Decimal("0.01"),
+            order_type="market",
+            limit_price=None,
+        )
+    )
+
+    assert response.success is True
+    assert response.data["non_binding"] is True
+    assert response.data["estimated_total"] == "1000"
+    assert request_seen[0].instrument == "BTC-USD"
+    assert client.closed is True
+
+
+def test_coinbase_access_uses_injected_composition_root() -> None:
+    access = object()
+
+    class Container:
+        def create_coinbase_read_preview_access(self) -> object:
+            return access
+
+    assert account_cmd._build_coinbase_access("ignored", container=Container()) is access
