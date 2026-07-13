@@ -43,9 +43,15 @@ def service(tmp_path: Path) -> TradeIdeaService:
     return built
 
 
-def _fill_idea(service: TradeIdeaService, *, decision_id: str = "trade-20260612-001") -> None:
+def _fill_idea(
+    service: TradeIdeaService,
+    *,
+    decision_id: str = "trade-20260612-001",
+    instrument: str = "BTC-USD",
+) -> None:
     idea = build_trade_idea(
         decision_id=decision_id,
+        instrument=instrument,
         entry_zone=EntryZone(lower=Decimal("100"), upper=Decimal("102")),
         invalidation="Close below 95",
         target_exit="Take profit at 113 or exit at expiry",
@@ -73,13 +79,13 @@ def _candle(offset_hours: int, *, high: str, low: str, close: str) -> Candle:
     )
 
 
-def _snapshot(*candles: Candle) -> MarketSnapshot:
+def _snapshot(*candles: Candle, symbol: str = "BTC-USD") -> MarketSnapshot:
     # as_of sits after the recorded candles: the monitor runs on a later turn's
     # snapshot whose bars span the position's post-entry history.
     return MarketSnapshot(
         as_of=CLOCK + timedelta(hours=3),
         source="test:fixture",
-        series=(SymbolSeries(symbol="BTC-USD", granularity="ONE_HOUR", candles=candles),),
+        series=(SymbolSeries(symbol=symbol, granularity="ONE_HOUR", candles=candles),),
     )
 
 
@@ -90,7 +96,7 @@ def test_target_hit_records_thesis_target_with_positive_pnl(service: TradeIdeaSe
         _candle(1, high="114", low="101", close="113"),  # hits target 113
     )
 
-    (closeout,) = resolve_filled_ideas(service, snapshot, now=CLOCK + timedelta(hours=2))
+    (closeout,) = resolve_filled_ideas(service, snapshot, now=CLOCK + timedelta(hours=2)).recorded
 
     assert closeout.resolution is CloseoutResolution.THESIS_TARGET
     # entry midpoint 101, exit 113, qty 0.1 -> +1.2
@@ -106,7 +112,7 @@ def test_stop_hit_records_invalidation_with_negative_pnl(service: TradeIdeaServi
         _candle(1, high="102", low="94", close="96"),  # breaches stop 95
     )
 
-    (closeout,) = resolve_filled_ideas(service, snapshot, now=CLOCK + timedelta(hours=2))
+    (closeout,) = resolve_filled_ideas(service, snapshot, now=CLOCK + timedelta(hours=2)).recorded
 
     assert closeout.resolution is CloseoutResolution.INVALIDATION
     # entry 101, exit 95, qty 0.1 -> -0.6
@@ -120,9 +126,9 @@ def test_unexpired_without_touch_stays_open(service: TradeIdeaService) -> None:
         _candle(1, high="103", low="100", close="101"),  # no target/stop touch
     )
 
-    recorded = resolve_filled_ideas(service, snapshot, now=CLOCK + timedelta(hours=2))
+    recorded = resolve_filled_ideas(service, snapshot, now=CLOCK + timedelta(hours=2)).recorded
 
-    assert recorded == []
+    assert recorded == ()
     assert service.get_closeout_attribution("trade-20260612-001") is None
 
 
@@ -134,11 +140,90 @@ def test_expired_without_touch_marks_to_market_as_expiry(service: TradeIdeaServi
     )
 
     # now is past the 4h expiry, so the end-of-candles is a real timeout.
-    (closeout,) = resolve_filled_ideas(service, snapshot, now=CLOCK + timedelta(hours=5))
+    (closeout,) = resolve_filled_ideas(service, snapshot, now=CLOCK + timedelta(hours=5)).recorded
 
     assert closeout.resolution is CloseoutResolution.EXPIRY
     # entry 101, mark-to-market exit 105.5, qty 0.1 -> +0.45
     assert closeout.realized_profit_loss_amount == Decimal("0.45")
+
+
+def test_equity_idea_is_not_resolved_while_xnys_is_closed(service: TradeIdeaService) -> None:
+    # Resolving an equity position against a closed session would time it out
+    # or mark it against stale data; the pass must skip it loudly instead
+    # (issue #1232). Saturday 2026-06-13 15:00 UTC is a closed XNYS instant.
+    _fill_idea(service, instrument="AAPL")
+    snapshot = _snapshot(
+        _candle(0, high="103", low="100", close="102"),
+        _candle(1, high="114", low="101", close="113"),  # would hit target 113
+        symbol="AAPL",
+    )
+    weekend = datetime(2026, 6, 13, 15, 0, tzinfo=UTC)
+
+    weekend_pass = resolve_filled_ideas(service, snapshot, now=weekend)
+
+    assert weekend_pass.recorded == ()
+    (skip,) = weekend_pass.skipped_closed_sessions
+    assert skip["decision_id"] == "trade-20260612-001"
+    assert skip["instrument"] == "AAPL"
+    assert "market closed for session XNYS" in skip["reason"]
+    assert "next open 2026-06-15T13:30:00+00:00" in skip["reason"]
+    assert service.get("trade-20260612-001").state is TradeIdeaState.FILLED
+    assert service.get_closeout_attribution("trade-20260612-001") is None
+
+    # At the next open the same pass resolves against the recorded candles.
+    monday_open = datetime(2026, 6, 15, 14, 0, tzinfo=UTC)
+    (closeout,) = resolve_filled_ideas(service, snapshot, now=monday_open).recorded
+    assert closeout.resolution is CloseoutResolution.THESIS_TARGET
+
+
+def test_crypto_idea_resolves_on_a_weekend(service: TradeIdeaService) -> None:
+    _fill_idea(service)
+    snapshot = _snapshot(
+        _candle(0, high="103", low="100", close="102"),
+        _candle(1, high="114", low="101", close="113"),
+    )
+    weekend = datetime(2026, 6, 13, 15, 0, tzinfo=UTC)
+
+    weekend_pass = resolve_filled_ideas(service, snapshot, now=weekend)
+
+    assert weekend_pass.skipped_closed_sessions == ()
+    (closeout,) = weekend_pass.recorded
+    assert closeout.resolution is CloseoutResolution.THESIS_TARGET
+
+
+def test_unclassifiable_instrument_is_skipped_loudly(service: TradeIdeaService) -> None:
+    _fill_idea(service, instrument="BTC-USD-PERP")
+    snapshot = _snapshot(
+        _candle(0, high="103", low="100", close="102"),
+        _candle(1, high="114", low="101", close="113"),
+        symbol="BTC-USD-PERP",
+    )
+
+    monitor_pass = resolve_filled_ideas(service, snapshot, now=CLOCK + timedelta(hours=2))
+
+    assert monitor_pass.recorded == ()
+    (skip,) = monitor_pass.skipped_closed_sessions
+    assert skip["decision_id"] == "trade-20260612-001"
+    assert skip["instrument"] == "BTC-USD-PERP"
+    assert "not classifiable to a trading session" in skip["reason"]
+    assert service.get("trade-20260612-001").state is TradeIdeaState.FILLED
+
+
+def test_calendar_out_of_bounds_is_skipped_loudly(service: TradeIdeaService) -> None:
+    _fill_idea(service, instrument="AAPL")
+    snapshot = _snapshot(
+        _candle(0, high="103", low="100", close="102"),
+        _candle(1, high="114", low="101", close="113"),
+        symbol="AAPL",
+    )
+    historical_now = datetime(1980, 1, 2, 15, 0, tzinfo=UTC)
+
+    monitor_pass = resolve_filled_ideas(service, snapshot, now=historical_now)
+
+    assert monitor_pass.recorded == ()
+    (skip,) = monitor_pass.skipped_closed_sessions
+    assert "session calendar XNYS cannot evaluate" in skip["reason"]
+    assert service.get("trade-20260612-001").state is TradeIdeaState.FILLED
 
 
 def test_already_closed_and_sizeless_ideas_are_skipped(service: TradeIdeaService) -> None:
@@ -150,4 +235,4 @@ def test_already_closed_and_sizeless_ideas_are_skipped(service: TradeIdeaService
     resolve_filled_ideas(service, snapshot, now=CLOCK + timedelta(hours=2))
 
     # A second pass is idempotent: the idea already carries a closeout.
-    assert resolve_filled_ideas(service, snapshot, now=CLOCK + timedelta(hours=2)) == []
+    assert resolve_filled_ideas(service, snapshot, now=CLOCK + timedelta(hours=2)).recorded == ()

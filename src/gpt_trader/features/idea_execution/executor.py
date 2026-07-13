@@ -19,6 +19,11 @@ from decimal import Decimal
 from typing import Any
 
 from gpt_trader.core import OrderStatus
+from gpt_trader.core.instruments import InstrumentParseError
+from gpt_trader.core.trading_calendar import (
+    SessionCalendarResolver,
+    get_calendar_for_instrument,
+)
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.brokerages.mock import DeterministicBroker
 from gpt_trader.features.brokerages.paper import HybridPaperBroker
@@ -211,10 +216,12 @@ class PaperIdeaExecutor:
         broker: PaperBroker,
         *,
         now_factory: Callable[[], datetime] | None = None,
+        session_calendar_resolver: SessionCalendarResolver | None = None,
     ) -> None:
         self._service = service
         self._broker = _require_paper_broker(broker)
         self._now_factory = now_factory or (lambda: datetime.now(UTC))
+        self._session_calendar_resolver = session_calendar_resolver or get_calendar_for_instrument
 
     @property
     def broker(self) -> PaperBroker:
@@ -223,10 +230,11 @@ class PaperIdeaExecutor:
     def resolve_approved_idea(self, decision_id: str) -> TradeIdeaView:
         """Load an idea and admit it to the lane, or refuse with a typed error.
 
-        Admission requires workflow state APPROVED and an unexpired
-        ``time_horizon.expires_at``. Every other state — including SUBMITTED
-        (already being executed) and FILLED — is refused so the lane can never
-        double-execute or resurrect a terminal record.
+        Admission requires workflow state APPROVED, an unexpired
+        ``time_horizon.expires_at``, and an open market session for the
+        idea's instrument (issue #1232). Every other state — including
+        SUBMITTED (already being executed) and FILLED — is refused so the
+        lane can never double-execute or resurrect a terminal record.
         """
         return self._resolve_execution_admission(decision_id).view
 
@@ -264,7 +272,52 @@ class PaperIdeaExecutor:
                 value=expires_at.isoformat(),
             )
 
+        session_refusal = self._closed_session_refusal(decision_id, view.idea.instrument)
+        if session_refusal is not None:
+            raise session_refusal
+
         return _PaperExecutionAdmission(view=view, submission_evidence=submission_evidence)
+
+    def _closed_session_refusal(
+        self, decision_id: str, instrument: str
+    ) -> IdeaNotExecutableError | None:
+        """Refuse a sessioned instrument outside its market hours (issue #1232).
+
+        A fill against a closed session would be priced from stale
+        closed-market data, so the lane refuses loudly and the idea stays
+        APPROVED. The scheduled cycle records the typed refusal as a skip and
+        retries; execution resumes at the next open against that turn's own
+        snapshot marks, so any overnight/weekend gap lands in the attributed
+        fill price — honest, never smoothed or backdated.
+        """
+        try:
+            calendar = self._session_calendar_resolver(instrument)
+        except InstrumentParseError as error:
+            return IdeaNotExecutableError(
+                f"Idea {decision_id} is not executable: instrument "
+                f"{instrument!r} is not classifiable to a trading session: {error}",
+                field="instrument",
+                value=instrument,
+            )
+        now = self._now_factory()
+        try:
+            if calendar.is_open(now):
+                return None
+            next_open = calendar.next_open(now)
+        except ValueError as error:
+            return IdeaNotExecutableError(
+                f"Idea {decision_id} is not executable: session calendar "
+                f"{calendar.session_id} cannot evaluate {now.isoformat()}: {error}",
+                field="session",
+                value=calendar.session_id,
+            )
+        detail = f"; next open {next_open.isoformat()}" if next_open is not None else ""
+        return IdeaNotExecutableError(
+            f"Idea {decision_id} is not executable: market closed for session "
+            f"{calendar.session_id} at {now.isoformat()}{detail}",
+            field="session",
+            value=calendar.session_id,
+        )
 
     def execute(
         self,

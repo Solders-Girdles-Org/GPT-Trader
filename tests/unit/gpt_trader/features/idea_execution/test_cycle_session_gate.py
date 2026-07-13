@@ -134,6 +134,73 @@ class TestProposerSessionGate:
         assert skip["instrument"] == "BTC-USD-PERP"
         assert "not classifiable" in skip["reason"]
 
+    def test_calendar_out_of_bounds_is_skipped_loudly(
+        self, cycle_service: TradeIdeaService, tmp_path: Path
+    ) -> None:
+        proposer = FixedProposer(
+            "test-historical-proposer",
+            [build_cycle_idea("trade-20260703-gate-historical", instrument="AAPL")],
+        )
+        historical_now = datetime(1980, 1, 2, 15, 0, tzinfo=UTC)
+        result = make_cycle_runner(
+            cycle_service, tmp_path, proposers=[proposer], now=historical_now
+        ).run(snapshot_provider(snapshot(flat_series("AAPL"))))
+
+        (skip,) = result.proposer_turns[0].skipped_closed_sessions
+        assert skip["instrument"] == "AAPL"
+        assert "session calendar XNYS cannot evaluate" in skip["reason"]
+        assert cycle_service.list_views() == []
+
+
+class TestExecutionLegSessionGuard:
+    def test_approved_equity_idea_waits_for_the_open(
+        self, cycle_service: TradeIdeaService, tmp_path: Path
+    ) -> None:
+        decision_id = "trade-20260703-gate-approved"
+        cycle_service.propose(
+            build_cycle_idea(decision_id, instrument="AAPL"), actor_id="test-proposer"
+        )
+        cycle_service.approve(decision_id, actor_id="test-operator", reason="test approval")
+
+        # Closed turn: the executor's typed refusal lands as an execution skip.
+        closed_turn = make_cycle_runner(cycle_service, tmp_path, proposers=[]).run(
+            snapshot_provider(snapshot(flat_series("AAPL")))
+        )
+        assert closed_turn.execution.executed == ()
+        (skip,) = closed_turn.execution.skipped
+        assert skip["decision_id"] == decision_id
+        assert "market closed for session XNYS" in skip["reason"]
+        assert cycle_service.get(decision_id).state.value == "approved"
+
+        # Open turn: the fill resumes against this turn's own snapshot marks.
+        open_turn = make_cycle_runner(cycle_service, tmp_path, proposers=[], now=XNYS_OPEN_NOW).run(
+            snapshot_provider(snapshot(flat_series("AAPL")))
+        )
+        (executed,) = open_turn.execution.executed
+        assert executed["decision_id"] == decision_id
+
+    def test_filled_equity_idea_exit_skip_is_manifest_visible(
+        self, cycle_service: TradeIdeaService, tmp_path: Path
+    ) -> None:
+        decision_id = "trade-20260703-gate-filled"
+        cycle_service.propose(
+            build_cycle_idea(decision_id, instrument="AAPL"), actor_id="test-proposer"
+        )
+        cycle_service.approve(decision_id, actor_id="test-operator", reason="test approval")
+        cycle_service.record_submission(decision_id, actor_id="test-executor", venue="paper")
+        cycle_service.record_fill(decision_id, actor_id="test-venue", venue="paper")
+
+        result = make_cycle_runner(cycle_service, tmp_path, proposers=[]).run(
+            snapshot_provider(snapshot(flat_series("AAPL")))
+        )
+
+        assert result.resolved_decision_ids == ()
+        (skip,) = result.exit_monitor_skipped_closed_sessions
+        assert skip["decision_id"] == decision_id
+        assert "market closed for session XNYS" in skip["reason"]
+        (row,) = manifest_rows(tmp_path)
+        assert row["exit_monitor_skipped_closed_sessions"] == [dict(skip)]
+
 
 class TestManifestSessionEvidence:
     def test_manifest_row_records_the_session_decision_per_instrument(
