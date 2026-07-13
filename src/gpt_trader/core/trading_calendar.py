@@ -17,14 +17,15 @@ Two sessions are supported:
 Timezone rule follows the repo convention (``risk_units.py``): naive
 datetimes are treated as UTC, never host-local time.
 
-Consumers (ratchet day boundary, snapshot staleness, scheduler windows) are
-NOT wired here — that migration is venue phase P1-E.
+The paper lane uses this service for cycle/executor admission, per-instrument
+daily-loss windows, review latency, and expiry-sweep session guards. Snapshot
+staleness and non-paper runtime calendars remain separate concerns.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
 from typing import TYPE_CHECKING, Protocol
 
@@ -102,6 +103,52 @@ exit monitor) so deterministic tests can pin session state; the default is
 unclassifiable instruments — callers must turn that into a loud skip or a
 typed refusal, never a silent pass.
 """
+
+
+def advance_by_open_time(
+    calendar: TradingCalendar,
+    start: datetime,
+    duration: timedelta,
+) -> datetime:
+    """Advance ``start`` by time during which ``calendar`` is open.
+
+    The 24x7 calendar therefore matches ordinary wall-clock arithmetic, while
+    a sessioned calendar pauses the duration across nights, weekends, and
+    holidays. Calendar-domain errors deliberately propagate to the caller so
+    decision paths can fail closed instead of silently shortening a review
+    window.
+    """
+    if duration < timedelta(0):
+        raise ValueError("Open-session duration must be non-negative")
+    cursor = _as_utc(start)
+    remaining = duration
+    while remaining > timedelta(0):
+        if not calendar.is_open(cursor):
+            next_open = calendar.next_open(cursor)
+            if next_open is None:
+                raise ValueError(f"Calendar {calendar.session_id!r} is closed and has no next open")
+            next_open = _as_utc(next_open)
+            if next_open <= cursor:
+                raise ValueError(
+                    f"Calendar {calendar.session_id!r} returned a non-advancing next open"
+                )
+            cursor = next_open
+            continue
+
+        next_close = calendar.next_close(cursor)
+        if next_close is None:
+            return cursor + remaining
+        next_close = _as_utc(next_close)
+        if next_close <= cursor:
+            raise ValueError(
+                f"Calendar {calendar.session_id!r} returned a non-advancing next close"
+            )
+        open_span = next_close - cursor
+        if remaining <= open_span:
+            return cursor + remaining
+        remaining -= open_span
+        cursor = next_close
+    return cursor
 
 
 class AlwaysOpenCalendar:
@@ -212,6 +259,7 @@ __all__ = [
     "ExchangeBackedCalendar",
     "SessionCalendarResolver",
     "TradingCalendar",
+    "advance_by_open_time",
     "get_calendar_for_instrument",
     "get_trading_calendar",
 ]

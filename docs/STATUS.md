@@ -101,8 +101,12 @@ the approval loudly. Margin, pattern-day-trading, and the options defined-risk
 half stay deferred. The paper executor and exit monitor now refuse equity fills
 and closeout resolution outside XNYS regular hours, leaving the idea open and
 recording the skip in cycle manifest evidence; crypto retains 24x7 behavior and
-unclassifiable instruments fail closed. Session-date ratchet/expiry migration
-and the operator-gated equity-universe flip remain in #1232.
+unclassifiable instruments fail closed. The paper budget now groups realized
+losses by each closeout instrument's session date (XNYS for equities, UTC day
+for 24x7 crypto), and equity review-latency clocks pause while XNYS is closed.
+Hard idea expiries remain immutable, but the sweep cannot expire an equity idea
+until its session is open. Only the operator-gated equity-universe flip remains
+in #1232.
 
 **The promotion gates are now measurable in one command** (`ideas scorecard`,
 #1193): the Stage 1 -> 2 gates of the

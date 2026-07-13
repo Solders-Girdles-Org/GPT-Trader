@@ -21,7 +21,12 @@ from gpt_trader.core.instruments import AssetClass, InstrumentParseError
 from gpt_trader.core.risk_units import (
     fraction_to_pct_points,
     pct_points_to_fraction,
-    same_trading_day,
+    trading_day,
+)
+from gpt_trader.core.trading_calendar import (
+    SessionCalendarResolver,
+    advance_by_open_time,
+    get_calendar_for_instrument,
 )
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.trade_ideas.accounting import (
@@ -337,6 +342,7 @@ class TradeIdeaService:
         root: Path,
         *,
         now_factory: Callable[[], datetime] = _utc_now,
+        calendar_resolver: SessionCalendarResolver = get_calendar_for_instrument,
     ) -> None:
         self._root = root
         self._store = TradeIdeaStore(root / "records")
@@ -345,7 +351,64 @@ class TradeIdeaService:
         self._budget_log = RiskBudgetLog(root / "risk_budget.jsonl")
         self._autonomy_log = AutonomyStateLog(root / "autonomy_state.jsonl")
         self._now = now_factory
+        self._calendar_resolver = calendar_resolver
         self._kernel = RiskKernel(self, now_factory=self._now)
+
+    def review_deadline(
+        self,
+        idea: TradeIdea,
+        *,
+        review_started_at: datetime | None,
+        budget: RiskBudget,
+    ) -> datetime | None:
+        """Return the review deadline using only time the instrument is open.
+
+        Calendar-domain failures fail closed at the review start instant.
+        Unclassifiable legacy records retain their prior wall-clock deadline,
+        while expiry sweeps separately refuse to mutate any idea whose session
+        cannot be proven open.
+        """
+        if review_started_at is None:
+            return None
+        try:
+            calendar = self._calendar_resolver(idea.instrument)
+            return advance_by_open_time(
+                calendar,
+                review_started_at,
+                timedelta(hours=budget.max_review_latency_hours),
+            )
+        except InstrumentParseError:
+            # Preserve the legacy wall-clock review contract for stored ideas
+            # that predate the instrument taxonomy. They still cannot execute
+            # or be expiry-swept without a proven session.
+            return review_started_at + timedelta(hours=budget.max_review_latency_hours)
+        except ValueError:
+            return review_started_at
+
+    def _session_is_open(self, idea: TradeIdea, moment: datetime) -> bool:
+        """Fail closed when the instrument session cannot be proven open."""
+        try:
+            return self._calendar_resolver(idea.instrument).is_open(moment)
+        except (InstrumentParseError, ValueError):
+            return False
+
+    def _same_accounting_session(
+        self,
+        idea: TradeIdea,
+        first: datetime,
+        second: datetime,
+    ) -> tuple[bool, str]:
+        """Compare per-instrument session dates, conservatively on failure."""
+        try:
+            calendar = self._calendar_resolver(idea.instrument)
+            first_date = calendar.session_date(first)
+            second_date = calendar.session_date(second)
+            return first_date == second_date, f"{calendar.session_id}:{second_date.isoformat()}"
+        except (InstrumentParseError, ValueError):
+            # Never undercount a realized loss because its instrument or
+            # calendar could not be evaluated. Preserve the legacy UTC label
+            # in evidence and include the closeout conservatively.
+            return True, f"unresolved:{trading_day(second).isoformat()}"
 
     @property
     def kernel(self) -> RiskKernel:
@@ -511,6 +574,7 @@ class TradeIdeaService:
             max_daily_loss_pct=active_budget.max_daily_loss_pct,
             budget_version=active_budget.version,
             moment=now,
+            session_dates=context.daily_loss_session_dates,
         )
         reason = (
             "Automatic ratchet-down: same-trading-day realized loss breached max_daily_loss_pct"
@@ -595,6 +659,8 @@ class TradeIdeaService:
         budget: RiskBudget,
     ) -> list[str]:
         policy = ApprovalPolicy(resolution.mode)
+        now = self._now()
+        review_started_at = self.review_started_at(idea.decision_id)
         return [
             *autonomy_resolution_violations(resolution),
             *policy.approval_violations(
@@ -602,8 +668,13 @@ class TradeIdeaService:
                 actor_type=actor_type,
                 budget=budget,
                 open_approved_count=self.open_approved_count(),
-                now=self._now(),
-                review_started_at=self.review_started_at(idea.decision_id),
+                now=now,
+                review_started_at=review_started_at,
+                review_deadline=self.review_deadline(
+                    idea,
+                    review_started_at=review_started_at,
+                    budget=budget,
+                ),
                 budget_context=self.approval_budget_context(
                     exclude_decision_id=idea.decision_id,
                 ),
@@ -621,6 +692,7 @@ class TradeIdeaService:
         latest_events = self._latest_audit_events_by_decision_id()
         open_ideas: list[TradeIdea] = []
         same_day_closeouts: list[tuple[TradeIdea, CloseoutAttribution]] = []
+        daily_loss_session_dates: set[str] = set()
         for decision_id, event in latest_events.items():
             if event.after_state in OPEN_BUDGET_EXPOSURE_STATES:
                 if decision_id == exclude_decision_id:
@@ -639,12 +711,21 @@ class TradeIdeaService:
             ):
                 open_ideas.append(idea)
                 continue
-            if closeout is not None and same_trading_day(closeout.timestamp, evaluation_time):
+            same_session = False
+            session_date = ""
+            if closeout is not None:
+                same_session, session_date = self._same_accounting_session(
+                    idea,
+                    closeout.timestamp,
+                    evaluation_time,
+                )
+            if closeout is not None and same_session:
                 if (
                     event.after_state is TradeIdeaState.FILLED
                     or _closeout_has_realized_profit_loss(closeout)
                 ):
                     same_day_closeouts.append((idea, closeout))
+                    daily_loss_session_dates.add(session_date)
         closeouts = [closeout for _, closeout in same_day_closeouts]
         account_equity_snapshot = self._account_equity_snapshot(
             # Non-mutating read: building a budget context (e.g. during a
@@ -681,6 +762,7 @@ class TradeIdeaService:
         return ApprovalBudgetContext(
             same_day_realized_loss_pct=same_day_realized_loss_pct,
             same_day_realized_loss_unavailable_count=(same_day_realized_loss_unavailable_count),
+            daily_loss_session_dates=tuple(sorted(daily_loss_session_dates)),
             open_approved_at_risk_pct=open_approved_at_risk_pct,
             open_at_risk_unavailable_count=open_at_risk_unavailable_count,
             open_notional=open_notional,
@@ -729,6 +811,7 @@ class TradeIdeaService:
             "same_day_realized_loss_unavailable_count": (
                 context.same_day_realized_loss_unavailable_count
             ),
+            "daily_loss_session_dates": list(context.daily_loss_session_dates),
             "open_approved_at_risk_pct": str(context.open_approved_at_risk_pct),
             "open_at_risk_unavailable_count": context.open_at_risk_unavailable_count,
             "daily_loss_used_pct": str(daily_loss_used_pct),
@@ -1115,12 +1198,20 @@ class TradeIdeaService:
                 continue
             expires_at = view.idea.time_horizon.expires_at
             idea_expired = expires_at is not None and expires_at <= now
+            review_started_at = self._review_started_at_from_events(view.events)
             review_latency_violation = policy.review_latency_violation(
-                review_started_at=self._review_started_at_from_events(view.events),
+                review_started_at=review_started_at,
                 budget=budget,
                 now=now,
+                review_deadline=self.review_deadline(
+                    view.idea,
+                    review_started_at=review_started_at,
+                    budget=budget,
+                ),
             )
-            if idea_expired or review_latency_violation is not None:
+            if (idea_expired or review_latency_violation is not None) and self._session_is_open(
+                view.idea, now
+            ):
                 expired.append(
                     self.expire(
                         view.idea.decision_id,
@@ -1291,6 +1382,7 @@ class TradeIdeaService:
         # the autonomy log, mirroring the non-mutating budget read above.
         autonomy_resolution = self.peek_autonomy()
         policy = ApprovalPolicy(autonomy_resolution.mode)
+        review_started_at = self._review_started_at_from_events(view.events)
         policy_violations = [
             *autonomy_resolution_violations(autonomy_resolution),
             *policy.approval_violations(
@@ -1299,7 +1391,12 @@ class TradeIdeaService:
                 budget=effective_budget,
                 open_approved_count=self._open_approved_count_excluding(decision_id),
                 now=export_time,
-                review_started_at=self._review_started_at_from_events(view.events),
+                review_started_at=review_started_at,
+                review_deadline=self.review_deadline(
+                    view.idea,
+                    review_started_at=review_started_at,
+                    budget=effective_budget,
+                ),
                 budget_context=self.approval_budget_context(
                     exclude_decision_id=decision_id,
                     now=export_time,
@@ -1456,12 +1553,18 @@ class TradeIdeaService:
         review_latency_applies = ApprovalPolicy(self.peek_autonomy().mode).review_latency_applies
         upcoming_expirations: list[TradeIdeaQueueExpiration] = []
         for view in (*proposed, *needs_changes):
+            review_started_at = self._review_started_at_from_events(view.events)
             expiration = _queue_expiration(
                 view,
                 as_of,
                 window_end,
                 budget,
-                review_started_at=self._review_started_at_from_events(view.events),
+                review_started_at=review_started_at,
+                review_deadline=self.review_deadline(
+                    view.idea,
+                    review_started_at=review_started_at,
+                    budget=budget,
+                ),
                 review_latency_applies=review_latency_applies,
             )
             if expiration is not None:
@@ -1958,6 +2061,7 @@ def _queue_expiration(
     budget: RiskBudget,
     *,
     review_started_at: datetime | None,
+    review_deadline: datetime | None = None,
     review_latency_applies: bool = True,
 ) -> TradeIdeaQueueExpiration | None:
     deadlines: list[tuple[str, datetime]] = []
@@ -1965,8 +2069,10 @@ def _queue_expiration(
     if horizon_expires_at is not None:
         deadlines.append(("time_horizon", horizon_expires_at))
     if review_latency_applies and review_started_at is not None:
-        review_deadline = review_started_at + timedelta(hours=budget.max_review_latency_hours)
-        deadlines.append(("review_latency", review_deadline))
+        effective_review_deadline = review_deadline or (
+            review_started_at + timedelta(hours=budget.max_review_latency_hours)
+        )
+        deadlines.append(("review_latency", effective_review_deadline))
 
     upcoming = [
         (deadline_type, expires_at)
@@ -1991,6 +2097,7 @@ def create_trade_idea_service(
     root: Path | None = None,
     *,
     now_factory: Callable[[], datetime] = _utc_now,
+    calendar_resolver: SessionCalendarResolver = get_calendar_for_instrument,
 ) -> TradeIdeaService:
     """Resolve root (arg > GPT_TRADER_IDEAS_ROOT > default) and build the service.
 
@@ -1998,7 +2105,11 @@ def create_trade_idea_service(
     audited autonomy state log at each decision boundary
     (docs/decisions/persistent-autonomy-state.md).
     """
-    return TradeIdeaService(resolve_ideas_root(root), now_factory=now_factory)
+    return TradeIdeaService(
+        resolve_ideas_root(root),
+        now_factory=now_factory,
+        calendar_resolver=calendar_resolver,
+    )
 
 
 def _validate_audit_venue(venue: str) -> str:

@@ -607,6 +607,12 @@ Thin wrappers over `service.reject` / `service.request_changes` /
   - `time_horizon.expires_at` is set and `<= now`; or
   - the review deadline has elapsed under the current
     `RiskBudget.max_review_latency_hours` policy.
+  Review latency consumes wall-clock time for 24x7 crypto and open XNYS time
+  for equities. A due equity idea is not mutated while XNYS is closed; the
+  authored `time_horizon.expires_at` remains unchanged and the next open sweep
+  may expire it. An unclassifiable or unavailable session fails closed without
+  an expiry mutation. Queue status continues to show the immutable hard
+  horizon timestamp even when a closed equity session delays the sweep itself.
   The review-latency path can expire a far-future idea whose `expires_at` is
   still later than `now` when the review queue exceeds the configured budget.
   Report `data["expired"]` = list of decision_ids; success even when zero
