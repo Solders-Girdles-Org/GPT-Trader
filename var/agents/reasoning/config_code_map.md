@@ -44,6 +44,7 @@ Scan root: `src/gpt_trader`
 | regime_switcher_trend_mode | 0 | — |
 | risk_budget_runtime_seed_enabled | 0 | — |
 | risk_config_path | 0 | — |
+| robinhood_crypto_expected_account_number | 0 | — |
 | runtime_root | 0 | — |
 | spot_force_live | 0 | — |
 | status_enabled | 0 | — |

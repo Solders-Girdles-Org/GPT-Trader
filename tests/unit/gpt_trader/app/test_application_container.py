@@ -169,6 +169,17 @@ class TestApplicationContainerSecondaryServices:
         assert container.create_coinbase_read_preview_access() is access
         factory.assert_called_once_with(mock_config)
 
+    def test_robinhood_crypto_access_uses_injected_factory(self, mock_config: BotConfig) -> None:
+        access = MagicMock()
+        factory = MagicMock(return_value=access)
+        container = ApplicationContainer(
+            mock_config,
+            robinhood_crypto_read_preview_access_factory=factory,
+        )
+
+        assert container.create_robinhood_crypto_read_preview_access() is access
+        factory.assert_called_once_with(mock_config)
+
     def test_validation_failure_tracker_creation(self, mock_config: BotConfig) -> None:
         """Test that validation failure tracker is created correctly."""
         from gpt_trader.features.live_trade.execution.validation import ValidationFailureTracker
