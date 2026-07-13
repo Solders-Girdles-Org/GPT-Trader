@@ -89,6 +89,26 @@ class TestMockBrokerEnvParsing:
         assert result is False
 
 
+class TestCoinbaseAccountIdentityEnvParsing:
+    def test_expected_identity_fields_load_from_env(self, clean_env: pytest.MonkeyPatch) -> None:
+        clean_env.setenv("COINBASE_EXPECTED_PORTFOLIO_UUID", " portfolio-1 ")
+        clean_env.setenv(
+            "COINBASE_EXPECTED_ACCOUNT_UUIDS",
+            "usd-account,btc-account",
+        )
+
+        config = BotConfig.from_env()
+
+        assert config.coinbase_expected_portfolio_uuid == "portfolio-1"
+        assert config.coinbase_expected_account_uuids == ["usd-account", "btc-account"]
+
+    def test_expected_identity_fields_default_unset(self, clean_env: pytest.MonkeyPatch) -> None:
+        config = BotConfig.from_env()
+
+        assert config.coinbase_expected_portfolio_uuid is None
+        assert config.coinbase_expected_account_uuids == []
+
+
 class TestReduceOnlyModeEnvParsing:
     """Test reduce_only_mode env variable parsing."""
 

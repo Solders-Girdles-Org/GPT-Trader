@@ -10,6 +10,7 @@ class _StubAccountClient(AccountClientMixin):
     def __init__(self, api_mode: str = "advanced") -> None:
         self.api_mode = api_mode
         self.calls: list[tuple[str, str]] = []
+        self.responses: list[dict] = []
 
     def _get_endpoint_path(self, endpoint_name: str, **kwargs: str) -> str:
         if endpoint_name == "account":
@@ -19,6 +20,8 @@ class _StubAccountClient(AccountClientMixin):
 
     def _request(self, method: str, path: str) -> dict:
         self.calls.append((method, path))
+        if self.responses:
+            return self.responses.pop(0)
         return {"ok": True}
 
 
@@ -29,6 +32,46 @@ def test_get_accounts_calls_endpoint() -> None:
 
     assert result == {"ok": True}
     assert client.calls == [("GET", "/accounts")]
+
+
+def test_list_all_accounts_follows_cursor_until_complete() -> None:
+    client = _StubAccountClient()
+    client.responses = [
+        {
+            "accounts": [{"uuid": "account-1"}],
+            "has_next": True,
+            "cursor": "next page",
+        },
+        {
+            "accounts": [{"uuid": "account-2"}],
+            "has_next": False,
+            "cursor": "",
+        },
+    ]
+
+    result = client.list_all_accounts()
+
+    assert result == {"accounts": [{"uuid": "account-1"}, {"uuid": "account-2"}]}
+    assert client.calls == [
+        ("GET", "/accounts?limit=250"),
+        ("GET", "/accounts?limit=250&cursor=next%20page"),
+    ]
+
+
+def test_list_all_accounts_rejects_missing_next_cursor() -> None:
+    client = _StubAccountClient()
+    client.responses = [{"accounts": [], "has_next": True}]
+
+    with pytest.raises(InvalidRequestError, match="next cursor"):
+        client.list_all_accounts()
+
+
+def test_list_all_accounts_rejects_missing_has_next() -> None:
+    client = _StubAccountClient()
+    client.responses = [{"accounts": []}]
+
+    with pytest.raises(InvalidRequestError, match="pagination"):
+        client.list_all_accounts()
 
 
 def test_get_account_uses_account_uuid() -> None:

@@ -29,6 +29,7 @@ Any abbreviation not listed here should be spelled out in full.
 | `CDP` | Coinbase Developer Platform | Coinbase API | Coinbase-specific |
 | `INTX` | Coinbase International Exchange | Coinbase API | Coinbase-specific |
 | `JWT` | JSON Web Token | Security | Authentication standard |
+| `MCP` | Model Context Protocol | Agent integrations | Standard protocol for connecting AI applications to external tools and data |
 | `MVP` | Minimum Viable Product | Project management | Industry standard |
 | `PR` | Pull Request | Development | Git/GitHub standard |
 | `CI` | Continuous Integration | Development | Industry standard |

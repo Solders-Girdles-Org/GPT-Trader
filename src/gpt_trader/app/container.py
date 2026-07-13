@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -34,6 +35,9 @@ from gpt_trader.utilities.logging_patterns import get_logger
 if TYPE_CHECKING:
     from gpt_trader.app.config.profile_loader import ProfileLoader
     from gpt_trader.app.risk_budget_seed import RiskBudgetRuntimeSeed
+    from gpt_trader.features.brokerages.coinbase.read_preview_access import (
+        CoinbaseReadPreviewAccess,
+    )
     from gpt_trader.features.live_trade.bot import TradingBot
     from gpt_trader.features.live_trade.execution.validation import ValidationFailureTracker
     from gpt_trader.features.live_trade.risk.manager import LiveRiskManager
@@ -57,8 +61,22 @@ class ApplicationContainer:
         bot = container.create_bot()  # Creates fully-wired TradingBot
     """
 
-    def __init__(self, config: BotConfig):
+    def __init__(
+        self,
+        config: BotConfig,
+        *,
+        coinbase_read_preview_access_factory: (
+            Callable[[BotConfig], CoinbaseReadPreviewAccess] | None
+        ) = None,
+    ):
         self.config = config
+        if coinbase_read_preview_access_factory is None:
+            from gpt_trader.features.brokerages.coinbase.read_preview_access import (
+                CoinbaseReadPreviewAccess,
+            )
+
+            coinbase_read_preview_access_factory = CoinbaseReadPreviewAccess.from_config
+        self._coinbase_read_preview_access_factory = coinbase_read_preview_access_factory
         # Stage 2 derivation seam (default ON): resolve the active RiskBudget
         # version once at startup so the shorts gate and the runtime risk
         # limits are seeded from the same version, before the settings
@@ -182,6 +200,14 @@ class ApplicationContainer:
     def secrets_manager(self) -> SecretsManager:
         """Delegate to ObservabilityContainer."""
         return self._observability.secrets_manager
+
+    def create_coinbase_read_preview_access(self) -> CoinbaseReadPreviewAccess:
+        """Create command-scoped Coinbase read/preview access.
+
+        The caller owns the returned lifecycle so separate CLI invocations do
+        not share credentials, HTTP sessions, or identity attestations.
+        """
+        return self._coinbase_read_preview_access_factory(self.config)
 
     def reset_broker(self) -> None:
         """Delegate to BrokerageContainer."""

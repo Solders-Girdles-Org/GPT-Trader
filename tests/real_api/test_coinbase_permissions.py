@@ -61,5 +61,6 @@ def test_live_permission_check(coinbase_cdp_credentials: CDPCredentials) -> None
     assert "can_view" in perms
     assert "can_trade" in perms
     assert "can_transfer" in perms
+    assert "can_receive" in perms
     assert "portfolio_uuid" in perms
     assert "portfolio_type" in perms

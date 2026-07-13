@@ -32,6 +32,9 @@ and *where execution happens* — three decisions that must not be blended.
 - **Scope:** Coinbase only (spot + CFM futures). Options, Robinhood, event
   contracts, and other venues are out of scope until the Coinbase lane works end
   to end and a fresh venue/API/account capability review reopens them.
+  *Update 2026-07-12: see
+  [real-account-read-preview-capability](real-account-read-preview-capability.md)
+  for the scoped authenticated-observation exception.*
 - **INTX perpetuals:** frozen — no new work or tests; remove INTX-only surfaces
   opportunistically when they block other work. (Remaining default-hygiene item:
   [intx-default-derivatives-venue](intx-default-derivatives-venue.md).)
@@ -55,14 +58,18 @@ and *where execution happens* — three decisions that must not be blended.
   append-only audit, eligibility/policy, versioned budget, operator lifecycle).
 - The migration-trigger discipline in [DIRECTION.md](../DIRECTION.md) gates any
   execution-path or broker-adapter work.
-- An official venue/API/account capability review remains **pending** before any
-  non-manual execution lane.
+- An official venue/API/account **execution** capability review remains pending
+  before any non-manual order lane. The observation-only exception is owned by
+  [real-account-read-preview-capability](real-account-read-preview-capability.md).
 
 ## Safety boundary
 
-This decision does not authorize real broker/API calls, live trading commands,
-production preflight, canary operations, credential reads, money movement, or
-order submission.
+This decision alone does not authorize real broker/API calls, live trading
+commands, production preflight, canary operations, credential reads, money
+movement, or order submission. The later
+[real-account-read-preview-capability](real-account-read-preview-capability.md)
+provides the narrow authenticated-read and non-binding-preview exception; it does
+not change this record's execution boundary.
 
 > Absorbs the former framework "Accepted Direction" + "Initial Decision Record"
 > table and the cleanup-roadmap "Decided (2026-06-11)" rows.
