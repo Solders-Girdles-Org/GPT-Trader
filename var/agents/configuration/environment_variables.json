@@ -1283,7 +1283,7 @@
       ],
       "code_references": [
         {
-          "line": 134,
+          "line": 139,
           "path": "src/gpt_trader/features/idea_execution/executor.py",
           "reader": "os.environ.get"
         }

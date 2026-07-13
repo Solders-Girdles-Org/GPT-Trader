@@ -23,6 +23,7 @@ NOT wired here — that migration is venue phase P1-E.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 from functools import lru_cache
 from typing import TYPE_CHECKING, Protocol
@@ -90,6 +91,17 @@ class TradingCalendar(Protocol):
     def next_close(self, moment: datetime) -> datetime | None:
         """Return the earliest close strictly after ``moment``, if any."""
         ...
+
+
+SessionCalendarResolver = Callable[[str], TradingCalendar]
+"""Maps an instrument string to the session calendar it trades on.
+
+Injected wherever session decisions are made (cycle runner, paper executor,
+exit monitor) so deterministic tests can pin session state; the default is
+``get_calendar_for_instrument``. May raise ``InstrumentParseError`` for
+unclassifiable instruments — callers must turn that into a loud skip or a
+typed refusal, never a silent pass.
+"""
 
 
 class AlwaysOpenCalendar:
@@ -198,6 +210,7 @@ __all__ = [
     "SUPPORTED_SESSIONS",
     "AlwaysOpenCalendar",
     "ExchangeBackedCalendar",
+    "SessionCalendarResolver",
     "TradingCalendar",
     "get_calendar_for_instrument",
     "get_trading_calendar",

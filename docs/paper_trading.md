@@ -208,6 +208,13 @@ idea awaiting closeout, so the exit monitor keeps receiving candles until the
 position resolves. Top-up fetches are per-symbol and non-fatal — a delisted
 instrument defers its own resolution without failing the turn.
 
+Sessioned instruments also fail safely: the paper executor leaves an approved
+equity idea unsubmitted while XNYS is closed, and the exit monitor leaves a
+filled equity idea unresolved rather than marking it against closed-session
+data. Both outcomes are explicit in the cycle manifest and retry on a later
+turn. Crypto remains 24x7; an instrument that cannot be classified to a known
+session is refused rather than silently assigned crypto semantics.
+
 Strategy-backed proposers — the live strategy library running over the turn's
 snapshot through the `Proposer` contract — are opt-in until replay parity is
 demonstrated: pass `--proposer strategy-baseline-spot` (or

@@ -98,7 +98,11 @@ crypto-spot approval outcomes are unchanged (test-pinned) and no product
 boolean was added. With the lever configured, anything the check cannot verify
 — an unclassifiable instrument, missing notional, unattested equity — refuses
 the approval loudly. Margin, pattern-day-trading, and the options defined-risk
-half stay deferred; equity executor/cycle wiring is #1232.
+half stay deferred. The paper executor and exit monitor now refuse equity fills
+and closeout resolution outside XNYS regular hours, leaving the idea open and
+recording the skip in cycle manifest evidence; crypto retains 24x7 behavior and
+unclassifiable instruments fail closed. Session-date ratchet/expiry migration
+and the operator-gated equity-universe flip remain in #1232.
 
 **The promotion gates are now measurable in one command** (`ideas scorecard`,
 #1193): the Stage 1 -> 2 gates of the

@@ -59,6 +59,7 @@ from gpt_trader.features.idea_execution.executor import (
 )
 from gpt_trader.features.idea_execution.exit_monitor import (
     DEFAULT_EXIT_MONITOR_ACTOR_ID,
+    ExitMonitorPass,
     resolve_filled_ideas,
 )
 
@@ -80,6 +81,7 @@ __all__ = [
     "PaperExecutionError",
     "PaperExecutionResult",
     "ExecutionTurn",
+    "ExitMonitorPass",
     "PaperCycleLockError",
     "PaperCycleResult",
     "PaperCycleRunner",

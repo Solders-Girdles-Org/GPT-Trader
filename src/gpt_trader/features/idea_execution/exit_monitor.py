@@ -22,10 +22,16 @@ resolved (a bare end-of-candles is not a timeout until the idea has expired).
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
 from gpt_trader.core import Candle
+from gpt_trader.core.instruments import InstrumentParseError
+from gpt_trader.core.trading_calendar import (
+    SessionCalendarResolver,
+    get_calendar_for_instrument,
+)
 from gpt_trader.features.trade_ideas import (
     ActorType,
     AuditAction,
@@ -53,26 +59,46 @@ _OUTCOME_TO_RESOLUTION: dict[ReplayOutcome, CloseoutResolution] = {
 }
 
 
+@dataclass(frozen=True, slots=True)
+class ExitMonitorPass:
+    """One exit-monitor pass: closeouts recorded plus session skips left open."""
+
+    recorded: tuple[CloseoutAttribution, ...]
+    skipped_closed_sessions: tuple[dict[str, str], ...] = ()
+
+
 def resolve_filled_ideas(
     service: TradeIdeaService,
     snapshot: MarketSnapshot,
     *,
     now: datetime,
     actor_id: str = DEFAULT_EXIT_MONITOR_ACTOR_ID,
-) -> list[CloseoutAttribution]:
+    session_calendar_resolver: SessionCalendarResolver | None = None,
+) -> ExitMonitorPass:
     """Close every resolvable filled idea against ``snapshot``'s candles.
 
-    Returns the closeout attributions recorded this pass. Ideas that cannot be
-    resolved yet (no candles for the instrument, no size, no exit levels, entry
-    not reached in the recorded window, or an unexpired end-of-candles) are left
-    ``FILLED`` for a later turn.
+    Returns the closeout attributions recorded this pass plus the ideas it
+    refused to resolve because their market session is closed at ``now``
+    (issue #1232): resolving an equity position against a closed session
+    would time it out or mark it against stale data, so the position stays
+    ``FILLED`` — loudly, with the skip on the pass record — and resolves at
+    the next open against that turn's own candles. Ideas that merely cannot
+    be resolved yet (no candles for the instrument, no size, no exit levels,
+    entry not reached in the recorded window, or an unexpired end-of-candles)
+    are likewise left ``FILLED`` for a later turn.
     """
+    resolver = session_calendar_resolver or get_calendar_for_instrument
     candles_by_instrument = {
         series.symbol.casefold(): series.candles for series in snapshot.series if series.candles
     }
     recorded: list[CloseoutAttribution] = []
+    skipped_closed: list[dict[str, str]] = []
     for view in service.list_views(TradeIdeaState.FILLED):
         if view.closeout_attribution is not None:
+            continue
+        closed_skip = _closed_session_skip(view, resolver, now)
+        if closed_skip is not None:
+            skipped_closed.append(closed_skip)
             continue
         attribution = _resolve_one(
             view,
@@ -84,7 +110,47 @@ def resolve_filled_ideas(
         )
         if attribution is not None:
             recorded.append(attribution)
-    return recorded
+    return ExitMonitorPass(
+        recorded=tuple(recorded),
+        skipped_closed_sessions=tuple(skipped_closed),
+    )
+
+
+def _closed_session_skip(
+    view: TradeIdeaView,
+    resolver: SessionCalendarResolver,
+    now: datetime,
+) -> dict[str, str] | None:
+    """Return a skip entry when the idea's market session is closed at ``now``."""
+    instrument = view.idea.instrument
+    decision_id = view.idea.decision_id
+    try:
+        calendar = resolver(instrument)
+    except InstrumentParseError as error:
+        return {
+            "decision_id": decision_id,
+            "instrument": instrument,
+            "reason": f"instrument is not classifiable to a trading session: {error}",
+        }
+    try:
+        if calendar.is_open(now):
+            return None
+        next_open = calendar.next_open(now)
+    except ValueError as error:
+        return {
+            "decision_id": decision_id,
+            "instrument": instrument,
+            "reason": (
+                f"session calendar {calendar.session_id} cannot evaluate "
+                f"{now.isoformat()}: {error}"
+            ),
+        }
+    detail = f"; next open {next_open.isoformat()}" if next_open is not None else ""
+    return {
+        "decision_id": decision_id,
+        "instrument": instrument,
+        "reason": (f"market closed for session {calendar.session_id} at {now.isoformat()}{detail}"),
+    }
 
 
 def _resolve_one(
