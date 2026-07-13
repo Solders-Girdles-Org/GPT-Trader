@@ -215,6 +215,16 @@ data. Both outcomes are explicit in the cycle manifest and retry on a later
 turn. Crypto remains 24x7; an instrument that cannot be classified to a known
 session is refused rather than silently assigned crypto semantics.
 
+The same calendar owns paper accounting time. Realized-loss windows compare
+each closeout against its own instrument's current session date, so a Friday
+equity loss remains in the XNYS daily-loss ratchet through the weekend and
+resets at Monday's open, while crypto still resets at UTC midnight. Human
+review latency consumes only open-session time for equities. The authored
+`time_horizon.expires_at` is never rewritten; an equity expiry sweep simply
+leaves the record untouched while XNYS is closed and may expire it once the
+next session opens. Calendar or instrument failures never undercount loss,
+admit a stale review, or mutate an expiry sweep.
+
 Strategy-backed proposers — the live strategy library running over the turn's
 snapshot through the `Proposer` contract — are opt-in until replay parity is
 demonstrated: pass `--proposer strategy-baseline-spot` (or

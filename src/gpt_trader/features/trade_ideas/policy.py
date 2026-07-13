@@ -61,6 +61,7 @@ class ApprovalBudgetContext:
 
     same_day_realized_loss_pct: Decimal = Decimal("0")
     same_day_realized_loss_unavailable_count: int = 0
+    daily_loss_session_dates: tuple[str, ...] = ()
     open_approved_at_risk_pct: Decimal = Decimal("0")
     open_at_risk_unavailable_count: int = 0
     open_notional: Decimal = Decimal("0")
@@ -189,6 +190,7 @@ class ApprovalPolicy:
         open_approved_count: int,
         now: datetime,
         review_started_at: datetime | None = None,
+        review_deadline: datetime | None = None,
         budget_context: ApprovalBudgetContext | None = None,
     ) -> list[str]:
         """Return every reason this approval must be refused; empty means allowed."""
@@ -324,6 +326,7 @@ class ApprovalPolicy:
             review_started_at=review_started_at,
             budget=budget,
             now=now,
+            review_deadline=review_deadline,
         )
         if review_latency_violation is not None:
             violations.append(review_latency_violation)
@@ -348,6 +351,7 @@ class ApprovalPolicy:
         review_started_at: datetime | None,
         budget: RiskBudget,
         now: datetime,
+        review_deadline: datetime | None = None,
     ) -> str | None:
         """Return a violation when the active review window has elapsed.
 
@@ -358,12 +362,14 @@ class ApprovalPolicy:
             return None
         if review_started_at is None:
             return None
-        review_deadline = review_started_at + timedelta(hours=budget.max_review_latency_hours)
-        if review_deadline > now:
+        effective_deadline = review_deadline or (
+            review_started_at + timedelta(hours=budget.max_review_latency_hours)
+        )
+        if effective_deadline > now:
             return None
         return (
             MODE_DEPENDENT_ELIGIBILITY_PREFIX
-            + f"Idea review deadline expired at {review_deadline.isoformat()} "
+            + f"Idea review deadline expired at {effective_deadline.isoformat()} "
             f"after max_review_latency_hours={budget.max_review_latency_hours}"
         )
 

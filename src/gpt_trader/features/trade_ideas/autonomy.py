@@ -251,6 +251,7 @@ def daily_loss_breach_evidence(
     max_daily_loss_pct: Decimal,
     budget_version: int,
     moment: datetime,
+    session_dates: tuple[str, ...] = (),
 ) -> tuple[str, ...] | None:
     """Return ratchet evidence when same-day realized loss breaches the budget cap.
 
@@ -263,10 +264,15 @@ def daily_loss_breach_evidence(
     """
     if same_day_realized_loss_pct <= max_daily_loss_pct:
         return None
+    window = (
+        " across session_dates=" + ",".join(session_dates)
+        if session_dates
+        else f" on trading_day={trading_day(moment).isoformat()}"
+    )
     return (
         f"same_day_realized_loss_pct={same_day_realized_loss_pct} exceeds "
         f"max_daily_loss_pct={max_daily_loss_pct} from risk budget version "
-        f"{budget_version} on trading_day={trading_day(moment).isoformat()}",
+        f"{budget_version}{window}",
     )
 
 

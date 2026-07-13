@@ -25,6 +25,7 @@ from gpt_trader.core.trading_calendar import (
     AlwaysOpenCalendar,
     ExchangeBackedCalendar,
     TradingCalendar,
+    advance_by_open_time,
     get_calendar_for_instrument,
     get_trading_calendar,
 )
@@ -62,6 +63,12 @@ class TestAlwaysOpenSession:
         moment = datetime(2026, 7, 6, 12, 0, tzinfo=UTC)
         assert calendar.next_open(moment) is None
         assert calendar.next_close(moment) is None
+
+    def test_open_time_matches_wall_clock(self) -> None:
+        start = datetime(2026, 7, 4, 12, 0, tzinfo=UTC)
+        assert advance_by_open_time(AlwaysOpenCalendar(), start, timedelta(hours=3)) == (
+            start + timedelta(hours=3)
+        )
 
 
 class TestXnysSession:
@@ -120,6 +127,24 @@ class TestXnysSession:
         assert type(next_open) is datetime  # not a pandas.Timestamp subclass
         assert next_open is not None and next_open.tzinfo == UTC
         assert type(xnys.session_date(_MONDAY_MIDDAY)) is date
+
+    def test_open_time_pauses_across_weekend(self, xnys: TradingCalendar) -> None:
+        # Friday 2026-07-10 has 30 open minutes left; the other 30 minutes
+        # resume after Monday's open.
+        friday = datetime(2026, 7, 10, 19, 30, tzinfo=UTC)
+        assert advance_by_open_time(xnys, friday, timedelta(hours=1)) == datetime(
+            2026, 7, 13, 14, 0, tzinfo=UTC
+        )
+
+    def test_open_time_respects_early_close(self, xnys: TradingCalendar) -> None:
+        christmas_eve = datetime(2025, 12, 24, 17, 30, tzinfo=UTC)
+        assert advance_by_open_time(xnys, christmas_eve, timedelta(hours=1)) == datetime(
+            2025, 12, 26, 15, 0, tzinfo=UTC
+        )
+
+    def test_zero_open_time_preserves_start(self, xnys: TradingCalendar) -> None:
+        closed = datetime(2026, 7, 11, 12, 0, tzinfo=UTC)
+        assert advance_by_open_time(xnys, closed, timedelta(0)) == closed
 
 
 class TestGetTradingCalendar:

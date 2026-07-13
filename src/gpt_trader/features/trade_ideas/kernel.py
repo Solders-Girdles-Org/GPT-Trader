@@ -80,6 +80,14 @@ class KernelRuntime(Protocol):
 
     def review_started_at(self, decision_id: str) -> datetime | None: ...
 
+    def review_deadline(
+        self,
+        idea: TradeIdea,
+        *,
+        review_started_at: datetime | None,
+        budget: RiskBudget,
+    ) -> datetime | None: ...
+
     def append_audit(
         self,
         idea: TradeIdea,
@@ -146,6 +154,7 @@ class KernelCheck:
             f"risk budget version {budget.version}: approval_violations=0",
             "budget envelope: "
             f"same_day_realized_loss_pct={budget_context.same_day_realized_loss_pct} "
+            f"daily_loss_session_dates={budget_context.daily_loss_session_dates} "
             f"open_approved_at_risk_pct={budget_context.open_approved_at_risk_pct} "
             f"candidate_max_loss_pct={self.candidate_max_loss_pct} "
             f"max_daily_loss_pct={budget.max_daily_loss_pct}",
@@ -211,6 +220,7 @@ class RiskKernel:
             budget_context=budget_context,
         )
         policy = ApprovalPolicy(resolution.mode)
+        review_started_at = self._runtime.review_started_at(idea.decision_id)
         violations = (
             *autonomy_resolution_violations(resolution),
             *policy.approval_violations(
@@ -219,7 +229,12 @@ class RiskKernel:
                 budget=budget,
                 open_approved_count=self._runtime.open_approved_count(),
                 now=evaluated_at,
-                review_started_at=self._runtime.review_started_at(idea.decision_id),
+                review_started_at=review_started_at,
+                review_deadline=self._runtime.review_deadline(
+                    idea,
+                    review_started_at=review_started_at,
+                    budget=budget,
+                ),
                 budget_context=budget_context,
             ),
         )

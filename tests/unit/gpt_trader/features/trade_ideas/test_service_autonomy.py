@@ -269,7 +269,7 @@ def test_daily_loss_breach_ratchets_bounded_autonomy_down(
     assert latest.actor_id == RATCHET_ACTOR_ID
     assert latest.evidence
     assert "same_day_realized_loss_pct=12" in latest.evidence[0]
-    assert "trading_day=2026-06-12" in latest.evidence[0]
+    assert "session_dates=24x7:2026-06-12" in latest.evidence[0]
 
 
 def test_ratchet_fires_at_budget_decision_boundary(service: TradeIdeaService) -> None:
