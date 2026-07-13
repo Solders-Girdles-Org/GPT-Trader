@@ -3,12 +3,45 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _bash_executable() -> str:
+    if sys.platform != "win32":
+        bash = shutil.which("bash")
+        assert bash is not None
+        return bash
+
+    git = shutil.which("git")
+    candidates = [
+        Path(os.environ.get("ProgramFiles", "")) / "Git" / "bin" / "bash.exe",
+        Path(os.environ.get("ProgramW6432", "")) / "Git" / "bin" / "bash.exe",
+    ]
+    if git is not None:
+        candidates.extend(
+            [
+                Path(git).resolve().parents[1] / "bin" / "bash.exe",
+                Path(git).resolve().parents[1] / "usr" / "bin" / "bash.exe",
+            ]
+        )
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    pytest.fail("Git for Windows Bash is required to exercise scheduler wrappers portably")
+
+
+def _shell_path(path: Path) -> str:
+    if sys.platform != "win32":
+        return str(path)
+    drive, tail = os.path.splitdrive(str(path.resolve()))
+    return f"/{drive[0].lower()}{tail.replace(os.sep, '/')}"
 
 
 def _run_wrapper(
@@ -32,7 +65,7 @@ def _run_wrapper(
     fake_uv.chmod(0o755)
 
     env = os.environ.copy()
-    env.update({"HOME": str(home), "UV_CALL_LOG": str(call_log)})
+    env.update({"HOME": _shell_path(home), "UV_CALL_LOG": _shell_path(call_log)})
     env.pop("GPT_TRADER_IDEAS_AUTO_APPROVAL", None)
     env.pop("GPT_TRADER_IDEAS_AUTO_EXECUTION", None)
     if proposers is None:
@@ -41,7 +74,7 @@ def _run_wrapper(
         env["CYCLE_PROPOSERS"] = proposers
 
     subprocess.run(
-        ["bash", str(REPO_ROOT / "scripts" / "ops" / script_name)],
+        [_bash_executable(), str(REPO_ROOT / "scripts" / "ops" / script_name)],
         check=True,
         cwd=REPO_ROOT,
         env=env,
