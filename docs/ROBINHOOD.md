@@ -45,5 +45,45 @@ uv run pytest tests/real_api/test_robinhood_crypto_read_preview_non_mutation.py 
 It dispatches only authenticated reads and one non-binding estimated-price
 `GET`, then verifies stable balances, holds, positions, and order evidence.
 
-The Agentic MCP read/review adapter remains a separate Phase 2 slice. It must
-attest exact tool names and schemas and expose no generic tool-call surface.
+## Robinhood Agentic Trading
+
+Install the isolated optional client with `uv sync --extra robinhood-agentic`.
+Set the non-secret expected identity:
+
+- `ROBINHOOD_AGENTIC_EXPECTED_ACCOUNT_NUMBER`
+
+OAuth tokens and dynamic-client metadata are stored in the operating-system
+credential store. The first command-scoped connection opens Robinhood OAuth;
+subsequent connections refresh through the official MCP SDK without placing
+session material in tracked files.
+
+The adapter is fixed to `https://agent.robinhood.com/mcp/trading`. At connection
+time it paginates `tools/list` and attests the exact live-captured input/output
+schema fingerprints for only `get_accounts`, `get_portfolio`,
+`review_equity_order`, and `review_option_order`. The server currently advertises
+separate place, cancel, watchlist, and scan mutation tools; none has a dispatch
+route in the public gateway or facade. There is no generic `call_tool` method.
+
+Account reads require exactly one Agentic-accessible account and bind it to the
+configured expected account number before portfolio or review dispatch. Equity
+reviews return provider-neutral non-binding preview evidence plus the exact
+provider order-check, quote, and market-data disclosure evidence. Single-leg
+option reviews retain a provider-specific immutable record rather than forcing
+the option shape into the equity request contract.
+
+## Explicit Agentic non-mutation smoke
+
+The live smoke is never automatic. It performs account/portfolio reads and the
+two accepted review simulations, then verifies the account observation is
+stable. It never invokes a place, cancel, or mutation tool:
+
+```bash
+ROBINHOOD_AGENTIC_REAL_READ_REVIEW_SMOKE=1 \
+ROBINHOOD_AGENTIC_EXPECTED_ACCOUNT_NUMBER=<accepted-account> \
+ROBINHOOD_AGENTIC_EQUITY_SYMBOL=<symbol> \
+ROBINHOOD_AGENTIC_EQUITY_LIMIT_PRICE=<price> \
+ROBINHOOD_AGENTIC_OPTION_ID=<option-instrument-uuid> \
+ROBINHOOD_AGENTIC_OPTION_LIMIT_PRICE=<price> \
+uv run --extra robinhood-agentic pytest \
+  tests/real_api/test_robinhood_agentic_read_review_non_mutation.py -q
+```

@@ -45,6 +45,16 @@ These values enable only the typed observation and non-binding estimate adapter
 documented in [Robinhood Integration](ROBINHOOD.md). They do not register an
 execution broker or authorize order placement/cancellation.
 
+### Robinhood Agentic observation identity
+
+- `ROBINHOOD_AGENTIC_EXPECTED_ACCOUNT_NUMBER` (non-secret expected identity)
+
+Robinhood Agentic OAuth/session material is stored in the operating-system
+credential store by the optional official MCP client. The application exposes
+only four typed account/portfolio/review operations and no generic tool-call
+surface. Configuring it does not authorize place, cancel, transfer, watchlist,
+scan, or any other mutation operation.
+
 ### Secrets and encryption
 
 - `GPT_TRADER_ENCRYPTION_KEY` (required outside development if using SecretsManager)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -38,6 +38,9 @@ if TYPE_CHECKING:
     from gpt_trader.features.brokerages.coinbase.read_preview_access import (
         CoinbaseReadPreviewAccess,
     )
+    from gpt_trader.features.brokerages.robinhood.agentic.read_review_access import (
+        RobinhoodAgenticReadReviewAccess,
+    )
     from gpt_trader.features.brokerages.robinhood.crypto.read_preview_access import (
         RobinhoodCryptoReadPreviewAccess,
     )
@@ -74,6 +77,9 @@ class ApplicationContainer:
         robinhood_crypto_read_preview_access_factory: (
             Callable[[BotConfig], RobinhoodCryptoReadPreviewAccess] | None
         ) = None,
+        robinhood_agentic_read_review_access_factory: (
+            Callable[[BotConfig], Awaitable[RobinhoodAgenticReadReviewAccess]] | None
+        ) = None,
     ):
         self.config = config
         if coinbase_read_preview_access_factory is None:
@@ -93,6 +99,17 @@ class ApplicationContainer:
             )
         self._robinhood_crypto_read_preview_access_factory = (
             robinhood_crypto_read_preview_access_factory
+        )
+        if robinhood_agentic_read_review_access_factory is None:
+            from gpt_trader.features.brokerages.robinhood.agentic.read_review_access import (
+                RobinhoodAgenticReadReviewAccess,
+            )
+
+            robinhood_agentic_read_review_access_factory = (
+                RobinhoodAgenticReadReviewAccess.from_config
+            )
+        self._robinhood_agentic_read_review_access_factory = (
+            robinhood_agentic_read_review_access_factory
         )
         # Stage 2 derivation seam (default ON): resolve the active RiskBudget
         # version once at startup so the shorts gate and the runtime risk
@@ -231,6 +248,12 @@ class ApplicationContainer:
     ) -> RobinhoodCryptoReadPreviewAccess:
         """Create command-scoped, GET-only Robinhood Crypto access."""
         return self._robinhood_crypto_read_preview_access_factory(self.config)
+
+    async def create_robinhood_agentic_read_review_access(
+        self,
+    ) -> RobinhoodAgenticReadReviewAccess:
+        """Create command-scoped, typed-only Robinhood Agentic access."""
+        return await self._robinhood_agentic_read_review_access_factory(self.config)
 
     def reset_broker(self) -> None:
         """Delegate to BrokerageContainer."""
