@@ -91,7 +91,7 @@ gpt-trader ideas
 ├── show             DECISION_ID [--events]
 ├── report           [--since ISO|YYYY-MM-DD] [--until ISO|YYYY-MM-DD]
 │                    [--output PATH] [--output-dir DIR] [--format text|json|csv]
-├── export-ticket    --decision-id ID --venue {coinbase,manual}
+├── export-ticket    --decision-id ID --venue {coinbase,manual,robinhood}
 │                    [--venue-order-type TEXT] [--time-in-force TEXT]
 │                    [--client-order-id ID] [--out PATH] [--format {json,text}]
 ├── replay
@@ -372,7 +372,8 @@ already exist (`IDEA_NOT_FOUND` otherwise). Service/audit layer enforces the
   surfaces, and it does not mutate the persisted `TradeIdea.broker_ticket`.
 - Required options:
   - `--decision-id ID`
-  - `--venue {coinbase,manual}`
+  - `--venue {coinbase,manual,robinhood}`. Robinhood is render-only and is
+    deliberately absent from lifecycle-recording commands.
 - Optional venue placeholders:
   - `--venue-order-type TEXT` (default `operator_selected`)
   - `--time-in-force TEXT` (default `operator_selected`)
@@ -397,6 +398,8 @@ already exist (`IDEA_NOT_FOUND` otherwise). Service/audit layer enforces the
   `needs_changes`, `rejected`, or pre-approval `expired`. Approved ideas also
   recheck `time_horizon.expires_at` at export time and fail instead of
   producing an actionable ticket when the idea has gone stale.
+  Robinhood export is narrower: it succeeds only while the idea is `approved`,
+  so the artifact cannot claim a Robinhood submitted or filled state.
 - Payload includes:
   - `schema_version`, `decision_id`, `record_hash`, deterministic
     `generated_at`, and `ticket_hash`.
@@ -424,9 +427,9 @@ Example:
 ```bash
 uv run gpt-trader ideas export-ticket \
   --decision-id trade-20350612-btcusd-4c5a9e2d \
-  --venue coinbase \
-  --venue-order-type limit \
-  --time-in-force GTC \
+  --venue robinhood \
+  --venue-order-type operator_selected \
+  --time-in-force operator_selected \
   --out review_artifacts/tmp/trade-ticket.json
 ```
 
