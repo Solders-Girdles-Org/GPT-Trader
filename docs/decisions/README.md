@@ -68,7 +68,10 @@ markers. Regenerating cannot drift from the files.
 <!-- BEGIN GENERATED DECISION INDEX -->
 | Date | Decision | Status |
 |------|----------|--------|
+| 2026-07-12 | [Real-account capability — authenticated reads and non-binding previews only](real-account-read-preview-capability.md) | accepted |
+| 2026-07-08 | [Alpha layer builds toward agentic reasoning — TA demoted to benchmark and feature inputs](adopt-agentic-alpha-direction.md) | accepted |
 | 2026-07-04 | [Adopt an event-driven execution topology — rails as kernel, not workflow](adopt-event-driven-execution-topology.md) | accepted |
+| 2026-07-04 | [Stop committing high-churn generated agent inventories](stop-committing-high-churn-agent-inventories.md) | accepted |
 | 2026-07-04 | [Venue-neutrality posture — adapters at the edges, no speculative abstraction](venue-neutrality-posture.md) | accepted |
 | 2026-07-03 | [MIT license for the public repository](adopt-mit-license.md) | accepted |
 | 2026-07-03 | [Persistent audited autonomy-level state](persistent-autonomy-state.md) | accepted |
@@ -81,7 +84,6 @@ markers. Regenerating cannot drift from the files.
 | 2026-07-02 | [Five-role runtime composition — trade-idea spine, recorder and executor as separate arms](adopt-five-role-composition.md) | accepted |
 | 2026-07-02 | [Meaning of the prod and canary profiles under the approval ladder](prod-canary-profile-meaning.md) | accepted |
 | 2026-07-02 | [Operator web console — a thin adapter over the trade-idea spine](adopt-operator-web-console.md) | accepted |
-| 2026-07-02 | [Stop committing high-churn generated agent inventories](stop-committing-high-churn-agent-inventories.md) | proposed |
 | 2026-07-01 | [Remove the unwired account manager and strategy-dev lab](remove-unwired-account-manager-and-strategy-lab.md) | accepted |
 | 2026-06-30 | [Remove the TUI subsystem](remove-tui-subsystem.md) | accepted |
 | 2026-06-28 | [INTX default derivatives venue](intx-default-derivatives-venue.md) | accepted |

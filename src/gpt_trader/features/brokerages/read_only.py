@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from enum import Enum
 from typing import Any, cast
 
@@ -21,13 +21,18 @@ from gpt_trader.core import (
     TimeInForce,
 )
 from gpt_trader.core.protocols import BrokerProtocol
+from gpt_trader.features.brokerages.mock import DeterministicBroker
 from gpt_trader.utilities.logging_patterns import get_logger
 
 logger = get_logger(__name__, component="read_only_broker")
 
 
+class ReadOnlyViolation(AttributeError):
+    """Raised when dry-run code requests an undeclared broker capability."""
+
+
 class ReadOnlyBroker(BrokerProtocol):
-    """Prevent broker write calls while allowing read access."""
+    """Prevent broker writes while allowing an explicit read/preview surface."""
 
     _blocked_methods = {
         "place_order",
@@ -35,6 +40,33 @@ class ReadOnlyBroker(BrokerProtocol):
         "close_position",
         "edit_order",
     }
+    _read_methods = frozenset(
+        {
+            "_mark_cache",
+            "close",
+            "get_cfm_balance_summary",
+            "get_cfm_margin_window",
+            "get_cfm_sweeps_schedule",
+            "get_mark_price",
+            "get_market_snapshot",
+            "get_order",
+            "get_portfolio_balances",
+            "get_position",
+            "get_position_pnl",
+            "get_position_risk",
+            "get_resilience_status",
+            "get_ticker_freshness_provider",
+            "get_tickers",
+            "get_time",
+            "get_ws_health",
+            "list_cfm_sweeps",
+            "list_fills",
+            "list_orders",
+            "list_products",
+            "stream_orderbook",
+            "stream_trades",
+        }
+    )
 
     def __init__(
         self,
@@ -50,10 +82,14 @@ class ReadOnlyBroker(BrokerProtocol):
         self._reason = reason
 
     def __getattr__(self, name: str) -> Any:
-        attr = getattr(self._broker, name)
-        if name in self._blocked_methods and callable(attr):
+        if name in self._blocked_methods:
             return self._build_blocked_call(name)
-        return attr
+        if name in self._read_methods:
+            return getattr(self._broker, name)
+        if name == "set_mark" and isinstance(self._broker, DeterministicBroker):
+            return self._broker.set_mark
+
+        raise ReadOnlyViolation(f"Read-only broker blocked undeclared capability: {name}")
 
     # --- BrokerProtocol read methods ---------------------------------------
     def get_product(self, symbol: str) -> Product | None:
@@ -186,7 +222,7 @@ class ReadOnlyBroker(BrokerProtocol):
 
     def cancel_order(self, order_id: str) -> bool:
         self._record_suppressed_event("cancel_order", {"order_id": order_id})
-        return True
+        return False
 
     def close_position(
         self,
@@ -228,7 +264,7 @@ class ReadOnlyBroker(BrokerProtocol):
             return value
         try:
             return Decimal(str(value))
-        except (TypeError, ValueError):
+        except (InvalidOperation, TypeError, ValueError):
             return None
 
     def _coerce_tif(self, value: Any) -> TimeInForce:
@@ -237,4 +273,4 @@ class ReadOnlyBroker(BrokerProtocol):
         return TimeInForce.GTC
 
 
-__all__ = ["ReadOnlyBroker"]
+__all__ = ["ReadOnlyBroker", "ReadOnlyViolation"]

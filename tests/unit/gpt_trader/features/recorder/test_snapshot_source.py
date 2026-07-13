@@ -11,8 +11,9 @@ from gpt_trader.core import Candle
 from gpt_trader.features.recorder import MarketSnapshotBuildRequest
 from gpt_trader.features.recorder.equities_candles import EquitiesCandleFeedError
 from gpt_trader.features.recorder.snapshot_source import (
+    build_alpaca_equities_market_snapshot,
     build_coinbase_market_snapshot,
-    build_equities_market_snapshot,
+    build_stooq_equities_market_snapshot,
 )
 
 AS_OF = datetime(2026, 6, 12, 12, 0, tzinfo=UTC)
@@ -158,7 +159,7 @@ class FakeEquitiesFetcher:
 
 
 @pytest.mark.asyncio
-async def test_build_equities_snapshot_labels_source_stooq(
+async def test_build_stooq_equities_snapshot_labels_source_stooq(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     FakeEquitiesFetcher.base_urls = []
@@ -167,7 +168,7 @@ async def test_build_equities_snapshot_labels_source_stooq(
         FakeEquitiesFetcher,
     )
 
-    snapshot = await build_equities_market_snapshot(
+    snapshot = await build_stooq_equities_market_snapshot(
         MarketSnapshotBuildRequest(
             symbols=("AAPL",),
             granularity="ONE_DAY",
@@ -189,10 +190,54 @@ async def test_build_equities_snapshot_labels_source_stooq(
 
 
 @pytest.mark.asyncio
-async def test_build_equities_snapshot_rejects_intraday_granularity() -> None:
+async def test_build_stooq_equities_snapshot_rejects_intraday_granularity() -> None:
     # Rejection happens before any transport call, so no network is touched.
     with pytest.raises(EquitiesCandleFeedError, match="ONE_DAY candles only"):
-        await build_equities_market_snapshot(
+        await build_stooq_equities_market_snapshot(
+            MarketSnapshotBuildRequest(
+                symbols=("AAPL",),
+                granularity="ONE_HOUR",
+                lookback=2,
+                as_of=AS_OF,
+            )
+        )
+
+
+@pytest.mark.asyncio
+async def test_build_alpaca_equities_snapshot_labels_source_alpaca(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    FakeEquitiesFetcher.base_urls = []
+    monkeypatch.setattr(
+        "gpt_trader.features.recorder.equities_candles.AlpacaDailyCandleFetcher",
+        FakeEquitiesFetcher,
+    )
+
+    snapshot = await build_alpaca_equities_market_snapshot(
+        MarketSnapshotBuildRequest(
+            symbols=("AAPL",),
+            granularity="ONE_DAY",
+            lookback=2,
+            as_of=AS_OF,
+        )
+    )
+
+    assert FakeEquitiesFetcher.base_urls == ["https://data.alpaca.markets"]
+    assert snapshot.source.startswith("alpaca:market-candles:granularity=ONE_DAY:lookback=2")
+    assert snapshot.symbols() == ("AAPL",)
+
+
+@pytest.mark.asyncio
+async def test_build_alpaca_equities_snapshot_rejects_intraday_granularity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Credentials satisfy the default transport; rejection happens before
+    # any network call is attempted.
+    monkeypatch.setenv("ALPACA_API_KEY_ID", "key-id")
+    monkeypatch.setenv("ALPACA_API_SECRET_KEY", "secret")
+
+    with pytest.raises(EquitiesCandleFeedError, match="ONE_DAY candles only"):
+        await build_alpaca_equities_market_snapshot(
             MarketSnapshotBuildRequest(
                 symbols=("AAPL",),
                 granularity="ONE_HOUR",

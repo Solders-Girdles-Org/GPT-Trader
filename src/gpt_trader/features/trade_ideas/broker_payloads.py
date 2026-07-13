@@ -34,7 +34,7 @@ from gpt_trader.features.trade_ideas.workflow import (
 TICKET_PAYLOAD_SCHEMA_VERSION = "gpt-trader.trade_idea_ticket.v1"
 DEFAULT_VENUE_ORDER_TYPE = "operator_selected"
 DEFAULT_TIME_IN_FORCE = "operator_selected"
-EXPORT_TICKET_VENUES = frozenset({TicketVenue.COINBASE, TicketVenue.MANUAL})
+EXPORT_TICKET_VENUES = frozenset({TicketVenue.COINBASE, TicketVenue.MANUAL, TicketVenue.ROBINHOOD})
 MAX_CLIENT_ORDER_ID_LENGTH = 128
 
 _CLIENT_ORDER_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
@@ -100,7 +100,7 @@ def build_broker_neutral_ticket_payload(
     approval_policy_violations: list[str],
 ) -> dict[str, Any]:
     """Build a stable broker-neutral ticket payload from audited local state."""
-    _require_exportable_state(idea.decision_id, state, events)
+    _require_exportable_state(idea.decision_id, state, events, venue=request.venue)
     latest_event = events[-1]
     approval_event = _latest_event(events, AuditAction.APPROVED)
     terminal_event = latest_event if state in TERMINAL_STATES else None
@@ -201,7 +201,16 @@ def _require_exportable_state(
     decision_id: str,
     state: TradeIdeaState,
     events: tuple[AuditEvent, ...],
+    *,
+    venue: TicketVenue,
 ) -> None:
+    if venue is TicketVenue.ROBINHOOD and state is not TradeIdeaState.APPROVED:
+        raise InvalidTransitionError(
+            f"Trade idea '{decision_id}' must be approved for render-only Robinhood "
+            f"ticket export; got '{state.value}'",
+            field="after_state",
+            value=state.value,
+        )
     if state in {
         TradeIdeaState.APPROVED,
         TradeIdeaState.SUBMITTED,

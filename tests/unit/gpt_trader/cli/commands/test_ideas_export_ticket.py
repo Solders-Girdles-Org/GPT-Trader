@@ -102,7 +102,7 @@ def _propose_and_approve(
     assert approved["data"]["state"] == "approved"
 
 
-def _export_args(root: Path, decision_id: str) -> list[str]:
+def _export_args(root: Path, decision_id: str, *, venue: str = "coinbase") -> list[str]:
     return [
         "ideas",
         "export-ticket",
@@ -111,7 +111,7 @@ def _export_args(root: Path, decision_id: str) -> list[str]:
         "--decision-id",
         decision_id,
         "--venue",
-        "coinbase",
+        venue,
         "--venue-order-type",
         "limit",
         "--time-in-force",
@@ -146,6 +146,49 @@ def test_export_ticket_defaults_to_raw_json_for_approved_idea(
     }
     assert ticket["record_hash"]
     assert ticket["ticket_hash"]
+
+
+def test_export_ticket_accepts_robinhood_as_render_only_venue(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    root = tmp_path / "ideas"
+    payload = _idea_payload(decision_id="trade-export-robinhood")
+    _propose_and_approve(capsys, root, payload)
+
+    exit_code, output = _run(
+        capsys,
+        _export_args(root, payload["decision_id"], venue="robinhood"),
+    )
+
+    assert exit_code == 0
+    ticket = json.loads(output)
+    assert ticket["venue_request"]["venue"] == "robinhood"
+    assert ticket["broker_ticket"]["exported"] == {
+        "venue": "robinhood",
+        "status": "approved",
+    }
+    assert ticket["venue_request"]["client_order_id"].startswith(
+        "gpt-trader-robinhood-trade-export-robinhood-"
+    )
+
+
+@pytest.mark.parametrize("subcommand", ["mark-submitted", "mark-filled"])
+def test_robinhood_remains_unavailable_to_lifecycle_commands(subcommand: str) -> None:
+    parser = cli._build_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            [
+                "ideas",
+                subcommand,
+                "trade-render-only",
+                "--actor",
+                "operator",
+                "--venue",
+                "robinhood",
+            ]
+        )
 
 
 def test_export_ticket_rejects_unapproved_idea_with_json_error(

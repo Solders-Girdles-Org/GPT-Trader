@@ -55,6 +55,7 @@ cannot provide. The metadata block and reachability are enforced by
 | [Trade-Idea Interface Design Notes](specs/TRADE_IDEA_INTERFACES_DESIGN_NOTES.md) | Implemented CLI workstream for human-approved trade ideas |
 | [Reliability Guide](RELIABILITY.md) | Guard stack, degradation responses, chaos testing |
 | [Coinbase Integration](COINBASE.md) | Coinbase configuration + pointers |
+| [Robinhood Integration](ROBINHOOD.md) | Read-only Crypto and Agentic capability pointers |
 | [Naming Standards](naming.md) | Approved terminology and banned abbreviations |
 | [Feature Flags](FEATURE_FLAGS.md) | Config precedence + canonical sources |
 | [AI Agent Reference](../AGENTS.md) | Agent workflow + repo rules (canonical) |
@@ -90,6 +91,9 @@ cannot provide. The metadata block and reachability are enforced by
 
 ### Coinbase Integration
 - [Coinbase Integration](COINBASE.md) - Configuration + internal entrypoints
+
+### Robinhood Integration
+- [Robinhood Integration](ROBINHOOD.md) - Authenticated observation and non-binding preview/review boundaries
 
 ### Development
 - [Development Guidelines](DEVELOPMENT_GUIDELINES.md) - Standards for contributing, cleanup passes, and the verification bundle

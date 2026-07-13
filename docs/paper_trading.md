@@ -347,13 +347,20 @@ The script mirrors the Stage-2 cycle turn's universe and granularity so the
 replay measures the proposer set that is actually running: it snapshot-builds
 the paper universe from read-only public Coinbase candles
 (`ideas snapshot build --from-coinbase`), runs one tournament per symbol with
-the active pair (`baseline-ma-10-50,regime-aware-ma-10-50` — the deterministic
-baseline is the benchmark side of the edge comparison), then renders the
-scorecard with all reports attached. Each run writes a self-contained
+the active pair plus the strategy-backed convergence proposers
+(`baseline-ma-10-50,regime-aware-ma-10-50,strategy-mean-reversion,strategy-regime-switcher`
+— the deterministic baseline is the benchmark side of the edge comparison,
+and the strategy-backed ids add genuine decision diversity, #1245), then
+renders the scorecard with all reports attached. The default lookback is 720
+hourly candles (~30 days) so the window samples more regime variety than a
+single 300-candle slice; expect a few minutes per symbol. Each run writes a self-contained
 directory under `var/data/trade_ideas/replay_evidence/<UTC timestamp>/`:
 the snapshot, per-symbol tournament reports, and the durable scorecard
 artifact. Override `REPLAY_SYMBOLS`, `REPLAY_GRANULARITY`, `REPLAY_LOOKBACK`,
-`REPLAY_PROPOSERS`, or `REPLAY_EVIDENCE_DIR` per invocation; everything is
+`REPLAY_PROPOSERS`, `REPLAY_PRICE_PRECISION`, or `REPLAY_EVIDENCE_DIR` per
+invocation (the replay price grid defaults to 0.0001, finer than the cycle's
+0.01, so low-priced symbols keep distinct stop/entry/target levels instead
+of failing the strategy adapter's fail-closed precision guard); everything is
 broker-free and never reads accounts or places orders. A symbol whose
 tournament fails keeps its error envelope in the run directory as evidence
 but is excluded from the scorecard render; the turn only fails when every
@@ -371,7 +378,16 @@ Both raw replay artifacts and the CliResponse envelope written by
 `--format json --output <path>` are accepted. Interpretation: per-proposer
 `target_hit_rate` / `stop_hit_rate` are the replay read on risk calibration,
 `average_return_r` is the replay read on expectancy, and the `edge vs
-baseline-ma-…` lines are the replay read on benchmark edge.
+baseline-ma-…` lines are the replay read on benchmark edge. When the replay
+artifact carries sizing (`capital_weighted_avg_r=… (n=…)`), that row is the
+only aggregate that can see the sizing channel — proposers with identical
+levels but different notional commitment separate there and nowhere else.
+Overlay proposers additionally print a `counterfactuals:` line (candidates
+vs emitted, UNKNOWN skips, suppressions by regime, exit plans adjusted, and
+the emitted-ideas regime distribution) so a decision channel that never
+fires is visible in every run instead of requiring a manual audit — the M5
+diagnosis found regime suppression had fired 0/84 times with nothing
+reporting it.
 
 ## Readiness Evidence Inputs
 

@@ -45,6 +45,16 @@ _CRYPTO_PAIR = re.compile(r"^[A-Z0-9]+-[A-Z0-9]+$")
 # Bare uppercase ticker, e.g. AAPL: letters only.
 _EQUITY_TICKER = re.compile(r"^[A-Z]+$")
 
+# Cash-account settlement lag, in trading days, keyed by asset class (data,
+# not venue branching — docs/decisions/venue-neutrality-posture.md leak-watch
+# item 3): crypto spot settles immediately; US equities settle T+1 under the
+# post-May-2024 regime. Sale proceeds are not spendable buying power until
+# this many trading days after the closing trade.
+_SETTLEMENT_DAYS: dict[AssetClass, int] = {
+    AssetClass.CRYPTO: 0,
+    AssetClass.EQUITY: 1,
+}
+
 
 @dataclass(frozen=True, slots=True)
 class Instrument:
@@ -58,6 +68,11 @@ class Instrument:
     symbol: str
     asset_class: AssetClass
     product_type: ProductType
+
+    @property
+    def settlement_days(self) -> int:
+        """Trading days until sale proceeds settle into spendable cash."""
+        return _SETTLEMENT_DAYS[self.asset_class]
 
     @classmethod
     def parse(cls, raw: str) -> Instrument:

@@ -24,13 +24,22 @@ export PATH="${HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin:${PATH}"
 
 # Defaults mirror the Stage-2 cycle turn (scripts/ops/stage2_cycle_turn.sh):
 # same universe and granularity, so replay evidence measures the proposer set
-# that is actually running. The proposer ids are the cycle's active pair —
-# the deterministic baseline plus the regime-aware overlay — at the cycle's
-# default MA windows (10/50).
+# that is actually running, plus the strategy-backed convergence proposers
+# (#1164) so benchmark edge is measured against genuine decision diversity,
+# not only the overlay pair (#1245). The 720-candle hourly lookback (~30
+# days) samples more regime variety than one 300-candle slice; the candle
+# fetcher chunks requests, so the lookback is bounded by runtime (roughly
+# 2.5 minutes per symbol at 720 candles x 4 proposers), not by the public
+# API's 300-candle page size.
 : "${REPLAY_SYMBOLS:=BTC-USD,ETH-USD,SOL-USD,XRP-USD,LTC-USD,LINK-USD,AVAX-USD,DOT-USD}"
 : "${REPLAY_GRANULARITY:=ONE_HOUR}"
-: "${REPLAY_LOOKBACK:=300}"
-: "${REPLAY_PROPOSERS:=baseline-ma-10-50,regime-aware-ma-10-50}"
+: "${REPLAY_LOOKBACK:=720}"
+: "${REPLAY_PROPOSERS:=baseline-ma-10-50,regime-aware-ma-10-50,strategy-mean-reversion,strategy-regime-switcher}"
+# Finer than the cycle's 0.01 default: the strategy adapter fails closed when
+# quantization collapses stop/entry/target on low-priced symbols (DOT at the
+# default grid), and replay evidence should measure those symbols, not drop
+# them. Replay-only; live proposal records keep their own precision.
+: "${REPLAY_PRICE_PRECISION:=0.0001}"
 : "${REPLAY_EVIDENCE_DIR:=var/data/trade_ideas/replay_evidence}"
 
 RUN_DIR="${REPLAY_EVIDENCE_DIR}/$(date -u +%Y%m%dT%H%M%SZ)"
@@ -54,6 +63,7 @@ for symbol in "${SYMBOLS[@]}"; do
     --file "${RUN_DIR}/snapshot.json" \
     --symbol "${symbol}" \
     --granularity "${REPLAY_GRANULARITY}" \
+    --price-precision "${REPLAY_PRICE_PRECISION}" \
     --proposers "${REPLAY_PROPOSERS}" \
     --format json \
     --output "${report}"; then

@@ -54,13 +54,16 @@ from gpt_trader.features.live_trade.strategies.baseline import (
 from gpt_trader.features.live_trade.strategies.mean_reversion import MeanReversionStrategy
 from gpt_trader.features.live_trade.strategies.regime_switcher import RegimeSwitchingStrategy
 from gpt_trader.features.recorder import (
+    DEFAULT_ALPACA_DATA_BASE_URL,
+    DEFAULT_ALPACA_SNAPSHOT_SOURCE_LABEL,
     DEFAULT_COINBASE_BASE_URL,
-    DEFAULT_EQUITIES_SNAPSHOT_SOURCE_LABEL,
     DEFAULT_SNAPSHOT_SOURCE_LABEL,
     DEFAULT_STOOQ_BASE_URL,
+    DEFAULT_STOOQ_SNAPSHOT_SOURCE_LABEL,
     MarketSnapshotBuildRequest,
+    build_alpaca_equities_market_snapshot,
     build_coinbase_market_snapshot,
-    build_equities_market_snapshot,
+    build_stooq_equities_market_snapshot,
     canonical_granularity,
 )
 from gpt_trader.features.strategy_tools import (
@@ -143,6 +146,7 @@ from gpt_trader.features.trade_ideas.scorecard import (
 from gpt_trader.persistence.event_store import EventStore
 
 VENUE_CHOICES = ("coinbase", "manual")
+EXPORT_TICKET_VENUE_CHOICES = (*VENUE_CHOICES, "robinhood")
 # --strategy flag values: live-trade strategies runnable as snapshot proposers.
 # The CLI is the composition root — it constructs the strategy so the
 # strategy_tools slice never imports live_trade (SnapshotDecider is structural).
@@ -171,6 +175,7 @@ BUDGET_FIELDS = (
     "allow_naked_shorts",
     "account_equity",
     "max_drawdown_from_peak_pct",
+    "max_equity_buying_power_pct",
 )
 
 
@@ -302,10 +307,10 @@ def register(subparsers: Any) -> None:
         "build",
         help="Fetch read-only market candles and write a MarketSnapshot JSON file",
         description=(
-            "Fetch public market candles, enforce point-in-time snapshot "
+            "Fetch public or keyed market candles, enforce point-in-time snapshot "
             "bounds, and write a JSON file accepted by ideas propose-baseline. "
-            "This command requires --from-coinbase or --from-stooq and never "
-            "reads accounts or places, modifies, or cancels orders."
+            "This command requires --from-coinbase, --from-alpaca, or --from-stooq "
+            "and never reads accounts or places, modifies, or cancels orders."
         ),
     )
     snapshot_build.add_argument(
@@ -331,16 +336,27 @@ def register(subparsers: Any) -> None:
         help="Explicitly fetch read-only public Coinbase market candles",
     )
     snapshot_build_venue.add_argument(
+        "--from-alpaca",
+        action="store_true",
+        help=(
+            "Explicitly fetch read-only Alpaca daily equity candles (ONE_DAY only; "
+            "requires ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY market-data keys)"
+        ),
+    )
+    snapshot_build_venue.add_argument(
         "--from-stooq",
         action="store_true",
-        help="Explicitly fetch read-only public Stooq daily equity candles (ONE_DAY only)",
+        help=(
+            "Explicitly fetch read-only public Stooq daily equity candles "
+            "(ONE_DAY only; dormant vendor, currently bot-gated upstream)"
+        ),
     )
     snapshot_build.add_argument(
         "--symbols",
         required=True,
         help=(
             "Comma-separated symbols: Coinbase product ids (BTC-USD,ETH-USD) "
-            "or plain equity tickers with --from-stooq (AAPL,SPY)"
+            "or plain equity tickers with --from-alpaca/--from-stooq (AAPL,SPY)"
         ),
     )
     snapshot_build.add_argument(
@@ -369,14 +385,20 @@ def register(subparsers: Any) -> None:
         default=None,
         help=(
             "Source label stamped into snapshot metadata "
-            f"(default: {DEFAULT_SNAPSHOT_SOURCE_LABEL} or "
-            f"{DEFAULT_EQUITIES_SNAPSHOT_SOURCE_LABEL} per venue)"
+            f"(default: {DEFAULT_SNAPSHOT_SOURCE_LABEL}, "
+            f"{DEFAULT_ALPACA_SNAPSHOT_SOURCE_LABEL}, or "
+            f"{DEFAULT_STOOQ_SNAPSHOT_SOURCE_LABEL} per venue)"
         ),
     )
     snapshot_build.add_argument(
         "--coinbase-base-url",
         default=DEFAULT_COINBASE_BASE_URL,
         help="Coinbase API base URL for market-data reads",
+    )
+    snapshot_build.add_argument(
+        "--alpaca-data-base-url",
+        default=DEFAULT_ALPACA_DATA_BASE_URL,
+        help="Alpaca Market Data API base URL for daily equity candle reads",
     )
     snapshot_build.add_argument(
         "--stooq-base-url",
@@ -537,8 +559,9 @@ def register(subparsers: Any) -> None:
         help="Export a deterministic broker-neutral ticket artifact",
         description=(
             "Render a deterministic broker-neutral ticket JSON artifact from an approved "
-            "or terminal-approved trade idea. This command reads only local trade-idea "
-            "records and never contacts a broker, account, preflight, or canary surface."
+            "or terminal-approved trade idea. Robinhood exports require the approved state. "
+            "This command reads only local trade-idea records and never contacts a broker, "
+            "account, preflight, or canary surface."
         ),
     )
     export_ticket.add_argument(
@@ -567,7 +590,7 @@ def register(subparsers: Any) -> None:
         required=True,
         help="Approved or terminal-approved trade idea decision identifier",
     )
-    export_ticket.add_argument("--venue", required=True, choices=VENUE_CHOICES)
+    export_ticket.add_argument("--venue", required=True, choices=EXPORT_TICKET_VENUE_CHOICES)
     export_ticket.add_argument(
         "--venue-order-type",
         default=DEFAULT_VENUE_ORDER_TYPE,
@@ -1251,6 +1274,15 @@ def register(subparsers: Any) -> None:
         help=(
             "Drawdown-from-peak appetite for the continuous portfolio "
             "monitors; breach ratchets autonomy down through the audited path"
+        ),
+    )
+    budget_set.add_argument(
+        "--max-equity-buying-power-pct",
+        type=_non_negative_decimal_value,
+        help=(
+            "Cash-account buying-power cap for equity instruments, in percent "
+            "of attested account equity; 100 = cash-account fidelity. Crypto "
+            "spot is never checked against it"
         ),
     )
     budget_set.set_defaults(handler=_handle_budget_set, subcommand="budget set")
@@ -1969,8 +2001,10 @@ def _handle_snapshot_build(args: Namespace) -> CliResponse:
             lookback=args.lookback,
             as_of=_snapshot_as_of(args.as_of),
         )
-        if getattr(args, "from_stooq", False):
-            snapshot = asyncio.run(_build_equities_market_snapshot(args, request))
+        if getattr(args, "from_alpaca", False):
+            snapshot = asyncio.run(_build_alpaca_equities_market_snapshot(args, request))
+        elif getattr(args, "from_stooq", False):
+            snapshot = asyncio.run(_build_stooq_equities_market_snapshot(args, request))
         else:
             snapshot = asyncio.run(_build_coinbase_market_snapshot(args, request))
         payload = market_snapshot_to_payload(snapshot)
@@ -2005,15 +2039,27 @@ async def _build_coinbase_market_snapshot(
     )
 
 
-async def _build_equities_market_snapshot(
+async def _build_alpaca_equities_market_snapshot(
     args: Namespace,
     request: MarketSnapshotBuildRequest,
 ) -> MarketSnapshot:
     # Snapshot production is recorder-owned; the CLI only adapts arguments.
-    return await build_equities_market_snapshot(
+    return await build_alpaca_equities_market_snapshot(
+        request,
+        base_url=args.alpaca_data_base_url,
+        source_label=args.source_label or DEFAULT_ALPACA_SNAPSHOT_SOURCE_LABEL,
+    )
+
+
+async def _build_stooq_equities_market_snapshot(
+    args: Namespace,
+    request: MarketSnapshotBuildRequest,
+) -> MarketSnapshot:
+    # Snapshot production is recorder-owned; the CLI only adapts arguments.
+    return await build_stooq_equities_market_snapshot(
         request,
         base_url=args.stooq_base_url,
-        source_label=args.source_label or DEFAULT_EQUITIES_SNAPSHOT_SOURCE_LABEL,
+        source_label=args.source_label or DEFAULT_STOOQ_SNAPSHOT_SOURCE_LABEL,
     )
 
 

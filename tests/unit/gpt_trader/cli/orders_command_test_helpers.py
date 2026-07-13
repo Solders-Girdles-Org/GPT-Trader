@@ -39,3 +39,15 @@ def make_history_args(**overrides):
     )
     defaults.update(overrides)
     return Namespace(**defaults)
+
+
+def make_suppressed_args(**overrides):
+    defaults = dict(
+        profile="dev",
+        orders_command="suppressed",
+        limit=orders_cmd._DEFAULT_HISTORY_LIMIT,
+        output_format="text",
+        subcommand="suppressed",
+    )
+    defaults.update(overrides)
+    return Namespace(**defaults)

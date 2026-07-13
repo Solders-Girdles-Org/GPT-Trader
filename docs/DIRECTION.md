@@ -15,9 +15,12 @@ restate current state or hold a backlog.
 
 An **autonomous trading entity** (`bounded_autonomy`): a bot that observes
 markets, does its own research, and manages funds inside machine-enforced limits.
-Scope is **Coinbase only (spot + CFM futures)**. The formal scope, boundary, and
-exclusions are recorded in
+The autonomous **execution** destination remains **Coinbase only (spot + CFM
+futures)** under
 [accept-staged-autonomy-direction](decisions/accept-staged-autonomy-direction.md).
+Authenticated observation may include officially reviewed non-execution venues
+under the scoped
+[real-account-read-preview-capability](decisions/real-account-read-preview-capability.md).
 
 ## Charter
 
@@ -106,9 +109,11 @@ remains gated before any non-manual execution lane opens:
 - **Numeric risk budget.** Max loss per idea, max daily loss, max open notional
   by product type, max concurrent approved-but-unexecuted tickets, max review
   latency, and whether sizing is advisory or hard-capped must be chosen values.
-- **Official venue/API/account capability review — pending.** No doc here
-  authorizes account, venue, product, or API capability. A fresh review gates any
-  non-manual Coinbase (or other) execution.
+- **Official venue/API/account execution-capability review — pending.** The
+  observation-only review is accepted in
+  [real-account-read-preview-capability](decisions/real-account-read-preview-capability.md),
+  but a fresh execution review still gates any non-manual Coinbase or other-venue
+  order path.
 
 Open questions that gate parts of this are tracked as `proposed` decisions in
 [docs/decisions](decisions/README.md). Profile meaning is resolved: `prod` and
@@ -121,8 +126,10 @@ decision is accepted.
 
 ## What this direction does not authorize
 
-Stating a destination is not approval to operate. Nothing here authorizes real
-broker/API calls, live trading commands, production preflight, canary operations,
-money movement, or order submission. Those require the gates above and recorded
+Stating a destination is not approval to operate. The only real broker/API calls
+authorized here are the named account reads and non-binding previews in
+[real-account-read-preview-capability](decisions/real-account-read-preview-capability.md).
+No live trading command, production preflight, canary operation, money movement,
+or order submission is authorized; those require the gates above and recorded
 human approval. Paper/live readiness mechanics live in the operational
 [Readiness Checklist](READINESS.md) and [Live Operations](production.md).

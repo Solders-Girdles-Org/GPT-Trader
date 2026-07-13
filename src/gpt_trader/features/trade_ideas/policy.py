@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 
+from gpt_trader.core.instruments import AssetClass, InstrumentParseError
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.trade_ideas.audit import ActorType
 from gpt_trader.features.trade_ideas.budget import RiskBudget
@@ -65,6 +66,16 @@ class ApprovalBudgetContext:
     open_notional: Decimal = Decimal("0")
     open_notional_unavailable_count: int = 0
     account_equity_snapshot: Decimal | None = None
+    # Cash-account buying-power inputs (#1231), aggregated over equity-asset-
+    # class instruments only: open exposure that consumed settled cash, plus
+    # sale proceeds still inside their settlement window (T+1) and therefore
+    # not yet spendable. Unavailable counts cover open ideas and closeouts
+    # whose equity exposure or proceeds cannot be verified — including
+    # instruments that fail classification.
+    open_equity_notional: Decimal = Decimal("0")
+    open_equity_notional_unavailable_count: int = 0
+    unsettled_equity_proceeds: Decimal = Decimal("0")
+    unsettled_equity_proceeds_unavailable_count: int = 0
 
 
 def _decimal(value: Decimal | int | str) -> Decimal:
@@ -73,6 +84,91 @@ def _decimal(value: Decimal | int | str) -> Decimal:
 
 def _format_decimal(value: Decimal) -> str:
     return format(value.normalize(), "f")
+
+
+def _equity_buying_power_violations(
+    idea: TradeIdea,
+    budget: RiskBudget,
+    context: ApprovalBudgetContext,
+) -> list[str]:
+    """Cash-account buying-power check for equity candidates (#1231).
+
+    Runs only when ``max_equity_buying_power_pct`` is configured on the
+    budget. Crypto-spot candidates settle immediately and are never checked
+    here — ``max_open_notional_pct`` remains their complete story — so
+    configuring the lever provably cannot change a crypto approval outcome.
+    Every input that cannot be verified (unclassifiable instrument, missing
+    candidate notional, unverifiable open equity exposure or unsettled
+    proceeds, missing or non-positive attested equity) refuses the approval
+    loudly rather than passing silently.
+    """
+    if budget.max_equity_buying_power_pct is None:
+        return []
+    try:
+        instrument = idea.instrument_info
+    except InstrumentParseError as error:
+        return [
+            "instrument cannot be classified to verify max_equity_buying_power_pct "
+            f"budget exposure: {error}"
+        ]
+    if instrument.asset_class is not AssetClass.EQUITY:
+        return []
+    violations: list[str] = []
+    if context.open_equity_notional_unavailable_count:
+        violations.append(
+            "open budget exposure includes "
+            f"{context.open_equity_notional_unavailable_count} idea(s) whose equity "
+            "notional cannot be verified; max_equity_buying_power_pct budget "
+            "exposure cannot be verified"
+        )
+    if context.unsettled_equity_proceeds_unavailable_count:
+        violations.append(
+            "unsettled equity closeouts include "
+            f"{context.unsettled_equity_proceeds_unavailable_count} closeout(s) whose "
+            "sale proceeds cannot be verified; max_equity_buying_power_pct budget "
+            "exposure cannot be verified"
+        )
+    candidate_notional = idea.sizing_recommendation.notional
+    if candidate_notional is None:
+        violations.append(
+            "sizing_recommendation.notional is required to verify "
+            "max_equity_buying_power_pct budget exposure"
+        )
+        return violations
+    projected_usage = (
+        abs(context.open_equity_notional)
+        + abs(candidate_notional)
+        + abs(context.unsettled_equity_proceeds)
+    )
+    if projected_usage <= 0:
+        return violations
+    account_equity = context.account_equity_snapshot
+    if account_equity is None:
+        violations.append(
+            "account_equity_snapshot is required to verify "
+            "max_equity_buying_power_pct budget exposure"
+        )
+        return violations
+    if account_equity <= 0:
+        violations.append(
+            "account_equity_snapshot must be positive to verify "
+            "max_equity_buying_power_pct budget exposure; "
+            f"got {_format_decimal(account_equity)}"
+        )
+        return violations
+    projected_usage_pct = projected_usage / account_equity * _decimal(100)
+    if projected_usage_pct > budget.max_equity_buying_power_pct:
+        violations.append(
+            "max_equity_buying_power_pct budget breached: projected equity "
+            f"buying-power usage {_format_decimal(projected_usage_pct)}% exceeds "
+            f"limit {_format_decimal(budget.max_equity_buying_power_pct)}% "
+            f"(open_equity_notional={_format_decimal(abs(context.open_equity_notional))}, "
+            f"candidate_notional={_format_decimal(abs(candidate_notional))}, "
+            "unsettled_equity_proceeds="
+            f"{_format_decimal(abs(context.unsettled_equity_proceeds))}, "
+            f"account_equity_snapshot={_format_decimal(account_equity)})"
+        )
+    return violations
 
 
 class ApprovalPolicy:
@@ -204,6 +300,7 @@ class ApprovalPolicy:
                                 f"(projected_open_notional={_format_decimal(projected_notional)}, "
                                 f"account_equity_snapshot={_format_decimal(account_equity)})"
                             )
+            violations.extend(_equity_buying_power_violations(idea, budget, budget_context))
 
         if idea.product_type is ProductType.FUTURES and not budget.allow_futures_leverage:
             violations.append(
