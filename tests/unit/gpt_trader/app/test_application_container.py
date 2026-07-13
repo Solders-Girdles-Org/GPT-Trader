@@ -242,6 +242,25 @@ class TestApplicationContainerSecondaryServices:
         assert secrets_manager is secrets_manager2
 
 
+class TestRobinhoodAgenticFactory:
+    @pytest.mark.asyncio
+    async def test_command_scoped_async_factory(self, mock_config: BotConfig) -> None:
+        sentinel = MagicMock()
+        calls: list[BotConfig] = []
+
+        async def factory(config: BotConfig):
+            calls.append(config)
+            return sentinel
+
+        container = ApplicationContainer(
+            mock_config,
+            robinhood_agentic_read_review_access_factory=factory,
+        )
+
+        assert await container.create_robinhood_agentic_read_review_access() is sentinel
+        assert calls == [mock_config]
+
+
 class TestRiskBudgetRuntimeSeedGate:
     """Stage 2 derivation seam (#1120): default-on startup seeding."""
 

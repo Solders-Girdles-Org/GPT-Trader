@@ -120,6 +120,13 @@ class TestRobinhoodCryptoAccountIdentityEnvParsing:
     def test_expected_account_defaults_unset(self, clean_env: pytest.MonkeyPatch) -> None:
         assert BotConfig.from_env().robinhood_crypto_expected_account_number is None
 
+    def test_agentic_expected_account_loads_from_env(self, clean_env: pytest.MonkeyPatch) -> None:
+        clean_env.setenv("ROBINHOOD_AGENTIC_EXPECTED_ACCOUNT_NUMBER", " RH-agentic-1 ")
+        assert BotConfig.from_env().robinhood_agentic_expected_account_number == "RH-agentic-1"
+
+    def test_agentic_expected_account_defaults_unset(self, clean_env: pytest.MonkeyPatch) -> None:
+        assert BotConfig.from_env().robinhood_agentic_expected_account_number is None
+
 
 class TestReduceOnlyModeEnvParsing:
     """Test reduce_only_mode env variable parsing."""

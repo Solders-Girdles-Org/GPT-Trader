@@ -245,6 +245,7 @@ class BotConfig:
     coinbase_expected_portfolio_uuid: str | None = None
     coinbase_expected_account_uuids: list[str] = field(default_factory=list)
     robinhood_crypto_expected_account_number: str | None = None
+    robinhood_agentic_expected_account_number: str | None = None
     coinbase_us_futures_enabled: bool = False
     # Derivatives venue type. INTX perpetuals are removed; CFM US futures is the
     # only supported derivatives lane (see docs/decisions/intx-default-derivatives-venue.md).
@@ -463,6 +464,9 @@ class BotConfig:
             ),
             robinhood_crypto_expected_account_number=(
                 os.getenv("ROBINHOOD_CRYPTO_EXPECTED_ACCOUNT_NUMBER", "").strip() or None
+            ),
+            robinhood_agentic_expected_account_number=(
+                os.getenv("ROBINHOOD_AGENTIC_EXPECTED_ACCOUNT_NUMBER", "").strip() or None
             ),
             coinbase_us_futures_enabled=parse_bool_env(
                 "COINBASE_US_FUTURES_ENABLED", default=False
