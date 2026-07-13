@@ -251,8 +251,8 @@ next session opens. Calendar or instrument failures never undercount loss,
 admit a stale review, or mutate an expiry sweep.
 
 Strategy-backed proposers — the live strategy library running over the turn's
-snapshot through the `Proposer` contract — are opt-in until replay parity is
-demonstrated: pass `--proposer strategy-baseline-spot` (or
+snapshot through the `Proposer` contract — remain opt-in at the CLI and in the
+Stage-1 wrapper: pass `--proposer strategy-baseline-spot` (or
 `strategy-baseline-perps`, `strategy-mean-reversion`,
 `strategy-regime-switcher`; all emit long-only spot ideas), or set
 `CYCLE_PROPOSERS="baseline regime-aware strategy-baseline-spot"`. Each
@@ -270,7 +270,10 @@ sets the two audited Stage-2 gates (`GPT_TRADER_IDEAS_AUTO_APPROVAL=1`,
 `GPT_TRADER_IDEAS_AUTO_EXECUTION=1`), system-approves every violation-free
 proposal inside the budget envelope (`ideas approve --auto-sweep`), then runs one
 cycle turn so those approvals paper-execute against the turn's snapshot. It is
-paper-only and never contacts a live broker. To run unattended Stage-2 turns,
+paper-only and never contacts a live broker. Its accepted benchmark set is
+`baseline`, `regime-aware`, and `strategy-mean-reversion`; this does not change
+the general CLI or Stage-1 defaults. `CYCLE_PROPOSERS` replaces that full set as
+an explicit operator rollback/config control. To run unattended Stage-2 turns,
 point the launchd/cron entry below at `stage2_cycle_turn.sh` instead of
 `stage1_cycle_turn.sh`; the same env overrides (`CYCLE_SYMBOLS`, etc.), overlap
 lock, and manifest-row evidence contract apply.

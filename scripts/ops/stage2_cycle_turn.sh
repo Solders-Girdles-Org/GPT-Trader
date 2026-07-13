@@ -32,8 +32,9 @@ export PATH="${HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin:${PATH}"
 : "${CYCLE_GRANULARITY:=ONE_HOUR}"
 : "${CYCLE_LOOKBACK:=200}"
 : "${CYCLE_PRICE_PRECISION:=0.01}"
-# Space-separated proposer names; empty means the CLI default (all proposers).
-: "${CYCLE_PROPOSERS:=}"
+# The accepted Stage-2 benchmark set. Operators can replace the full set with
+# a space-separated CYCLE_PROPOSERS value to roll back or run a narrower turn.
+: "${CYCLE_PROPOSERS:=baseline regime-aware strategy-mean-reversion}"
 
 # The two Stage-2 gates. Both must be enabled for the loop to auto-approve and
 # auto-execute, and each still no-ops unless the audited autonomy mode resolves
