@@ -202,11 +202,36 @@ proposer set are env-overridable there (`CYCLE_SYMBOLS`, `CYCLE_GRANULARITY`,
 `CYCLE_PROPOSERS`, for example `CYCLE_PROPOSERS=baseline`); cadence belongs
 only in the scheduler entry.
 
+An opt-in mixed-universe source is available for a manually invoked paper
+turn, but is deliberately absent from both Stage 1/2 scripts and their default
+universes:
+
+```bash
+export ALPACA_API_KEY_ID=<market-data-key-id>
+export ALPACA_API_SECRET_KEY=<market-data-secret>
+uv run gpt-trader ideas cycle \
+  --from-coinbase --symbols BTC-USD,ETH-USD \
+  --from-alpaca --equity-symbols AAPL,MSFT,SPY \
+  --granularity ONE_HOUR --lookback 200
+```
+
+This composes public Coinbase crypto candles with authenticated, read-only
+Alpaca equity candles at one shared `as_of` instant. Equities are structurally
+fixed to completed `ONE_DAY` bars and the official
+`https://data.alpaca.markets` host; there is no cycle URL override. The two
+Alpaca environment variables must be market-data-only keys. This path imports
+no Alpaca account, broker, or order surface, and a configured provider failure
+fails the whole turn instead of running on a partial universe. It remains a
+dormant preparation route until the credential-gated smoke test is explicitly
+opted in and recorded; do not update scheduled scripts merely because the CLI
+surface exists.
+
 Shrinking `CYCLE_SYMBOLS` never strands an unresolved trade: each turn tops the
 snapshot fetch up with any instrument that still has an open idea or a filled
 idea awaiting closeout, so the exit monitor keeps receiving candles until the
-position resolves. Top-up fetches are per-symbol and non-fatal — a delisted
-instrument defers its own resolution without failing the turn.
+position resolves. In mixed mode, crypto top-ups route only to Coinbase and
+equity top-ups only to Alpaca. Top-up fetches are per-symbol and non-fatal — a
+delisted instrument defers its own resolution without failing the turn.
 
 Sessioned instruments also fail safely: the paper executor leaves an approved
 equity idea unsubmitted while XNYS is closed, and the exit monitor leaves a
