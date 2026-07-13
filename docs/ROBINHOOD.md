@@ -71,6 +71,38 @@ provider order-check, quote, and market-data disclosure evidence. Single-leg
 option reviews retain a provider-specific immutable record rather than forcing
 the option shape into the equity request contract.
 
+## Provider-aware account commands
+
+The application composition root exposes each adapter only to the three
+provider-aware account commands. The legacy `account snapshot` command is not
+provider-aware and retains its runtime-telemetry contract.
+
+```bash
+uv run gpt-trader account observe --provider robinhood-crypto --format json
+uv run gpt-trader account diagnose --provider robinhood-agentic --format json
+uv run gpt-trader account preview --provider robinhood-crypto \
+  --instrument BTC-USD --side buy --quantity <quantity> --order-type market \
+  --format json
+uv run gpt-trader account preview --provider robinhood-agentic \
+  --instrument <symbol> --side buy --quantity <quantity> --order-type limit \
+  --limit-price <price> --format json
+uv run gpt-trader account preview --provider robinhood-agentic \
+  --product-type option --instrument <option-instrument-uuid> \
+  --side buy --position-effect open --quantity 1 --order-type limit \
+  --limit-price <price> --format json
+```
+
+All preview results are marked non-binding. Provider rejections return an error
+without falling through to a place/cancel path, and command-scoped sessions are
+closed after success or failure. Rejected responses retain their masked
+identity/request/evidence binding; provider evidence JSON redacts account and
+portfolio identifiers and includes a digest of the sanitized record.
+
+`ideas export-ticket --venue robinhood` is a separate local render-only action.
+It accepts approved ideas only, emits the existing canonical broker-neutral
+ticket artifact, never imports or calls a Robinhood adapter, and remains absent
+from `mark-submitted`, `mark-filled`, and reconciliation venue choices.
+
 ## Explicit Agentic non-mutation smoke
 
 The live smoke is never automatic. It performs account/portfolio reads and the

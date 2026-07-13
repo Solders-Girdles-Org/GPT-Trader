@@ -39,6 +39,7 @@ def test_account_provider_commands_parse() -> None:
     account_cmd.register(subparsers)
 
     observe = parser.parse_args(["account", "observe", "--provider", "coinbase"])
+    crypto_observe = parser.parse_args(["account", "observe", "--provider", "robinhood-crypto"])
     preview = parser.parse_args(
         [
             "account",
@@ -57,8 +58,34 @@ def test_account_provider_commands_parse() -> None:
     )
 
     assert observe.provider == "coinbase"
+    assert crypto_observe.provider == "robinhood-crypto"
     assert preview.provider == "coinbase"
     assert preview.quantity == Decimal("0.01")
+
+    option_preview = parser.parse_args(
+        [
+            "account",
+            "preview",
+            "--provider",
+            "robinhood-agentic",
+            "--product-type",
+            "option",
+            "--instrument",
+            "option-id",
+            "--side",
+            "buy",
+            "--position-effect",
+            "open",
+            "--quantity",
+            "1",
+            "--order-type",
+            "limit",
+            "--limit-price",
+            "1.25",
+        ]
+    )
+    assert option_preview.product_type == "option"
+    assert option_preview.position_effect == "open"
 
 
 def test_legacy_snapshot_rejects_provider_override() -> None:
@@ -237,3 +264,108 @@ def test_coinbase_access_uses_injected_composition_root() -> None:
             return access
 
     assert account_cmd._build_coinbase_access("ignored", container=Container()) is access
+
+
+def _observation(provider: AccountProvider) -> AccountObservation:
+    return AccountObservation(
+        identity=AccountIdentity(
+            provider=provider,
+            account_id="account-1234",
+            portfolio_id="account-1234",
+            interface="typed-read-review",
+        ),
+        generated_at=datetime(2026, 7, 13, tzinfo=UTC),
+        buying_power={"cash": Decimal("100")},
+    )
+
+
+def test_robinhood_crypto_observe_and_diagnose_use_composition_root() -> None:
+    closed = {"count": 0}
+
+    class Reader:
+        def read_account(self) -> AccountObservation:
+            return _observation(AccountProvider.ROBINHOOD_CRYPTO)
+
+    access = SimpleNamespace(
+        reader=Reader(),
+        warnings=("read only",),
+        close=lambda: closed.__setitem__("count", closed["count"] + 1),
+    )
+
+    class Container:
+        config = object()
+
+        def create_robinhood_crypto_read_preview_access(self) -> object:
+            return access
+
+    observe = account_cmd._handle_observe(
+        Namespace(provider="robinhood-crypto", application_container=Container())
+    )
+    diagnose = account_cmd._handle_diagnose(
+        Namespace(provider="robinhood-crypto", application_container=Container())
+    )
+
+    assert observe.success is True
+    assert observe.data["identity"]["provider"] == "robinhood_crypto"
+    assert diagnose.success is True
+    assert diagnose.data == {
+        "provider": "robinhood_crypto",
+        "status": "available",
+        "identity": diagnose.data["identity"],
+        "observation_schema_version": "gpt-trader.account-observation.v1",
+        "balance_count": 0,
+        "position_count": 0,
+        "option_position_count": 0,
+        "buying_power_dimensions": ["cash"],
+    }
+    assert diagnose.data["identity"]["account_id"] == "********1234"
+    assert closed["count"] == 2
+
+
+def test_robinhood_crypto_rejected_preview_is_non_binding_and_closes() -> None:
+    closed = {"value": False}
+
+    class PreviewProvider:
+        def preview(self, request: PreviewRequest) -> PreviewResult:
+            return PreviewResult(
+                provider=AccountProvider.ROBINHOOD_CRYPTO,
+                kind=PreviewKind.PROVIDER_ESTIMATE,
+                generated_at=datetime(2026, 7, 13, tzinfo=UTC),
+                identity_fingerprint="fingerprint",
+                request=request,
+                errors=("market requests only; no provider estimate was dispatched",),
+            )
+
+    access = SimpleNamespace(
+        preview_provider=PreviewProvider(),
+        close=lambda: closed.__setitem__("value", True),
+    )
+
+    class Container:
+        config = object()
+
+        def create_robinhood_crypto_read_preview_access(self) -> object:
+            return access
+
+    response = account_cmd._handle_preview(
+        Namespace(
+            provider="robinhood-crypto",
+            product_type="equity",
+            instrument="BTC-USD",
+            side="buy",
+            quantity=Decimal("0.01"),
+            order_type="limit",
+            limit_price=Decimal("100"),
+            application_container=Container(),
+        )
+    )
+
+    assert response.success is False
+    details = response.errors[0].details
+    assert details["provider_errors"] == [
+        "market requests only; no provider estimate was dispatched"
+    ]
+    assert details["non_binding"] is True
+    assert details["evidence"]["identity_fingerprint"] == "fingerprint"
+    assert details["evidence"]["request"]["instrument"] == "BTC-USD"
+    assert closed["value"] is True

@@ -54,6 +54,7 @@ class TicketVenue(str, Enum):
     COINBASE = "coinbase"
     MANUAL = "manual"
     PAPER = "paper"
+    ROBINHOOD = "robinhood"
     NONE = "none"
 
 

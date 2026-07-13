@@ -146,6 +146,7 @@ from gpt_trader.features.trade_ideas.scorecard import (
 from gpt_trader.persistence.event_store import EventStore
 
 VENUE_CHOICES = ("coinbase", "manual")
+EXPORT_TICKET_VENUE_CHOICES = (*VENUE_CHOICES, "robinhood")
 # --strategy flag values: live-trade strategies runnable as snapshot proposers.
 # The CLI is the composition root — it constructs the strategy so the
 # strategy_tools slice never imports live_trade (SnapshotDecider is structural).
@@ -558,8 +559,9 @@ def register(subparsers: Any) -> None:
         help="Export a deterministic broker-neutral ticket artifact",
         description=(
             "Render a deterministic broker-neutral ticket JSON artifact from an approved "
-            "or terminal-approved trade idea. This command reads only local trade-idea "
-            "records and never contacts a broker, account, preflight, or canary surface."
+            "or terminal-approved trade idea. Robinhood exports require the approved state. "
+            "This command reads only local trade-idea records and never contacts a broker, "
+            "account, preflight, or canary surface."
         ),
     )
     export_ticket.add_argument(
@@ -588,7 +590,7 @@ def register(subparsers: Any) -> None:
         required=True,
         help="Approved or terminal-approved trade idea decision identifier",
     )
-    export_ticket.add_argument("--venue", required=True, choices=VENUE_CHOICES)
+    export_ticket.add_argument("--venue", required=True, choices=EXPORT_TICKET_VENUE_CHOICES)
     export_ticket.add_argument(
         "--venue-order-type",
         default=DEFAULT_VENUE_ORDER_TYPE,

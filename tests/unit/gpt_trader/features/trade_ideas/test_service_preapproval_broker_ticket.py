@@ -50,6 +50,7 @@ def test_propose_accepts_explicit_default_broker_ticket(service: TradeIdeaServic
     [
         BrokerTicket(venue=TicketVenue.COINBASE, status=TicketStatus.NOT_CREATED),
         BrokerTicket(venue=TicketVenue.MANUAL, status=TicketStatus.NOT_CREATED),
+        BrokerTicket(venue=TicketVenue.ROBINHOOD, status=TicketStatus.NOT_CREATED),
         BrokerTicket(venue=TicketVenue.NONE, status=TicketStatus.DRAFTED),
         BrokerTicket(venue=TicketVenue.NONE, status=TicketStatus.APPROVED),
         BrokerTicket(venue=TicketVenue.NONE, status=TicketStatus.SUBMITTED),
@@ -100,6 +101,7 @@ def test_resubmit_accepts_explicit_default_broker_ticket(service: TradeIdeaServi
     [
         BrokerTicket(venue=TicketVenue.COINBASE, status=TicketStatus.NOT_CREATED),
         BrokerTicket(venue=TicketVenue.MANUAL, status=TicketStatus.NOT_CREATED),
+        BrokerTicket(venue=TicketVenue.ROBINHOOD, status=TicketStatus.NOT_CREATED),
         BrokerTicket(venue=TicketVenue.NONE, status=TicketStatus.DRAFTED),
         BrokerTicket(venue=TicketVenue.NONE, status=TicketStatus.APPROVED),
         BrokerTicket(venue=TicketVenue.NONE, status=TicketStatus.SUBMITTED),
