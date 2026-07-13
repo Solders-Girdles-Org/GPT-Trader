@@ -36,6 +36,7 @@ from gpt_trader.cli.commands.ideas_input import (
     _load_trade_idea,
 )
 from gpt_trader.cli.response import CliError, CliErrorCode, CliResponse, RawCliOutput
+from gpt_trader.core.instruments import AssetClass, Instrument, InstrumentParseError
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.brokerages.mock import DeterministicBroker
 from gpt_trader.features.idea_execution import (
@@ -1178,17 +1179,32 @@ def register(subparsers: Any) -> None:
         help="Fetch read-only public Coinbase market candles for this turn",
     )
     cycle.add_argument(
+        "--from-alpaca",
+        action="store_true",
+        help=(
+            "Also fetch keyed read-only Alpaca ONE_DAY equity candles; valid only "
+            "with --from-coinbase"
+        ),
+    )
+    cycle.add_argument(
         "--symbols",
         help="Comma-separated Coinbase product ids (required with --from-coinbase)",
     )
     cycle.add_argument(
         "--granularity",
-        help="Candle granularity, for example ONE_HOUR or ONE_DAY (required with --from-coinbase)",
+        help=(
+            "Coinbase candle granularity, for example ONE_HOUR or ONE_DAY "
+            "(required with --from-coinbase)"
+        ),
     )
     cycle.add_argument(
         "--lookback",
         type=_positive_int_value,
         help="Completed candles per symbol (required with --from-coinbase)",
+    )
+    cycle.add_argument(
+        "--equity-symbols",
+        help="Comma-separated equity tickers (required with --from-alpaca)",
     )
     cycle.add_argument(
         "--coinbase-base-url",
@@ -1197,8 +1213,8 @@ def register(subparsers: Any) -> None:
     )
     cycle.add_argument(
         "--source-label",
-        default=DEFAULT_SNAPSHOT_SOURCE_LABEL,
-        help="Source label stamped into snapshot metadata",
+        default=None,
+        help="Optional source label stamped into snapshot metadata",
     )
     cycle.add_argument(
         "--proposer",
@@ -1227,6 +1243,9 @@ def register(subparsers: Any) -> None:
         help="Skip the paper-execution leg for APPROVED ideas this turn",
     )
     cycle.set_defaults(handler=_handle_cycle, subcommand="cycle", execute_approved=True)
+    # Mixed-cycle Alpaca reads are intentionally pinned to the recorder's
+    # official data host. There is no CLI URL override that could receive keys.
+    cycle.set_defaults(alpaca_data_base_url=DEFAULT_ALPACA_DATA_BASE_URL)
 
     budget = ideas_subparsers.add_parser("budget", help="Inspect or update risk budget")
     budget_subparsers = budget.add_subparsers(dest="budget_command", required=True)
@@ -3039,11 +3058,93 @@ def _cycle_busy_symbol_extras(
     )
 
 
+def _cycle_symbols(
+    value: str,
+    *,
+    expected_asset_class: AssetClass,
+    field: str,
+) -> tuple[str, ...]:
+    """Parse and attest a provider-specific cycle symbol allowlist."""
+    symbols = _snapshot_symbols(value)
+    for symbol in symbols:
+        try:
+            instrument = Instrument.parse(symbol)
+        except InstrumentParseError as error:
+            raise SnapshotBuildInputError(str(error), field=field) from error
+        if instrument.asset_class is not expected_asset_class:
+            raise SnapshotBuildInputError(
+                f"--{field.replace('_', '-')} accepts only "
+                f"{expected_asset_class.value} instruments; got {symbol}",
+                field=field,
+            )
+    return symbols
+
+
+def _merge_cycle_snapshots(
+    crypto_snapshot: MarketSnapshot,
+    equity_snapshot: MarketSnapshot,
+) -> MarketSnapshot:
+    """Compose two provider reads that attest the same point in time."""
+    if crypto_snapshot.as_of != equity_snapshot.as_of:
+        raise SnapshotBuildInputError(
+            "Mixed cycle snapshots must share the exact same as_of instant",
+            field="as_of",
+        )
+    return MarketSnapshot(
+        as_of=crypto_snapshot.as_of,
+        source=f"composite[{crypto_snapshot.source};{equity_snapshot.source}]",
+        series=(*crypto_snapshot.series, *equity_snapshot.series),
+    )
+
+
+async def _build_configured_cycle_snapshot(
+    args: Namespace,
+    crypto_request: MarketSnapshotBuildRequest,
+    equity_request: MarketSnapshotBuildRequest | None,
+) -> MarketSnapshot:
+    if equity_request is None:
+        return await _build_coinbase_market_snapshot(args, crypto_request)
+    crypto_snapshot, equity_snapshot = await asyncio.gather(
+        _build_coinbase_market_snapshot(args, crypto_request),
+        _build_alpaca_equities_market_snapshot(args, equity_request),
+    )
+    return _merge_cycle_snapshots(crypto_snapshot, equity_snapshot)
+
+
+async def _build_cycle_top_up(
+    args: Namespace,
+    request: MarketSnapshotBuildRequest,
+    symbol: str,
+) -> MarketSnapshot:
+    """Route one busy-instrument read without exposing a generic data escape."""
+    instrument = Instrument.parse(symbol)
+    if instrument.asset_class is AssetClass.CRYPTO:
+        return await _build_coinbase_market_snapshot(args, replace(request, symbols=(symbol,)))
+    if not args.from_alpaca:
+        raise SnapshotBuildInputError(
+            "Equity busy-instrument top-ups require --from-alpaca",
+            field="from_alpaca",
+        )
+    return await _build_alpaca_equities_market_snapshot(
+        args,
+        replace(request, symbols=(symbol,), granularity="ONE_DAY"),
+    )
+
+
 def _handle_cycle(args: Namespace) -> CliResponse:
     command = "ideas cycle"
     try:
-        service = _service(args)
         if args.snapshot is not None:
+            if args.from_alpaca:
+                raise SnapshotBuildInputError(
+                    "--from-alpaca requires --from-coinbase",
+                    field="from_alpaca",
+                )
+            if args.equity_symbols is not None:
+                raise SnapshotBuildInputError(
+                    "--equity-symbols requires --from-alpaca",
+                    field="equity_symbols",
+                )
             snapshot_path = args.snapshot
 
             def snapshot_provider() -> tuple[MarketSnapshot, str]:
@@ -3066,15 +3167,59 @@ def _handle_cycle(args: Namespace) -> CliResponse:
                     CliErrorCode.MISSING_ARGUMENT,
                     f"--from-coinbase requires {', '.join(missing)}",
                 )
+            if args.from_alpaca and args.equity_symbols is None:
+                return _failure(
+                    command,
+                    args,
+                    CliErrorCode.MISSING_ARGUMENT,
+                    "--from-alpaca requires --equity-symbols",
+                )
+            if not args.from_alpaca and args.equity_symbols is not None:
+                raise SnapshotBuildInputError(
+                    "--equity-symbols requires --from-alpaca",
+                    field="equity_symbols",
+                )
+            crypto_symbols = _cycle_symbols(
+                args.symbols,
+                expected_asset_class=AssetClass.CRYPTO,
+                field="symbols",
+            )
+            equity_symbols = (
+                _cycle_symbols(
+                    args.equity_symbols,
+                    expected_asset_class=AssetClass.EQUITY,
+                    field="equity_symbols",
+                )
+                if args.from_alpaca
+                else ()
+            )
+            if set(crypto_symbols) & set(equity_symbols):
+                raise SnapshotBuildInputError(
+                    "--symbols and --equity-symbols must not overlap",
+                    field="equity_symbols",
+                )
+            as_of = datetime.now(UTC)
             request = MarketSnapshotBuildRequest(
-                symbols=_snapshot_symbols(args.symbols),
+                symbols=crypto_symbols,
                 granularity=_snapshot_granularity(args.granularity),
                 lookback=args.lookback,
-                as_of=datetime.now(UTC),
+                as_of=as_of,
+            )
+            equity_request = (
+                MarketSnapshotBuildRequest(
+                    symbols=equity_symbols,
+                    granularity="ONE_DAY",
+                    lookback=args.lookback,
+                    as_of=as_of,
+                )
+                if args.from_alpaca
+                else None
             )
 
             def snapshot_provider() -> tuple[MarketSnapshot, str]:
-                snapshot = asyncio.run(_build_coinbase_market_snapshot(args, request))
+                snapshot = asyncio.run(
+                    _build_configured_cycle_snapshot(args, request, equity_request)
+                )
                 # Busy instruments must keep receiving candles after the
                 # configured universe drops them: without fresh candles the
                 # exit monitor can never resolve their filled ideas, so the
@@ -3084,16 +3229,13 @@ def _handle_cycle(args: Namespace) -> CliResponse:
                 # simply stays open until candles are available again.
                 for symbol in _cycle_busy_symbol_extras(service, snapshot.symbols()):
                     try:
-                        extra = asyncio.run(
-                            _build_coinbase_market_snapshot(
-                                args, replace(request, symbols=(symbol,))
-                            )
-                        )
+                        extra = asyncio.run(_build_cycle_top_up(args, request, symbol))
                     except Exception:  # noqa: BLE001
                         continue
                     snapshot = replace(snapshot, series=(*snapshot.series, *extra.series))
                 return snapshot, snapshot.source
 
+        service = _service(args)
         selected_proposers = tuple(dict.fromkeys(args.proposers or DEFAULT_CYCLE_PROPOSERS))
         runner = PaperCycleRunner(
             service,

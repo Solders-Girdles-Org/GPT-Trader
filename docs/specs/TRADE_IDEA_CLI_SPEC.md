@@ -81,6 +81,10 @@ gpt-trader ideas
 │   └── build        --from-coinbase --symbols BTC-USD,ETH-USD
 │                    --granularity GRANULARITY --lookback N --out snapshot.json
 │                    [--as-of TIMESTAMP] [--source-label LABEL]
+├── cycle            (--snapshot PATH | --from-coinbase --symbols BTC-USD,ETH-USD
+│                    --granularity GRANULARITY --lookback N)
+│                    [--from-alpaca --equity-symbols AAPL,MSFT,SPY]
+│                    [--proposer PROPOSER] [--no-execute-approved]
 ├── resubmit         --file PATH | --stdin   [--actor-type {ai,human}] [--reason TEXT]
 ├── list             [--state STATE] [--instrument SYMBOL] [--decision-id ID]
 │                    [--direction DIRECTION]
@@ -582,6 +586,36 @@ Stage 2 auto-approval inside the budget envelope
   and the audited autonomy log must resolve to `bounded_autonomy` at execution
   time. Without both gates, `execute-paper` and `ideas cycle` preserve the
   previous typed refusal / audited skip behavior.
+
+### `ideas cycle`
+
+- Runs one local paper-cycle turn. Its execution leg can reach only
+  `DeterministicBroker`; neither source mode constructs a live broker or order
+  client.
+- The required source is either a local `--snapshot PATH` or an explicit
+  Coinbase read with `--from-coinbase`, `--symbols`, `--granularity`, and
+  `--lookback`.
+- `--from-alpaca --equity-symbols AAPL,MSFT,SPY` is a cycle-only modifier to
+  the Coinbase source. It adds authenticated read-only Alpaca Market Data
+  candles; it cannot be combined with `--snapshot`, and neither option is
+  accepted alone.
+- Coinbase symbols must classify as crypto pairs. Alpaca symbols must classify
+  as bare equity tickers. Duplicates, malformed symbols, wrong asset classes,
+  and cross-list overlap are rejected before either provider is dispatched.
+- Both configured requests share one `as_of` and `--lookback`. Coinbase keeps
+  the selected granularity; Alpaca is fixed to completed `ONE_DAY` bars and
+  `https://data.alpaca.markets`. The cycle parser exposes no Alpaca base-URL
+  override, generic HTTP client, account client, or order client.
+- Configured Coinbase and Alpaca reads are all-or-nothing. Busy-instrument
+  top-ups remain per-symbol and non-fatal: crypto routes to Coinbase, while
+  equity routes to Alpaca only when mixed mode is enabled.
+- The combined evidence source is
+  `composite[<coinbase-source>;<alpaca-source>]`, with deterministic crypto-then-equity
+  series order. `MarketSnapshot` revalidates duplicate-series and look-ahead
+  invariants after composition.
+- The mixed route is dormant: repository Stage 1/2 scripts and default
+  universes remain Coinbase-only until a separate credential-gated smoke
+  receipt and operational change are approved.
 
 ### `ideas execute-paper`
 
