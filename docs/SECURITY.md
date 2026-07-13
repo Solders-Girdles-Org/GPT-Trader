@@ -10,6 +10,10 @@ This document outlines the security controls and operational guidance for GPT-Tr
 
 - Credentials and authentication live under `src/gpt_trader/features/brokerages/coinbase/`
   (`auth.py`, `credentials.py`) and use JWT-based CDP keys.
+- Robinhood Crypto observation credentials live under
+  `src/gpt_trader/features/brokerages/robinhood/crypto/README.md` and use Ed25519. The
+  adapter is structurally GET-only even though the provider credential may
+  retain trade authority.
 - Secrets management is handled by `src/gpt_trader/security/secrets_manager.py`, which
   supports HashiCorp Vault and an encrypted local file fallback at
   `path_registry.USER_SECRETS_DIR` (`~/.gpt_trader/secrets` by default).
@@ -30,6 +34,16 @@ Advanced Trade / CDP JWT:
 
 Legacy keys (Exchange keys and the retired `COINBASE_API_KEY_NAME` /
 `COINBASE_PRIVATE_KEY` env vars) are not accepted; use CDP JWT credentials above.
+
+### Robinhood Crypto observation credentials
+
+- `ROBINHOOD_CRYPTO_API_KEY`
+- `ROBINHOOD_CRYPTO_PRIVATE_KEY` (base64-encoded 32-byte Ed25519 private key)
+- `ROBINHOOD_CRYPTO_EXPECTED_ACCOUNT_NUMBER` (non-secret expected identity)
+
+These values enable only the typed observation and non-binding estimate adapter
+documented in [Robinhood Integration](ROBINHOOD.md). They do not register an
+execution broker or authorize order placement/cancellation.
 
 ### Secrets and encryption
 

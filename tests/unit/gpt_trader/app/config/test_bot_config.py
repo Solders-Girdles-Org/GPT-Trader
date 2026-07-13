@@ -109,6 +109,18 @@ class TestCoinbaseAccountIdentityEnvParsing:
         assert config.coinbase_expected_account_uuids == []
 
 
+class TestRobinhoodCryptoAccountIdentityEnvParsing:
+    def test_expected_account_loads_from_env(self, clean_env: pytest.MonkeyPatch) -> None:
+        clean_env.setenv("ROBINHOOD_CRYPTO_EXPECTED_ACCOUNT_NUMBER", " account-123 ")
+
+        config = BotConfig.from_env()
+
+        assert config.robinhood_crypto_expected_account_number == "account-123"
+
+    def test_expected_account_defaults_unset(self, clean_env: pytest.MonkeyPatch) -> None:
+        assert BotConfig.from_env().robinhood_crypto_expected_account_number is None
+
+
 class TestReduceOnlyModeEnvParsing:
     """Test reduce_only_mode env variable parsing."""
 

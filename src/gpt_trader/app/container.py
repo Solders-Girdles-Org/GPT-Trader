@@ -38,6 +38,9 @@ if TYPE_CHECKING:
     from gpt_trader.features.brokerages.coinbase.read_preview_access import (
         CoinbaseReadPreviewAccess,
     )
+    from gpt_trader.features.brokerages.robinhood.crypto.read_preview_access import (
+        RobinhoodCryptoReadPreviewAccess,
+    )
     from gpt_trader.features.live_trade.bot import TradingBot
     from gpt_trader.features.live_trade.execution.validation import ValidationFailureTracker
     from gpt_trader.features.live_trade.risk.manager import LiveRiskManager
@@ -68,6 +71,9 @@ class ApplicationContainer:
         coinbase_read_preview_access_factory: (
             Callable[[BotConfig], CoinbaseReadPreviewAccess] | None
         ) = None,
+        robinhood_crypto_read_preview_access_factory: (
+            Callable[[BotConfig], RobinhoodCryptoReadPreviewAccess] | None
+        ) = None,
     ):
         self.config = config
         if coinbase_read_preview_access_factory is None:
@@ -77,6 +83,17 @@ class ApplicationContainer:
 
             coinbase_read_preview_access_factory = CoinbaseReadPreviewAccess.from_config
         self._coinbase_read_preview_access_factory = coinbase_read_preview_access_factory
+        if robinhood_crypto_read_preview_access_factory is None:
+            from gpt_trader.features.brokerages.robinhood.crypto.read_preview_access import (
+                RobinhoodCryptoReadPreviewAccess,
+            )
+
+            robinhood_crypto_read_preview_access_factory = (
+                RobinhoodCryptoReadPreviewAccess.from_config
+            )
+        self._robinhood_crypto_read_preview_access_factory = (
+            robinhood_crypto_read_preview_access_factory
+        )
         # Stage 2 derivation seam (default ON): resolve the active RiskBudget
         # version once at startup so the shorts gate and the runtime risk
         # limits are seeded from the same version, before the settings
@@ -208,6 +225,12 @@ class ApplicationContainer:
         not share credentials, HTTP sessions, or identity attestations.
         """
         return self._coinbase_read_preview_access_factory(self.config)
+
+    def create_robinhood_crypto_read_preview_access(
+        self,
+    ) -> RobinhoodCryptoReadPreviewAccess:
+        """Create command-scoped, GET-only Robinhood Crypto access."""
+        return self._robinhood_crypto_read_preview_access_factory(self.config)
 
     def reset_broker(self) -> None:
         """Delegate to BrokerageContainer."""
