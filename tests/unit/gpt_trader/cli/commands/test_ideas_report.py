@@ -333,3 +333,53 @@ def test_report_is_read_only_and_does_not_seed_budget(
     assert not (root / "risk_budget.jsonl").exists()
     assert response["data"]["proposal_volume"]["idea_count"] == 1
     assert response["data"]["workflow"]["current_state_counts"]["proposed"] == 1
+
+
+def test_report_separates_open_fills_from_overdue_missing_closeouts(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An unexpired open fill is not a missing closeout; an expired one is (#1212).
+
+    FILLED is a terminal workflow state, so the old aggregation counted every
+    open paper position as a missing attribution — a scorecard-visible evidence
+    failure it could never repair while the position legitimately stayed open.
+    """
+    root = tmp_path / "ideas"
+    service = _service(root)
+    attest_account_equity(service)
+
+    def _fill(decision_id: str, expires_at: datetime) -> None:
+        idea = build_trade_idea(
+            decision_id=decision_id,
+            time_horizon=TimeHorizon(expected_hold="3-10 days", expires_at=expires_at),
+        )
+        service.propose(idea, actor_id="idea-generator-v1")
+        service.approve(decision_id, actor_id="rj", reason="Risk verified")
+        service.record_submission(decision_id, actor_id="operator", venue="manual")
+        service.record_fill(decision_id, actor_id="operator", venue="manual")
+
+    # Still inside its horizon at report time: a legitimately open position.
+    _fill("trade-report-open-fill", datetime(2035, 6, 19, 16, 0, tzinfo=UTC))
+    # Expired without a closeout: an overdue attribution the report must flag.
+    _fill("trade-report-overdue-fill", datetime(2026, 6, 13, 16, 0, tzinfo=UTC))
+
+    exit_code, response = _run_json(capsys, ["ideas", "report", *_root_args(root)])
+
+    assert exit_code == 0
+    closeouts = response["data"]["closeouts"]
+    assert closeouts["terminal_count"] == 2
+    assert closeouts["open_filled_count"] == 1
+    assert closeouts["open_filled_decision_ids"] == ["trade-report-open-fill"]
+    assert closeouts["overdue_unattributed_count"] == 1
+    assert closeouts["overdue_unattributed_decision_ids"] == ["trade-report-overdue-fill"]
+    assert closeouts["missing_closeout_count"] == 1
+    assert closeouts["missing_closeout_decision_ids"] == ["trade-report-overdue-fill"]
+    reasons = closeouts["overdue_unattributed_reasons"]
+    assert set(reasons) == {"trade-report-overdue-fill"}
+    assert "expired" in reasons["trade-report-overdue-fill"]
+    # Coverage is measured over ideas whose closure is due: the open fill is
+    # excluded from the denominator instead of reading as a coverage failure.
+    assert closeouts["with_closeout_count"] == 0
+    assert closeouts["coverage_rate_pct"] == "0.00"
+    assert closeouts["closure_due_count"] == 1

@@ -15,6 +15,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from tests.unit.gpt_trader.features.trade_ideas.conftest import (
+    attest_account_equity,
+    build_trade_idea,
+)
 
 from gpt_trader.core import Candle
 from gpt_trader.features.brokerages.mock import DeterministicBroker
@@ -27,6 +31,7 @@ from gpt_trader.features.trade_ideas import (
     Confidence,
     ConfidenceLabel,
     EntryZone,
+    ExitPlan,
     MarketSnapshot,
     MaxLoss,
     ProductType,
@@ -156,3 +161,70 @@ def manifest_rows(tmp_path: Path) -> list[dict[str, Any]]:
     if not manifest_path.exists():
         return []
     return [json.loads(line) for line in manifest_path.read_text().splitlines() if line]
+
+
+# --- shared exit-monitor builders (test_exit_monitor*.py) ---
+
+EXIT_CLOCK = datetime(2026, 6, 12, 12, 0, tzinfo=UTC)
+EXIT_QUANTITY = Decimal("0.1")
+
+
+@pytest.fixture
+def service(tmp_path: Path) -> TradeIdeaService:
+    """Frozen-clock service for the exit-monitor test modules."""
+    built = TradeIdeaService(tmp_path / "trade_ideas", now_factory=lambda: EXIT_CLOCK)
+    attest_account_equity(built)
+    return built
+
+
+def fill_exit_idea(
+    service: TradeIdeaService,
+    *,
+    decision_id: str = "trade-20260612-001",
+    instrument: str = "BTC-USD",
+    fill_evidence: tuple[str, ...] = (),
+) -> None:
+    """Propose/approve/submit/fill one long idea (zone 100-102, stop 95, target 113)."""
+    idea = build_trade_idea(
+        decision_id=decision_id,
+        instrument=instrument,
+        entry_zone=EntryZone(lower=Decimal("100"), upper=Decimal("102")),
+        invalidation="Close below 95",
+        target_exit="Take profit at 113 or exit at expiry",
+        exit_plan=ExitPlan(stop=Decimal("95"), target=Decimal("113")),
+        sizing_recommendation=SizingRecommendation(
+            quantity=EXIT_QUANTITY, notional=Decimal("10.1"), rationale="test"
+        ),
+        time_horizon=TimeHorizon(expected_hold="1-4h", expires_at=EXIT_CLOCK + timedelta(hours=4)),
+    )
+    service.propose(idea, actor_id="proposer")
+    service.approve(decision_id, actor_id="rj", reason="verified")
+    service.record_submission(decision_id, actor_id="executor", venue="coinbase")
+    service.record_fill(
+        decision_id,
+        actor_id="coinbase",
+        venue="coinbase",
+        evidence=fill_evidence,
+    )
+
+
+def exit_candle(offset_hours: int, *, high: str, low: str, close: str) -> Candle:
+    price = Decimal(close)
+    return Candle(
+        ts=EXIT_CLOCK + timedelta(hours=offset_hours),
+        open=price,
+        high=Decimal(high),
+        low=Decimal(low),
+        close=price,
+        volume=Decimal("1000"),
+    )
+
+
+def exit_snapshot(*candles: Candle, symbol: str = "BTC-USD") -> MarketSnapshot:
+    # as_of sits after the recorded candles: the monitor runs on a later turn's
+    # snapshot whose bars span the position's post-entry history.
+    return MarketSnapshot(
+        as_of=EXIT_CLOCK + timedelta(hours=3),
+        source="test:fixture",
+        series=(SymbolSeries(symbol=symbol, granularity="ONE_HOUR", candles=candles),),
+    )

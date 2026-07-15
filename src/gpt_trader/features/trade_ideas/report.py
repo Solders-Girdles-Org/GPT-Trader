@@ -12,6 +12,11 @@ from gpt_trader.features.trade_ideas.artifacts import stable_artifact_id
 from gpt_trader.features.trade_ideas.audit import ActorType, AuditAction
 from gpt_trader.features.trade_ideas.closeout import CloseoutResolution
 from gpt_trader.features.trade_ideas.eligibility import evaluate_eligibility
+from gpt_trader.features.trade_ideas.lifecycle import (
+    LifecycleClassification,
+    classify_lifecycle,
+    unattributed_reason,
+)
 from gpt_trader.features.trade_ideas.models import ConfidenceLabel
 from gpt_trader.features.trade_ideas.policy import ApprovalPolicy
 from gpt_trader.features.trade_ideas.service import TradeIdeaService, TradeIdeaView
@@ -64,7 +69,7 @@ def build_trade_idea_track_record_report(
 
     quality = _quality_summary(service, views, now=report_cutoff)
     workflow = _workflow_summary(views, event_counts, state_counts)
-    closeouts = _closeout_summary(views)
+    closeouts = _closeout_summary(views, now=report_cutoff)
     monthly = _monthly_summary(views)
     filters = _filters_payload(since=since, until=until)
 
@@ -153,9 +158,10 @@ def format_trade_idea_track_record_report(report: Mapping[str, Any]) -> str:
         "Closeouts",
         (
             f"coverage: {closeouts['with_closeout_count']}/"
-            f"{closeouts['terminal_count']} terminal "
+            f"{closeouts['closure_due_count']} closure-due "
             f"({closeouts['coverage_rate_pct']}%)"
         ),
+        f"open_filled_count: {closeouts['open_filled_count']}",
         f"missing_closeout_count: {closeouts['missing_closeout_count']}",
         _counts_line("resolutions", closeouts["resolution_counts"]),
         _counts_line("outcomes", closeouts["outcome_distribution"]),
@@ -333,11 +339,13 @@ def _quality_summary(
     }
 
 
-def _closeout_summary(views: list[TradeIdeaView]) -> dict[str, Any]:
+def _closeout_summary(views: list[TradeIdeaView], *, now: datetime) -> dict[str, Any]:
     terminal_views = [view for view in views if view.state in TERMINAL_STATES]
     terminal_count = len(terminal_views)
     resolution_counts = {resolution.value: 0 for resolution in CloseoutResolution}
-    missing_closeout_ids: list[str] = []
+    open_filled_ids: list[str] = []
+    overdue_ids: list[str] = []
+    overdue_reasons: dict[str, str] = {}
     outcome_distribution = {
         "profit": 0,
         "loss": 0,
@@ -349,9 +357,21 @@ def _closeout_summary(views: list[TradeIdeaView]) -> dict[str, Any]:
     max_loss_comparisons: list[dict[str, Any]] = []
 
     for view in terminal_views:
+        classification = classify_lifecycle(view, now=now)
+        if classification is LifecycleClassification.OPEN_FILLED:
+            # A live paper position inside its horizon: closure is not due yet,
+            # so it is neither covered nor missing (#1212).
+            open_filled_ids.append(view.idea.decision_id)
+            continue
+        if classification is LifecycleClassification.OVERDUE_UNATTRIBUTED:
+            decision_id = view.idea.decision_id
+            overdue_ids.append(decision_id)
+            reason = unattributed_reason(view, now=now)
+            if reason is not None:
+                overdue_reasons[decision_id] = reason
+            continue
         closeout = view.closeout_attribution
-        if closeout is None:
-            missing_closeout_ids.append(view.idea.decision_id)
+        if closeout is None:  # pragma: no cover - CLOSED implies attribution
             continue
 
         resolution_counts[closeout.resolution.value] += 1
@@ -388,14 +408,24 @@ def _closeout_summary(views: list[TradeIdeaView]) -> dict[str, Any]:
         Decimal("0"),
     )
 
-    with_closeout_count = terminal_count - len(missing_closeout_ids)
+    # Coverage is measured over ideas whose closure is due: open fills are
+    # excluded from the denominator instead of reading as coverage failures,
+    # while overdue fills stay visible as missing closeouts (#1212).
+    closure_due_count = terminal_count - len(open_filled_ids)
+    with_closeout_count = closure_due_count - len(overdue_ids)
     return {
         "terminal_count": terminal_count,
+        "closure_due_count": closure_due_count,
         "with_closeout_count": with_closeout_count,
-        "missing_closeout_count": len(missing_closeout_ids),
-        "missing_closeout_decision_ids": sorted(missing_closeout_ids),
-        "coverage_rate": _rate(with_closeout_count, terminal_count),
-        "coverage_rate_pct": _percentage(with_closeout_count, terminal_count),
+        "missing_closeout_count": len(overdue_ids),
+        "missing_closeout_decision_ids": sorted(overdue_ids),
+        "open_filled_count": len(open_filled_ids),
+        "open_filled_decision_ids": sorted(open_filled_ids),
+        "overdue_unattributed_count": len(overdue_ids),
+        "overdue_unattributed_decision_ids": sorted(overdue_ids),
+        "overdue_unattributed_reasons": dict(sorted(overdue_reasons.items())),
+        "coverage_rate": _rate(with_closeout_count, closure_due_count),
+        "coverage_rate_pct": _percentage(with_closeout_count, closure_due_count),
         "resolution_counts": resolution_counts,
         "outcome_distribution": outcome_distribution,
         "realized_profit_loss": {

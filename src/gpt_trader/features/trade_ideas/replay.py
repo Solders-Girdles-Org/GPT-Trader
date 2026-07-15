@@ -496,6 +496,91 @@ def score_trade_idea(
     )
 
 
+def score_filled_trade_idea(
+    idea: TradeIdea,
+    *,
+    filled_at: datetime,
+    fill_price: Decimal | None,
+    future_candles: Sequence[Candle],
+    level_extractor: LevelExtractor = extract_numeric_scoring_levels,
+    candle_duration: timedelta | None = None,
+) -> ReplayResult:
+    """Score an idea whose entry is a venue-confirmed fill, not a simulation.
+
+    ``score_trade_idea`` reconstructs entry from the planned entry zone, so a
+    confirmed fill outside that zone replays as NOT_FILLED forever (#1212).
+    Here the entry is a recorded fact: only candles at/after ``filled_at`` are
+    inspected, every candle may exit (there is no ambiguous entry bar), and the
+    entry price is the recorded fill — falling back to the plan's zone midpoint
+    (the documented sizing assumption) when no fill price was preserved.
+    """
+    if idea.time_horizon.expires_at is None:
+        raise ReplayScoringError(
+            f"Trade idea '{idea.decision_id}' has no expiry to score against",
+            field="time_horizon",
+        )
+    if idea.direction not in {TradeDirection.LONG, TradeDirection.SHORT}:
+        raise ReplayScoringError(
+            f"Trade idea '{idea.decision_id}' direction '{idea.direction.value}' is not scoreable",
+            field="direction",
+        )
+
+    levels = level_extractor(idea)
+    candles = tuple(
+        sorted(
+            (
+                candle
+                for candle in future_candles
+                if filled_at <= candle.ts
+                and _candle_ends_by_expiry(
+                    candle,
+                    expires_at=idea.time_horizon.expires_at,
+                    candle_duration=candle_duration,
+                )
+            ),
+            key=lambda candle: candle.ts,
+        )
+    )
+    if not candles:
+        return _result(
+            idea,
+            as_of=filled_at,
+            levels=levels,
+            outcome=ReplayOutcome.NO_FUTURE_DATA,
+        )
+
+    entry_price = fill_price if fill_price is not None else levels.entry_midpoint
+    for bars_evaluated, candle in enumerate(candles, start=1):
+        outcome_price = _bar_outcome_price(idea.direction, candle, levels)
+        if outcome_price is None:
+            continue
+        outcome, exit_price = outcome_price
+        return _result(
+            idea,
+            as_of=filled_at,
+            levels=levels,
+            outcome=outcome,
+            entry_time=filled_at,
+            entry_price=entry_price,
+            exit_time=candle.ts,
+            exit_price=exit_price,
+            bars_evaluated=bars_evaluated,
+        )
+
+    timeout_candle = candles[-1]
+    return _result(
+        idea,
+        as_of=filled_at,
+        levels=levels,
+        outcome=ReplayOutcome.TIMED_OUT,
+        entry_time=filled_at,
+        entry_price=entry_price,
+        exit_time=timeout_candle.ts,
+        exit_price=timeout_candle.close,
+        bars_evaluated=len(candles),
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class ReplayRunnerConfig:
     """Configuration for replaying one historical candle series."""

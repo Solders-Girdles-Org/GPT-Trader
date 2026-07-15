@@ -14,6 +14,7 @@ from gpt_trader.features.trade_ideas import (
     TradeDirection,
     TradeIdea,
     TradeIdeaService,
+    score_filled_trade_idea,
     score_trade_idea,
 )
 
@@ -343,3 +344,28 @@ def test_replay_granularity_table_agrees_with_recorder_builder() -> None:
     }
 
     assert _GRANULARITY_DURATION_BY_ALIAS == recorder_table
+
+
+def test_score_filled_trade_idea_scores_stop_before_target_in_one_bar() -> None:
+    """Fill-anchored scoring keeps the conservative same-bar ordering."""
+    result = score_filled_trade_idea(
+        scoreable_idea(),
+        filled_at=AS_OF,
+        fill_price=Decimal("104"),
+        future_candles=(candle(1, high="114", low="94", close="100"),),  # touches both
+    )
+
+    assert result.outcome is ReplayOutcome.STOP_HIT
+    assert result.exit_price == Decimal("95")
+
+
+def test_score_filled_trade_idea_with_no_in_horizon_candles_is_no_future_data() -> None:
+    """A fill at/after expiry has no scorable window; it must not fabricate."""
+    result = score_filled_trade_idea(
+        scoreable_idea(),
+        filled_at=AS_OF + timedelta(hours=4),  # == expires_at
+        fill_price=Decimal("104"),
+        future_candles=(candle(5, high="114", low="94", close="100"),),  # post-expiry
+    )
+
+    assert result.outcome is ReplayOutcome.NO_FUTURE_DATA
