@@ -1255,6 +1255,7 @@ class TradeIdeaService:
         external_order_id: str = "",
         reason: str = "Venue confirmed fill",
         actor_type: ActorType = ActorType.VENUE,
+        evidence: tuple[str, ...] = (),
     ) -> TradeIdeaView:
         venue = _validate_audit_venue(venue)
         idea = self._require_idea(decision_id)
@@ -1265,6 +1266,7 @@ class TradeIdeaService:
             actor_type=actor_type,
             actor_id=actor_id,
             reason=reason,
+            evidence=evidence,
             venue=venue,
             external_order_id=external_order_id,
         )

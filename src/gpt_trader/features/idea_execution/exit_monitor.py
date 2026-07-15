@@ -1,14 +1,19 @@
 """Resolve filled paper ideas into audited closeouts (issue #1218).
 
-A ``FILLED`` idea is an open paper position. This monitor resolves it against the
-candles recorded after entry — first touch of the plan's target or stop, or a
-mark-to-market once past expiry — and records the outcome plus realized profit
-and loss on the audit trail through ``TradeIdeaService``.
+A ``FILLED`` idea is an open paper position. This monitor resolves it against
+the candles recorded after the venue-confirmed fill — first touch of the plan's
+target or stop, or a mark-to-market once past expiry — and records the outcome
+plus realized profit and loss on the audit trail through ``TradeIdeaService``.
 
-It reuses the replay scorer (``score_trade_idea``) so a live closeout and the
-scorecard's replay evidence share one resolution methodology; the structured
-exit plan (#1218a) supplies the levels via ``exit_plan_scoring_levels``. Realized
-P&L is recorded as a dollar amount (``quantity`` times the price move), which is
+Exit evaluation is anchored on the recorded fill (#1212), not on a replay of the
+proposal: ``score_filled_trade_idea`` inspects only candles at/after the fill
+timestamp, so a confirmed fill outside the planned entry zone still resolves.
+The entry price is, in order of evidentiary strength: the fill price on the
+FILLED audit event's evidence, a caller-supplied durable fallback (e.g. the
+paper cycle's manifest execution rows, for fills recorded before evidence
+persistence existed), or the plan's zone midpoint — the documented sizing
+assumption — with the source disclosed on the closeout evidence. Realized P&L
+is recorded as a dollar amount (``quantity`` times the price move), which is
 exactly what the Stage 1->2 calibration / expectancy / benchmark-edge gates read
 (``realized_profit_loss_amount`` vs the idea's recorded ``max_loss.amount``). The
 percent field is deliberately left unset to avoid conflating a position return
@@ -34,10 +39,10 @@ from gpt_trader.core.trading_calendar import (
 )
 from gpt_trader.features.trade_ideas import (
     ActorType,
-    AuditAction,
     CloseoutAttribution,
     CloseoutResolution,
     MarketSnapshot,
+    RecordedFill,
     ReplayOutcome,
     ReplayScoringError,
     TradeDirection,
@@ -45,7 +50,8 @@ from gpt_trader.features.trade_ideas import (
     TradeIdeaState,
     TradeIdeaView,
     exit_plan_scoring_levels,
-    score_trade_idea,
+    recorded_fill_from_view,
+    score_filled_trade_idea,
 )
 
 DEFAULT_EXIT_MONITOR_ACTOR_ID = "exit-monitor"
@@ -74,8 +80,13 @@ def resolve_filled_ideas(
     now: datetime,
     actor_id: str = DEFAULT_EXIT_MONITOR_ACTOR_ID,
     session_calendar_resolver: SessionCalendarResolver | None = None,
+    fallback_fills: Mapping[str, RecordedFill] | None = None,
 ) -> ExitMonitorPass:
     """Close every resolvable filled idea against ``snapshot``'s candles.
+
+    ``fallback_fills`` supplies durable fill facts (price/quantity) by decision
+    id for fills whose FILLED audit event predates fill-evidence persistence;
+    audit-trail evidence always takes precedence.
 
     Returns the closeout attributions recorded this pass plus the ideas it
     refused to resolve because their market session is closed at ``now``
@@ -84,8 +95,8 @@ def resolve_filled_ideas(
     ``FILLED`` — loudly, with the skip on the pass record — and resolves at
     the next open against that turn's own candles. Ideas that merely cannot
     be resolved yet (no candles for the instrument, no size, no exit levels,
-    entry not reached in the recorded window, or an unexpired end-of-candles)
-    are likewise left ``FILLED`` for a later turn.
+    no post-fill candles, or an unexpired end-of-candles) are likewise left
+    ``FILLED`` for a later turn.
     """
     resolver = session_calendar_resolver or get_calendar_for_instrument
     candles_by_instrument = {
@@ -107,6 +118,7 @@ def resolve_filled_ideas(
             now=now,
             service=service,
             actor_id=actor_id,
+            fallback_fill=(fallback_fills or {}).get(view.idea.decision_id),
         )
         if attribution is not None:
             recorded.append(attribution)
@@ -161,19 +173,28 @@ def _resolve_one(
     now: datetime,
     service: TradeIdeaService,
     actor_id: str,
+    fallback_fill: RecordedFill | None = None,
 ) -> CloseoutAttribution | None:
     idea = view.idea
     candles = candles_by_instrument.get(idea.instrument.casefold())
-    quantity = idea.sizing_recommendation.quantity
     expires_at = idea.time_horizon.expires_at
-    proposed_at = _proposed_at(view)
-    if not candles or quantity is None or expires_at is None or proposed_at is None:
+    recorded_fill = recorded_fill_from_view(view)
+    if not candles or expires_at is None or recorded_fill is None:
+        return None
+    filled_at = recorded_fill.filled_at
+    if filled_at is None:
+        return None
+
+    fill_price, entry_price_source = _fill_price_and_source(recorded_fill, fallback_fill)
+    quantity = _fill_quantity(view, recorded_fill, fallback_fill)
+    if quantity is None:
         return None
 
     try:
-        result = score_trade_idea(
+        result = score_filled_trade_idea(
             idea,
-            as_of=proposed_at,
+            filled_at=filled_at,
+            fill_price=fill_price,
             future_candles=candles,
             level_extractor=exit_plan_scoring_levels,
         )
@@ -182,7 +203,7 @@ def _resolve_one(
 
     resolution = _OUTCOME_TO_RESOLUTION.get(result.outcome)
     if resolution is None:
-        return None  # NOT_FILLED / NO_FUTURE_DATA -> position not resolvable yet
+        return None  # NO_FUTURE_DATA -> no post-fill candles recorded yet
     # A timeout is only a real exit once the idea has expired; before that it is
     # merely the end of the candles recorded so far.
     if result.outcome is ReplayOutcome.TIMED_OUT and now < expires_at:
@@ -202,11 +223,37 @@ def _resolve_one(
         evidence=(
             f"exit_monitor:{result.outcome.value}",
             f"entry_price={result.entry_price}",
+            f"entry_price_source={entry_price_source}",
+            f"fill_time={filled_at.isoformat()}",
             f"exit_price={result.exit_price}",
             f"quantity={quantity}",
             f"snapshot_as_of={snapshot.as_of.isoformat()}",
         ),
     )
+
+
+def _fill_price_and_source(
+    recorded_fill: RecordedFill,
+    fallback_fill: RecordedFill | None,
+) -> tuple[Decimal | None, str]:
+    """Pick the entry price by evidentiary strength and name its source."""
+    if recorded_fill.price is not None:
+        return recorded_fill.price, "recorded_fill"
+    if fallback_fill is not None and fallback_fill.price is not None:
+        return fallback_fill.price, fallback_fill.source
+    return None, "planned_zone_midpoint"
+
+
+def _fill_quantity(
+    view: TradeIdeaView,
+    recorded_fill: RecordedFill,
+    fallback_fill: RecordedFill | None,
+) -> Decimal | None:
+    if recorded_fill.quantity is not None:
+        return recorded_fill.quantity
+    if fallback_fill is not None and fallback_fill.quantity is not None:
+        return fallback_fill.quantity
+    return view.idea.sizing_recommendation.quantity
 
 
 def _realized_amount(
@@ -219,10 +266,3 @@ def _realized_amount(
         exit_price - entry_price if direction is TradeDirection.LONG else entry_price - exit_price
     )
     return quantity * move
-
-
-def _proposed_at(view: TradeIdeaView) -> datetime | None:
-    for event in view.events:
-        if event.action is AuditAction.PROPOSED:
-            return event.timestamp
-    return None

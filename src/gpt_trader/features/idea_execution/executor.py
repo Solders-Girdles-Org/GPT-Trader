@@ -376,6 +376,7 @@ class PaperIdeaExecutor:
             price=order.avg_fill_price,
             status="filled",
             decision_id=decision_id,
+            filled_at=order.updated_at or order.submitted_at or self._now_factory(),
         )
         report = PaperFillReconciler(
             self._service,

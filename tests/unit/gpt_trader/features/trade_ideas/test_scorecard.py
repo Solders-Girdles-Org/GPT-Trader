@@ -304,3 +304,37 @@ def test_metric_path_never_references_the_cycle_manifest() -> None:
             "metrics must compute from the idea-level closeout/audit trail"
         )
     assert "idea_execution" not in Path(scorecard.__file__).read_text(encoding="utf-8")
+
+
+def test_open_fill_is_not_a_closed_idea_but_overdue_fill_is(tmp_path: Path) -> None:
+    """The gates read closed trades; an open position is not one (#1212).
+
+    FILLED is a terminal workflow state, so the window used to count a live
+    unexpired position as a closed idea (inflating depth, diluting attribution
+    coverage). An expired fill without a closeout must still count — as an
+    attribution failure — so overdue evidence stays a visible red.
+    """
+    clock = _Clock(_START)
+    service = _service(tmp_path / "ideas", clock)
+    attest_account_equity(service)
+    now = _START + timedelta(days=3)
+
+    def _fill(decision_id: str, *, expires_at: datetime) -> None:
+        clock.now = _START
+        idea = _idea(decision_id, expires_at=expires_at)
+        service.propose(idea, actor_id="proposer-a")
+        service.approve(decision_id, actor_id="rj", reason="Risk verified")
+        service.record_submission(decision_id, actor_id="operator", venue="manual")
+        service.record_fill(decision_id, actor_id="operator", venue="manual")
+
+    _fill("trade-scorecard-open", expires_at=now + timedelta(days=30))
+    _fill("trade-scorecard-overdue", expires_at=now - timedelta(days=1))
+
+    scorecard = build_stage_promotion_scorecard(service, now=now)
+
+    # Only the overdue fill is a closed idea; the open position is excluded.
+    assert scorecard["observation_window"]["closed_idea_count"] == 1
+    coverage = scorecard["gates"]["attribution_coverage"]
+    assert coverage["status"] == "fail"
+    assert coverage["measured"]["attributed_count"] == 0
+    assert coverage["measured"]["closed_idea_count"] == 1

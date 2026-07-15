@@ -240,6 +240,21 @@ data. Both outcomes are explicit in the cycle manifest and retry on a later
 turn. Crypto remains 24x7; an instrument that cannot be classified to a known
 session is refused rather than silently assigned crypto semantics.
 
+Exit evaluation is anchored on the venue-confirmed fill, not on a replay of the
+proposal. Reconciliation preserves the actual fill price, quantity, and
+timestamp as structured evidence on the FILLED audit event, and the exit
+monitor resolves the position from that fill using only post-fill candles — so
+a fill outside the planned entry zone still reaches its target, stop, or expiry
+mark. Fills recorded before evidence persistence existed are repaired from the
+cycle manifest's execution rows; when no fill price survives anywhere, the
+plan's zone midpoint (the documented sizing assumption) is used and the
+closeout evidence discloses `entry_price_source`. The report and scorecard
+classify every terminal idea through one lifecycle read model: an open fill
+inside its horizon is neither covered nor missing (`open_filled_count`), while
+a fill past `expires_at` without a closeout stays a visible failure
+(`overdue_unattributed_count`, with per-idea reasons); coverage is measured
+over closure-due ideas only.
+
 The same calendar owns paper accounting time. Realized-loss windows compare
 each closeout against its own instrument's current session date, so a Friday
 equity loss remains in the XNYS daily-loss ratchet through the weekend and

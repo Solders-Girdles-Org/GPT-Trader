@@ -25,11 +25,13 @@ from gpt_trader.features.trade_ideas import (
     EntryZone,
     ExitPlan,
     MarketSnapshot,
+    RecordedFill,
     SizingRecommendation,
     SymbolSeries,
     TimeHorizon,
     TradeIdeaService,
     TradeIdeaState,
+    encode_fill_evidence,
 )
 
 CLOCK = datetime(2026, 6, 12, 12, 0, tzinfo=UTC)
@@ -48,6 +50,7 @@ def _fill_idea(
     *,
     decision_id: str = "trade-20260612-001",
     instrument: str = "BTC-USD",
+    fill_evidence: tuple[str, ...] = (),
 ) -> None:
     idea = build_trade_idea(
         decision_id=decision_id,
@@ -64,7 +67,12 @@ def _fill_idea(
     service.propose(idea, actor_id="proposer")
     service.approve(decision_id, actor_id="rj", reason="verified")
     service.record_submission(decision_id, actor_id="executor", venue="coinbase")
-    service.record_fill(decision_id, actor_id="coinbase", venue="coinbase")
+    service.record_fill(
+        decision_id,
+        actor_id="coinbase",
+        venue="coinbase",
+        evidence=fill_evidence,
+    )
 
 
 def _candle(offset_hours: int, *, high: str, low: str, close: str) -> Candle:
@@ -236,3 +244,103 @@ def test_already_closed_and_sizeless_ideas_are_skipped(service: TradeIdeaService
 
     # A second pass is idempotent: the idea already carries a closeout.
     assert resolve_filled_ideas(service, snapshot, now=CLOCK + timedelta(hours=2)).recorded == ()
+
+
+def test_out_of_zone_fill_resolves_from_recorded_fill_price(service: TradeIdeaService) -> None:
+    """A venue-confirmed fill outside the planned entry zone must still resolve.
+
+    Historically the monitor re-simulated entry from the proposal's entry zone
+    (issue #1212): a confirmed fill whose price never revisited the zone
+    replayed as NOT_FILLED and the position stayed open indefinitely.
+    """
+    _fill_idea(
+        service,
+        fill_evidence=encode_fill_evidence(
+            price=Decimal("105"),
+            quantity=QUANTITY,
+            filled_at=CLOCK,
+        ),
+    )
+    snapshot = _snapshot(
+        _candle(0, high="106", low="103.5", close="104"),  # never touches zone 100-102
+        _candle(1, high="114", low="103", close="113"),  # hits target 113
+    )
+
+    (closeout,) = resolve_filled_ideas(service, snapshot, now=CLOCK + timedelta(hours=2)).recorded
+
+    assert closeout.resolution is CloseoutResolution.THESIS_TARGET
+    # actual fill 105, exit 113, qty 0.1 -> +0.8 (not the zone-midpoint 101 estimate)
+    assert closeout.realized_profit_loss_amount == Decimal("0.8")
+    assert "entry_price=105" in closeout.evidence
+    assert "entry_price_source=recorded_fill" in closeout.evidence
+
+
+def test_pre_fill_candles_are_not_used_for_exit_evaluation(service: TradeIdeaService) -> None:
+    """Only candles at/after the recorded fill time may resolve the position."""
+    _fill_idea(
+        service,
+        fill_evidence=encode_fill_evidence(
+            price=Decimal("105"),
+            quantity=QUANTITY,
+            filled_at=CLOCK + timedelta(hours=2),
+        ),
+    )
+    snapshot = _snapshot(
+        _candle(0, high="114", low="100", close="104"),  # pre-fill target touch: must not exit
+        _candle(2, high="108", low="103", close="106.5"),  # last post-fill mark
+    )
+
+    # Unexpired: no post-fill touch, so the position stays open.
+    assert resolve_filled_ideas(service, snapshot, now=CLOCK + timedelta(hours=3)).recorded == ()
+
+    # Expired: mark-to-market from the actual fill, using post-fill candles only.
+    (closeout,) = resolve_filled_ideas(service, snapshot, now=CLOCK + timedelta(hours=5)).recorded
+    assert closeout.resolution is CloseoutResolution.EXPIRY
+    # entry 105, mark 106.5, qty 0.1 -> +0.15
+    assert closeout.realized_profit_loss_amount == Decimal("0.15")
+
+
+def test_legacy_fill_without_price_marks_expiry_from_zone_midpoint(
+    service: TradeIdeaService,
+) -> None:
+    """A pre-evidence fill still resolves, disclosing the estimated entry price."""
+    _fill_idea(service)  # no fill evidence recorded (legacy)
+    snapshot = _snapshot(
+        _candle(0, high="106", low="103.5", close="104"),  # out of zone: old replay hangs here
+        _candle(1, high="108", low="103", close="107"),
+    )
+
+    (closeout,) = resolve_filled_ideas(service, snapshot, now=CLOCK + timedelta(hours=5)).recorded
+
+    assert closeout.resolution is CloseoutResolution.EXPIRY
+    # documented estimate: zone midpoint 101, mark 107, qty 0.1 -> +0.6
+    assert closeout.realized_profit_loss_amount == Decimal("0.6")
+    assert "entry_price_source=planned_zone_midpoint" in closeout.evidence
+
+
+def test_fallback_fill_facts_repair_legacy_fills(service: TradeIdeaService) -> None:
+    """Durable execution evidence (cycle manifest) supplies legacy fill facts."""
+    _fill_idea(service)  # legacy: no evidence on the FILLED audit event
+    snapshot = _snapshot(
+        _candle(0, high="106", low="103.5", close="104"),
+        _candle(1, high="114", low="103", close="113"),  # hits target 113
+    )
+    fallback = RecordedFill(
+        filled_at=None,
+        price=Decimal("105"),
+        quantity=QUANTITY,
+        venue="paper",
+        external_order_id="MOCK_000001",
+        source="cycle_manifest",
+    )
+
+    (closeout,) = resolve_filled_ideas(
+        service,
+        snapshot,
+        now=CLOCK + timedelta(hours=2),
+        fallback_fills={"trade-20260612-001": fallback},
+    ).recorded
+
+    assert closeout.resolution is CloseoutResolution.THESIS_TARGET
+    assert closeout.realized_profit_loss_amount == Decimal("0.8")
+    assert "entry_price_source=cycle_manifest" in closeout.evidence

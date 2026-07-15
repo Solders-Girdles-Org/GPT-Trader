@@ -22,6 +22,10 @@ from gpt_trader.features.trade_ideas.accounting import max_drawdown_from_peak_pe
 from gpt_trader.features.trade_ideas.artifacts import stable_artifact_id
 from gpt_trader.features.trade_ideas.audit import AuditAction
 from gpt_trader.features.trade_ideas.eligibility import evaluate_eligibility
+from gpt_trader.features.trade_ideas.lifecycle import (
+    LifecycleClassification,
+    classify_lifecycle,
+)
 from gpt_trader.features.trade_ideas.service import TradeIdeaService, TradeIdeaView
 from gpt_trader.features.trade_ideas.workflow import TERMINAL_STATES
 
@@ -85,7 +89,16 @@ def build_stage_promotion_scorecard(
     views = service.list_views()
 
     window_start = _observation_window_start(views, now=current_time, thresholds=tuned)
-    closed_views = [view for view in views if view.state in TERMINAL_STATES]
+    # A FILLED idea inside its horizon is an open position, not a closed trade:
+    # it must not inflate depth or dilute attribution/expectancy denominators.
+    # Overdue unattributed fills stay in — their missing closeout is exactly
+    # the evidence failure attribution_coverage exists to surface (#1212).
+    closed_views = [
+        view
+        for view in views
+        if view.state in TERMINAL_STATES
+        and classify_lifecycle(view, now=current_time) is not LifecycleClassification.OPEN_FILLED
+    ]
     closed_in_window = [
         view for view in closed_views if window_start <= _closed_at(view) <= current_time
     ]

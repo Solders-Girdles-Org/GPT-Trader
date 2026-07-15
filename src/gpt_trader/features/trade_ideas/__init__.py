@@ -65,11 +65,23 @@ from gpt_trader.features.trade_ideas.eligibility import (
     evaluate_eligibility,
     is_eligible,
 )
+from gpt_trader.features.trade_ideas.fill_evidence import (
+    FILL_SOURCE_AUDIT_EVENT,
+    FILL_SOURCE_AUDIT_EVIDENCE,
+    RecordedFill,
+    encode_fill_evidence,
+    recorded_fill_from_view,
+)
 from gpt_trader.features.trade_ideas.kernel import (
     KernelCheck,
     KernelRuntime,
     RiskKernel,
     autonomy_resolution_violations,
+)
+from gpt_trader.features.trade_ideas.lifecycle import (
+    LifecycleClassification,
+    classify_lifecycle,
+    unattributed_reason,
 )
 from gpt_trader.features.trade_ideas.models import (
     AutonomyMode,
@@ -136,6 +148,7 @@ from gpt_trader.features.trade_ideas.replay import (
     TradeIdeaReplayTournamentRunner,
     exit_plan_scoring_levels,
     extract_numeric_scoring_levels,
+    score_filled_trade_idea,
     score_trade_idea,
 )
 from gpt_trader.features.trade_ideas.report import (
@@ -238,9 +251,12 @@ __all__ = [
     "EntryZone",
     "ExitPlan",
     "EquityLedgerPoint",
+    "FILL_SOURCE_AUDIT_EVENT",
+    "FILL_SOURCE_AUDIT_EVIDENCE",
     "InvalidTransitionError",
     "KernelCheck",
     "KernelRuntime",
+    "LifecycleClassification",
     "MarketSnapshot",
     "MaxLoss",
     "MaxLossSnapshot",
@@ -261,6 +277,7 @@ __all__ = [
     "PositionSizerLike",
     "ProductType",
     "Proposer",
+    "RecordedFill",
     "ReplayOutcome",
     "REPLAY_OPTIMIZE_OBJECTIVES",
     "ReplayReport",
@@ -306,11 +323,13 @@ __all__ = [
     "autonomy_transition_violations",
     "build_trade_idea_track_record_report",
     "canonical_ticket_json",
+    "classify_lifecycle",
     "create_trade_idea_service",
     "compute_paper_accounting",
     "compute_portfolio_monitors",
     "daily_loss_breach_evidence",
     "drawdown_from_peak_breach_evidence",
+    "encode_fill_evidence",
     "equity_ledger",
     "evaluate_eligibility",
     "exit_plan_scoring_levels",
@@ -324,12 +343,15 @@ __all__ = [
     "new_event_id",
     "optimize_replay_min_history",
     "paper_fill_events_from_store_events",
+    "recorded_fill_from_view",
     "replay_optimize_baseline_candidates",
     "resolve_auto_approval_enabled",
     "resolve_autonomy",
     "resolve_ideas_root",
     "resolve_trade_idea_actor_id",
+    "score_filled_trade_idea",
     "score_trade_idea",
+    "unattributed_reason",
     "validate_paper_reconciliation_profile",
     "validate_transition",
 ]

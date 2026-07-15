@@ -9,11 +9,13 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import AbstractSet, Any
 
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.trade_ideas.audit import ActorType, AuditAction
+from gpt_trader.features.trade_ideas.fill_evidence import encode_fill_evidence
 from gpt_trader.features.trade_ideas.models import TradeDirection, is_safe_decision_id
 from gpt_trader.features.trade_ideas.service import TradeIdeaService, TradeIdeaView
 from gpt_trader.features.trade_ideas.workflow import TradeIdeaState
@@ -39,6 +41,7 @@ class PaperFillEvent:
     status: str
     decision_id: str | None = None
     source_index: int | None = None
+    filled_at: datetime | None = None
 
     @property
     def external_order_id(self) -> str:
@@ -55,6 +58,7 @@ class PaperFillEvent:
             "status": self.status,
             "decision_id": self.decision_id,
             "source_index": self.source_index,
+            "filled_at": self.filled_at.isoformat() if self.filled_at is not None else None,
         }
 
 
@@ -167,6 +171,9 @@ def paper_fill_events_from_store_events(
                 status=status,
                 decision_id=_safe_text_or_none(data.get("decision_id")),
                 source_index=index,
+                filled_at=_optional_datetime(
+                    data.get("filled_at") or data.get("timestamp") or data.get("created_at")
+                ),
             )
         )
     return tuple(fills)
@@ -327,6 +334,11 @@ class PaperFillReconciler:
                     external_order_id=event.external_order_id,
                     reason=_fill_reason(event),
                     actor_type=ActorType.VENUE,
+                    evidence=encode_fill_evidence(
+                        price=event.price,
+                        quantity=event.quantity,
+                        filled_at=event.filled_at,
+                    ),
                 )
                 recorded_fill = True
                 final_state = view.state.value
@@ -574,6 +586,16 @@ def _optional_decimal(value: Any) -> Decimal | None:
     except (InvalidOperation, ValueError):
         return None
     return parsed if parsed.is_finite() else None
+
+
+def _optional_datetime(value: Any) -> datetime | None:
+    text = _text(value)
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
 
 
 def _safe_text_or_none(value: Any) -> str | None:

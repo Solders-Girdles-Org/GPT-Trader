@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -259,3 +261,45 @@ def test_live_profiles_are_rejected_for_paper_reconciliation() -> None:
 
     with pytest.raises(PaperFillProfileError):
         validate_paper_reconciliation_profile("prod")
+
+
+def test_apply_records_actual_fill_evidence_on_filled_event(tmp_path: Path) -> None:
+    """Reconciliation must preserve the venue-confirmed fill facts (#1212).
+
+    The fill price/quantity/time were historically dropped, forcing exit
+    monitoring to reconstruct entry from the proposal's planned entry zone.
+    """
+    service = _service(tmp_path / "ideas")
+    decision_id = _approved_idea(service)
+    event = replace(
+        _fill_event(client_order_id=decision_id),
+        filled_at=datetime(2026, 6, 12, 10, 30, tzinfo=UTC),
+    )
+
+    report = PaperFillReconciler(service, actor_id="paper-reconciler").reconcile_fills(
+        [event],
+        apply=True,
+    )
+
+    assert report.recorded_count == 1
+    filled_event = service.get(decision_id).events[-1]
+    assert filled_event.action is AuditAction.FILLED
+    assert filled_event.evidence == (
+        "fill_price=60750",
+        "fill_quantity=0.1",
+        "fill_time=2026-06-12T10:30:00+00:00",
+    )
+
+
+def test_apply_records_fill_evidence_without_fill_time(tmp_path: Path) -> None:
+    """Store-event fills carry no timestamp; price/quantity must still land."""
+    service = _service(tmp_path / "ideas")
+    decision_id = _approved_idea(service)
+
+    PaperFillReconciler(service, actor_id="paper-reconciler").reconcile_fills(
+        [_fill_event(client_order_id=decision_id)],
+        apply=True,
+    )
+
+    filled_event = service.get(decision_id).events[-1]
+    assert filled_event.evidence == ("fill_price=60750", "fill_quantity=0.1")
