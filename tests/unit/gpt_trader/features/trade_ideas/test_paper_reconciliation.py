@@ -303,3 +303,51 @@ def test_apply_records_fill_evidence_without_fill_time(tmp_path: Path) -> None:
 
     filled_event = service.get(decision_id).events[-1]
     assert filled_event.evidence == ("fill_price=60750", "fill_quantity=0.1")
+
+
+def test_store_event_timestamp_fallback_skips_malformed_candidates(tmp_path: Path) -> None:
+    """A garbage filled_at must not mask a valid timestamp on the same event."""
+    from gpt_trader.features.trade_ideas import paper_fill_events_from_store_events
+
+    (event,) = paper_fill_events_from_store_events(
+        [
+            {
+                "type": "trade",
+                "data": {
+                    "order_id": "MOCK_000004",
+                    "symbol": "BTC-USD",
+                    "side": "buy",
+                    "quantity": "0.1",
+                    "price": "60750",
+                    "status": "filled",
+                    "filled_at": "not-a-timestamp",
+                    "timestamp": "2026-06-12T10:30:00+00:00",
+                },
+            }
+        ]
+    )
+
+    assert event.filled_at == datetime(2026, 6, 12, 10, 30, tzinfo=UTC)
+
+
+def test_store_event_naive_timestamp_is_coerced_to_utc(tmp_path: Path) -> None:
+    from gpt_trader.features.trade_ideas import paper_fill_events_from_store_events
+
+    (event,) = paper_fill_events_from_store_events(
+        [
+            {
+                "type": "trade",
+                "data": {
+                    "order_id": "MOCK_000005",
+                    "symbol": "BTC-USD",
+                    "side": "buy",
+                    "quantity": "0.1",
+                    "price": "60750",
+                    "status": "filled",
+                    "timestamp": "2026-06-12T10:30:00",
+                },
+            }
+        ]
+    )
+
+    assert event.filled_at == datetime(2026, 6, 12, 10, 30, tzinfo=UTC)

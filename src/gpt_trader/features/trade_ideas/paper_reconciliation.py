@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import AbstractSet, Any
 
@@ -171,9 +171,7 @@ def paper_fill_events_from_store_events(
                 status=status,
                 decision_id=_safe_text_or_none(data.get("decision_id")),
                 source_index=index,
-                filled_at=_optional_datetime(
-                    data.get("filled_at") or data.get("timestamp") or data.get("created_at")
-                ),
+                filled_at=_first_datetime(data, ("filled_at", "timestamp", "created_at")),
             )
         )
     return tuple(fills)
@@ -588,14 +586,24 @@ def _optional_decimal(value: Any) -> Decimal | None:
     return parsed if parsed.is_finite() else None
 
 
-def _optional_datetime(value: Any) -> datetime | None:
-    text = _text(value)
-    if not text:
-        return None
-    try:
-        return datetime.fromisoformat(text)
-    except ValueError:
-        return None
+def _first_datetime(data: Mapping[str, Any], keys: tuple[str, ...]) -> datetime | None:
+    """Parse the first candidate key that yields a timestamp.
+
+    Each key is tried in turn — a present-but-malformed ``filled_at`` must not
+    mask a valid ``timestamp`` on the same event. Naive values are coerced to
+    UTC: paper/mock runtime timestamps are UTC by construction, and a naive
+    anchor would later raise against tz-aware candle timestamps.
+    """
+    for key in keys:
+        text = _text(data.get(key))
+        if not text:
+            continue
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            continue
+        return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+    return None
 
 
 def _safe_text_or_none(value: Any) -> str | None:

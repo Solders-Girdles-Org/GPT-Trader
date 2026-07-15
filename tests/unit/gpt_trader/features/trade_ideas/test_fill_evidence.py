@@ -108,3 +108,41 @@ def test_recorded_fill_is_none_for_unfilled_ideas(tmp_path: Path) -> None:
     decision_id = _submitted_idea(service)
 
     assert recorded_fill_from_view(service.get(decision_id)) is None
+
+
+def test_encode_coerces_naive_fill_time_to_utc() -> None:
+    """A naive timestamp must never reach tz-aware candle comparisons."""
+    evidence = encode_fill_evidence(
+        price=None,
+        quantity=None,
+        filled_at=datetime(2026, 6, 12, 10, 30),  # naive
+    )
+
+    assert evidence == ("fill_time=2026-06-12T10:30:00+00:00",)
+
+
+def test_corrupt_evidence_values_are_reported_not_silently_absent(tmp_path: Path) -> None:
+    """Destroyed evidence is distinguishable from evidence that never existed."""
+    service = _service(tmp_path / "ideas")
+    decision_id = _submitted_idea(service, external_order_id="MOCK_000009")
+    service.record_fill(
+        decision_id,
+        actor_id="paper-fill-reconciler",
+        venue="paper",
+        external_order_id="MOCK_000009",
+        evidence=(
+            "fill_price=12.3.4",  # unparseable
+            "fill_quantity=NaN",  # non-finite
+            "fill_time=2026-06-12T10:30:00",  # naive: rejected as corrupt
+        ),
+    )
+    view = service.get(decision_id)
+
+    recorded = recorded_fill_from_view(view)
+
+    assert recorded is not None
+    assert recorded.price is None
+    assert recorded.quantity is None
+    assert recorded.filled_at == view.events[-1].timestamp  # anchor falls back
+    assert recorded.source == "audit_evidence"
+    assert recorded.corrupt_keys == ("fill_price", "fill_quantity", "fill_time")

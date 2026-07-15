@@ -59,5 +59,6 @@ def unattributed_reason(view: TradeIdeaView, *, now: datetime) -> str | None:
         return "filled idea has no expiry, so exit monitoring cannot resolve it"
     return (
         f"filled idea expired {expires_at.isoformat()} without a closeout; "
-        "awaiting exit-monitor resolution against post-fill candles"
+        "the exit monitor records its blocking cause per turn as "
+        "exit_monitor_unresolved on the cycle manifest"
     )

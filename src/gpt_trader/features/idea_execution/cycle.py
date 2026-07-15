@@ -225,6 +225,7 @@ class PaperCycleResult:
     report_summary: dict[str, Any] = field(default_factory=dict)
     session_gate: tuple[dict[str, Any], ...] = ()
     exit_monitor_skipped_closed_sessions: tuple[dict[str, str], ...] = ()
+    exit_monitor_unresolved: tuple[dict[str, str], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -240,6 +241,7 @@ class PaperCycleResult:
             "exit_monitor_skipped_closed_sessions": [
                 dict(skip) for skip in self.exit_monitor_skipped_closed_sessions
             ],
+            "exit_monitor_unresolved": [dict(entry) for entry in self.exit_monitor_unresolved],
             "proposers": [turn.to_dict() for turn in self.proposer_turns],
             "execution": self.execution.to_dict(),
             "queue": self.queue,
@@ -396,19 +398,23 @@ class PaperCycleRunner:
         # P&L lands on the trail — the evidence the Stage 1->2 calibration /
         # expectancy / benchmark gates read (issue #1218). Runs before the report
         # so the fresh closeouts are reflected in this turn's artifact.
+        fallback_fills, manifest_unreadable_lines = self._legacy_fill_facts()
+        if manifest_unreadable_lines:
+            row["legacy_fill_manifest_unreadable_lines"] = manifest_unreadable_lines
         exit_monitor_pass = resolve_filled_ideas(
             self._service,
             snapshot,
             now=self._now_factory(),
             actor_id=self._actor_id,
             session_calendar_resolver=self._session_calendar_resolver,
-            fallback_fills=self._legacy_fill_facts(),
+            fallback_fills=fallback_fills,
         )
         resolved_decision_ids = tuple(record.decision_id for record in exit_monitor_pass.recorded)
         row["resolved_decision_ids"] = list(resolved_decision_ids)
         row["exit_monitor_skipped_closed_sessions"] = list(
             exit_monitor_pass.skipped_closed_sessions
         )
+        row["exit_monitor_unresolved"] = list(exit_monitor_pass.unresolved)
 
         report = build_trade_idea_track_record_report(self._service, now=self._now_factory())
         (run_dir / "report.json").write_text(
@@ -442,6 +448,7 @@ class PaperCycleRunner:
             report_summary=report_summary,
             session_gate=session_gate,
             exit_monitor_skipped_closed_sessions=exit_monitor_pass.skipped_closed_sessions,
+            exit_monitor_unresolved=exit_monitor_pass.unresolved,
         )
 
     def _session_decision(self, instrument: str, moment: datetime) -> dict[str, Any]:
@@ -668,7 +675,7 @@ class PaperCycleRunner:
             "granularities": sorted({series.granularity for series in snapshot.series}),
         }
 
-    def _legacy_fill_facts(self) -> dict[str, RecordedFill]:
+    def _legacy_fill_facts(self) -> tuple[dict[str, RecordedFill], int]:
         """Recover fill facts from manifest execution rows for pre-evidence fills.
 
         Fills recorded before fill-evidence persistence (#1212) carry no price
@@ -676,6 +683,11 @@ class PaperCycleRunner:
         this cycle's own manifest rows. Read them back only while such an open
         legacy fill exists; audit-trail evidence always takes precedence in the
         exit monitor, so this cost disappears once the legacy fills close.
+
+        Also returns the count of unreadable manifest lines (e.g. a partial
+        write from a killed turn) so the current turn's row can surface the
+        evidence loss instead of silently degrading to the zone-midpoint
+        estimate.
         """
         needs_fallback = False
         for view in self._service.list_views(TradeIdeaState.FILLED):
@@ -686,12 +698,13 @@ class PaperCycleRunner:
                 needs_fallback = True
                 break
         if not needs_fallback:
-            return {}
+            return {}, 0
 
         manifest_path = self._cycle_root / "manifest.jsonl"
         if not manifest_path.exists():
-            return {}
+            return {}, 0
         facts: dict[str, RecordedFill] = {}
+        unreadable_lines = 0
         with manifest_path.open("r", encoding="utf-8") as manifest_file:
             for line in manifest_file:
                 line = line.strip()
@@ -700,6 +713,7 @@ class PaperCycleRunner:
                 try:
                     row = json.loads(line)
                 except json.JSONDecodeError:
+                    unreadable_lines += 1
                     continue
                 execution = row.get("execution")
                 if not isinstance(execution, dict):
@@ -714,7 +728,7 @@ class PaperCycleRunner:
                     if fact is not None:
                         # First write wins: the original execution row is the fill.
                         facts.setdefault(entry["decision_id"], fact)
-        return facts
+        return facts, unreadable_lines
 
     def _append_manifest_row(self, row: dict[str, Any]) -> None:
         manifest_path = self._cycle_root / "manifest.jsonl"

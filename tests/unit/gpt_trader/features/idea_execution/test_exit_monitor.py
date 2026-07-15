@@ -3,98 +3,39 @@
 Each test fills an idea with a known ExitPlan, then drives the snapshot's candles
 so the position hits its target, hits its stop, sits open, or expires — and pins
 the recorded closeout resolution and the dollar realized P&L the Stage 1->2 gates
-read (``realized_profit_loss_amount`` = quantity x price move).
+read (``realized_profit_loss_amount`` = quantity x price move). Exit evaluation
+is anchored on the recorded fill (#1212); shared builders live in conftest.py.
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from pathlib import Path
 
-import pytest
-from tests.unit.gpt_trader.features.trade_ideas.conftest import (
-    attest_account_equity,
-    build_trade_idea,
+from tests.unit.gpt_trader.features.idea_execution.conftest import (
+    EXIT_CLOCK as CLOCK,
+)
+from tests.unit.gpt_trader.features.idea_execution.conftest import (
+    EXIT_QUANTITY as QUANTITY,
+)
+from tests.unit.gpt_trader.features.idea_execution.conftest import (
+    exit_candle as _candle,
+)
+from tests.unit.gpt_trader.features.idea_execution.conftest import (
+    exit_snapshot as _snapshot,
+)
+from tests.unit.gpt_trader.features.idea_execution.conftest import (
+    fill_exit_idea as _fill_idea,
 )
 
-from gpt_trader.core import Candle
 from gpt_trader.features.idea_execution import resolve_filled_ideas
 from gpt_trader.features.trade_ideas import (
     CloseoutResolution,
-    EntryZone,
-    ExitPlan,
-    MarketSnapshot,
     RecordedFill,
-    SizingRecommendation,
-    SymbolSeries,
-    TimeHorizon,
     TradeIdeaService,
     TradeIdeaState,
     encode_fill_evidence,
 )
-
-CLOCK = datetime(2026, 6, 12, 12, 0, tzinfo=UTC)
-QUANTITY = Decimal("0.1")
-
-
-@pytest.fixture
-def service(tmp_path: Path) -> TradeIdeaService:
-    built = TradeIdeaService(tmp_path / "trade_ideas", now_factory=lambda: CLOCK)
-    attest_account_equity(built)
-    return built
-
-
-def _fill_idea(
-    service: TradeIdeaService,
-    *,
-    decision_id: str = "trade-20260612-001",
-    instrument: str = "BTC-USD",
-    fill_evidence: tuple[str, ...] = (),
-) -> None:
-    idea = build_trade_idea(
-        decision_id=decision_id,
-        instrument=instrument,
-        entry_zone=EntryZone(lower=Decimal("100"), upper=Decimal("102")),
-        invalidation="Close below 95",
-        target_exit="Take profit at 113 or exit at expiry",
-        exit_plan=ExitPlan(stop=Decimal("95"), target=Decimal("113")),
-        sizing_recommendation=SizingRecommendation(
-            quantity=QUANTITY, notional=Decimal("10.1"), rationale="test"
-        ),
-        time_horizon=TimeHorizon(expected_hold="1-4h", expires_at=CLOCK + timedelta(hours=4)),
-    )
-    service.propose(idea, actor_id="proposer")
-    service.approve(decision_id, actor_id="rj", reason="verified")
-    service.record_submission(decision_id, actor_id="executor", venue="coinbase")
-    service.record_fill(
-        decision_id,
-        actor_id="coinbase",
-        venue="coinbase",
-        evidence=fill_evidence,
-    )
-
-
-def _candle(offset_hours: int, *, high: str, low: str, close: str) -> Candle:
-    price = Decimal(close)
-    return Candle(
-        ts=CLOCK + timedelta(hours=offset_hours),
-        open=price,
-        high=Decimal(high),
-        low=Decimal(low),
-        close=price,
-        volume=Decimal("1000"),
-    )
-
-
-def _snapshot(*candles: Candle, symbol: str = "BTC-USD") -> MarketSnapshot:
-    # as_of sits after the recorded candles: the monitor runs on a later turn's
-    # snapshot whose bars span the position's post-entry history.
-    return MarketSnapshot(
-        as_of=CLOCK + timedelta(hours=3),
-        source="test:fixture",
-        series=(SymbolSeries(symbol=symbol, granularity="ONE_HOUR", candles=candles),),
-    )
 
 
 def test_target_hit_records_thesis_target_with_positive_pnl(service: TradeIdeaService) -> None:

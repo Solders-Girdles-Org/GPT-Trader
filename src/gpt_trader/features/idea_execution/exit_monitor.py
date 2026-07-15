@@ -67,10 +67,18 @@ _OUTCOME_TO_RESOLUTION: dict[ReplayOutcome, CloseoutResolution] = {
 
 @dataclass(frozen=True, slots=True)
 class ExitMonitorPass:
-    """One exit-monitor pass: closeouts recorded plus session skips left open."""
+    """One exit-monitor pass: closeouts recorded plus positions left open loudly.
+
+    ``unresolved`` carries the concrete blocking cause for every position the
+    pass could not close even though closure is owed: permanent defects
+    (unscoreable exit levels, no recorded quantity, no expiry) always, and
+    missing-data conditions (no candles, no post-fill window) once the idea has
+    expired. A position quietly waiting inside its horizon is not unresolved.
+    """
 
     recorded: tuple[CloseoutAttribution, ...]
     skipped_closed_sessions: tuple[dict[str, str], ...] = ()
+    unresolved: tuple[dict[str, str], ...] = ()
 
 
 def resolve_filled_ideas(
@@ -104,6 +112,7 @@ def resolve_filled_ideas(
     }
     recorded: list[CloseoutAttribution] = []
     skipped_closed: list[dict[str, str]] = []
+    unresolved: list[dict[str, str]] = []
     for view in service.list_views(TradeIdeaState.FILLED):
         if view.closeout_attribution is not None:
             continue
@@ -111,7 +120,7 @@ def resolve_filled_ideas(
         if closed_skip is not None:
             skipped_closed.append(closed_skip)
             continue
-        attribution = _resolve_one(
+        attribution, unresolved_reason = _resolve_one(
             view,
             candles_by_instrument,
             snapshot=snapshot,
@@ -122,9 +131,18 @@ def resolve_filled_ideas(
         )
         if attribution is not None:
             recorded.append(attribution)
+        elif unresolved_reason is not None:
+            unresolved.append(
+                {
+                    "decision_id": view.idea.decision_id,
+                    "instrument": view.idea.instrument,
+                    "reason": unresolved_reason,
+                }
+            )
     return ExitMonitorPass(
         recorded=tuple(recorded),
         skipped_closed_sessions=tuple(skipped_closed),
+        unresolved=tuple(unresolved),
     )
 
 
@@ -174,21 +192,33 @@ def _resolve_one(
     service: TradeIdeaService,
     actor_id: str,
     fallback_fill: RecordedFill | None = None,
-) -> CloseoutAttribution | None:
+) -> tuple[CloseoutAttribution | None, str | None]:
+    """Close one position, or explain why it stays open.
+
+    Returns ``(attribution, None)`` when a closeout was recorded,
+    ``(None, reason)`` when closure is owed but blocked (see
+    ``ExitMonitorPass.unresolved``), and ``(None, None)`` for a position
+    legitimately waiting inside its horizon.
+    """
     idea = view.idea
     candles = candles_by_instrument.get(idea.instrument.casefold())
     expires_at = idea.time_horizon.expires_at
     recorded_fill = recorded_fill_from_view(view)
-    if not candles or expires_at is None or recorded_fill is None:
-        return None
+    if recorded_fill is None or recorded_fill.filled_at is None:
+        # A FILLED view always carries a FILLED event with a timestamp; this
+        # branch guards data that bypassed the service.
+        return None, "no recorded fill event to anchor exit evaluation"
+    if expires_at is None:
+        return None, "idea has no expiry, so exit monitoring can never time it out"
+    expired = now >= expires_at
+    if not candles:
+        return None, ("no candles for instrument in this turn's snapshot" if expired else None)
     filled_at = recorded_fill.filled_at
-    if filled_at is None:
-        return None
 
     fill_price, entry_price_source = _fill_price_and_source(recorded_fill, fallback_fill)
     quantity = _fill_quantity(view, recorded_fill, fallback_fill)
     if quantity is None:
-        return None
+        return None, "no fill or sizing quantity recorded; realized P&L cannot be computed"
 
     try:
         result = score_filled_trade_idea(
@@ -198,38 +228,46 @@ def _resolve_one(
             future_candles=candles,
             level_extractor=exit_plan_scoring_levels,
         )
-    except ReplayScoringError:
-        return None
+    except ReplayScoringError as error:
+        return None, f"exit levels not scoreable: {error}"
 
     resolution = _OUTCOME_TO_RESOLUTION.get(result.outcome)
     if resolution is None:
-        return None  # NO_FUTURE_DATA -> no post-fill candles recorded yet
+        # NO_FUTURE_DATA: no candles at/after the fill (and before expiry).
+        return None, (
+            "no post-fill candles inside the idea's horizon are available" if expired else None
+        )
     # A timeout is only a real exit once the idea has expired; before that it is
     # merely the end of the candles recorded so far.
-    if result.outcome is ReplayOutcome.TIMED_OUT and now < expires_at:
-        return None
+    if result.outcome is ReplayOutcome.TIMED_OUT and not expired:
+        return None, None
     if result.entry_price is None or result.exit_price is None:
-        return None
+        return None, "scoring produced no entry/exit price"
 
     realized_amount = _realized_amount(
         idea.direction, quantity, result.entry_price, result.exit_price
     )
-    return service.record_closeout_attribution(
+    evidence = [
+        f"exit_monitor:{result.outcome.value}",
+        f"entry_price={result.entry_price}",
+        f"entry_price_source={entry_price_source}",
+        f"fill_time={filled_at.isoformat()}",
+        f"exit_price={result.exit_price}",
+        f"quantity={quantity}",
+        f"snapshot_as_of={snapshot.as_of.isoformat()}",
+    ]
+    if recorded_fill.corrupt_keys:
+        # Destroyed evidence must never masquerade as a by-design estimate.
+        evidence.append(f"evidence_corrupt_keys={','.join(recorded_fill.corrupt_keys)}")
+    attribution = service.record_closeout_attribution(
         idea.decision_id,
         actor_id=actor_id,
         actor_type=ActorType.SYSTEM,
         resolution=resolution,
         realized_profit_loss_amount=realized_amount,
-        evidence=(
-            f"exit_monitor:{result.outcome.value}",
-            f"entry_price={result.entry_price}",
-            f"entry_price_source={entry_price_source}",
-            f"fill_time={filled_at.isoformat()}",
-            f"exit_price={result.exit_price}",
-            f"quantity={quantity}",
-            f"snapshot_as_of={snapshot.as_of.isoformat()}",
-        ),
+        evidence=tuple(evidence),
     )
+    return attribution, None
 
 
 def _fill_price_and_source(
