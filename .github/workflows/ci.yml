@@ -157,7 +157,7 @@ jobs:
 
       - name: Install uv
         # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
         with:
           enable-cache: true
 
@@ -197,7 +197,7 @@ jobs:
 
       - name: Install uv
         # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
         with:
           enable-cache: true
 
@@ -266,7 +266,7 @@ jobs:
 
       - name: Install uv
         # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
         with:
           enable-cache: true
 
@@ -294,7 +294,7 @@ jobs:
 
       - name: Install uv
         # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
         with:
           enable-cache: true
 
@@ -375,7 +375,7 @@ jobs:
       - name: Install uv
         if: needs.changes.result == 'success' && needs.changes.outputs.agent_artifacts == 'true'
         # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
         with:
           enable-cache: true
 
@@ -460,7 +460,7 @@ jobs:
 
       - name: Install uv
         # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
         with:
           enable-cache: true
 
@@ -506,7 +506,7 @@ jobs:
 
       - name: Install uv
         # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
         with:
           enable-cache: true
 
@@ -556,7 +556,7 @@ jobs:
 
       - name: Install uv
         # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
         with:
           enable-cache: true
 
@@ -589,7 +589,7 @@ jobs:
 
       - name: Install uv
         # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
         with:
           enable-cache: true
 
@@ -620,7 +620,7 @@ jobs:
 
       - name: Install uv
         # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
         with:
           enable-cache: true
 
@@ -651,7 +651,7 @@ jobs:
 
       - name: Install uv
         # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
         with:
           enable-cache: true
 
@@ -699,7 +699,7 @@ jobs:
 
       - name: Install uv
         # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
         if: needs.changes.result == 'success' && needs.changes.outputs.dependencies == 'true'
         with:
           enable-cache: true
