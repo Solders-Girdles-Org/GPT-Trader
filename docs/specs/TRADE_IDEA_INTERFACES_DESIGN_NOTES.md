@@ -64,26 +64,41 @@ default-off gate. This is the runtime half of the Stage 1 human-approved loop in
 [docs/STATUS.md](../STATUS.md) and the seam is documented in
 [docs/architecture/SEAMS.md](../architecture/SEAMS.md).
 
-**What the gate does.** When enabled, `TradingEngine._handle_decision`
-(`features/live_trade/engines/strategy.py`) routes every strategy decision into
-`TradeIdeaService.propose()` through the adapter and returns before submitting an
-order. Supported buy shapes become `proposed` trade ideas; hold, sell, and close
-shapes are logged and produce no idea. The per-cycle order audit — which
-reconciles broker state and can cancel drifted orders — is also skipped while the
-gate is on (`cycle_runner._fetch_positions_and_audit`), so proposal-only mode
-never mutates broker state: it reads market data but places and cancels nothing.
-With the gate off (the default) decisions flow to direct execution exactly as
-before.
+**Decision routing contract.** `TradingEngine._init_strategy_proposal_bridge`
+selects collaborators at construction; `decision_flow.handle_decision` uses the
+adapter's presence to choose one route. These flags select the strategy route;
+they are not a global order-submission lock.
 
-**How to enable it.** The gate is off by default and must be set explicitly:
+| Proposal flag | Paper-lane flag | Strategy decision destination |
+| --- | --- | --- |
+| Off | Off | BUY/SELL use `_validate_and_place_order`; CLOSE uses `submit_order` with the position quantity and reduce-only requested; HOLD does nothing. |
+| On | Off | Supported spot BUY becomes a proposed idea for review; SELL/CLOSE/HOLD and unsupported products are skipped. |
+| Either | On | Same adapter mapping, with executable sizing; each proposed idea continues through `EventDrivenIdeaLane` to gated paper execution. |
 
-- Config field: `BotConfig.strategy_signal_proposals_enabled` (default `False`).
-- Profile YAML: `execution.strategy_signal_proposals: true` under a profile in
-  `config/profiles/`.
+The flags are `BotConfig.strategy_signal_proposals_enabled` (profile YAML
+`execution.strategy_signal_proposals`) and
+`BotConfig.event_driven_paper_lane_enabled` (`execution.event_driven_paper_lane`).
+Both config defaults are false; selected profiles may opt in (see
+[shipped state](../STATUS.md)). Changing flags on an existing engine is not a
+supported route-switch operation; construction wires the collaborators.
 
-Enabling it puts the bot in proposal-only mode: it drafts ideas for human review
-and never places orders. It is not an execution lane and does not bypass
-`ApprovalPolicy`; every proposed idea still requires the human approve step.
+The adapter route always returns before direct strategy execution, including
+mapping, persistence and paper-lane failures. Failures are logged; unsupported
+actions/products are logged as skipped. Successful proposals and subsequent
+paper actions persist on the idea audit trail. A failure before persistence
+leaves no idea event. SELL/CLOSE do not become direct exits under this route.
+The per-cycle order audit is also skipped when either flag is enabled
+(`cycle_runner._fetch_positions_and_audit`); this is a cycle-specific boundary.
+
+**Separate submission boundaries.** `TradingEngine.submit_order()` delegates to
+`_validate_and_place_order()` regardless of the proposal flags. Both reach the
+engine's configured broker only through the guard stack: kill switch,
+degradation, sizing/reduce-only, security, risk, mark freshness, exchange rules,
+slippage and configured preview checks. Their evidence is an order decision
+trace and order events, not a trade-idea approval trail. Callers must satisfy
+[DIRECTION's execution authorization](../DIRECTION.md#gate-before-execution-paths);
+a route flag or a passing guard is not approval. `OrderSubmitter.submit_order()`
+is a lower-level execution helper, not an alternative public safety boundary.
 
 **How to review the proposals.** Proposed ideas land in the standard trade-idea
 store (`GPT_TRADER_IDEAS_ROOT`, default `var/data/trade_ideas/`) and are reviewed
@@ -93,19 +108,37 @@ through the existing `gpt-trader ideas` CLI — `ideas list --state proposed`,
 mark/as-of source (`live-strategy:decision:...`), action, and confidence as
 evidence on the audit trail.
 
-**Event-driven paper lane (#1191, default-off).** Setting
-`execution.event_driven_paper_lane: true` (config field
-`BotConfig.event_driven_paper_lane_enabled`) implies the proposal routing above
-and additionally carries each proposed idea through the risk kernel in the same
-engine cycle: system approval, an execution-time autonomy re-check, then paper
-execution against a lane-owned paper broker
-(`features/idea_execution/event_lane.py`). The lane honors the same operator
-env gates as the batch Stage 2 mechanisms — without
-`GPT_TRADER_IDEAS_AUTO_APPROVAL` ideas stay `proposed` for review, and without
-`GPT_TRADER_IDEAS_AUTO_EXECUTION` approved ideas await the batch executor.
-Kernel denials are audited on the idea trail (`auto_approval_skipped` /
-`auto_execution_skipped`). Paper only: live order submission stays gated by
-[docs/DIRECTION.md](../DIRECTION.md).
+**Paper admission and recovery.** `EventDrivenIdeaLane` uses a lane-owned
+`DeterministicBroker`, never the engine broker. Without
+`GPT_TRADER_IDEAS_AUTO_APPROVAL`, the idea stays proposed. With approval enabled,
+the risk kernel must admit system approval; without
+`GPT_TRADER_IDEAS_AUTO_EXECUTION`, an approved idea waits. The lane audits kernel
+precheck denials (`auto_approval_skipped` / `auto_execution_skipped`) and rechecks
+execution authority. Approval is revalidated in the committing transaction;
+a policy change after the preview returns an `approval_denied` outcome without
+an approval or denial event from that failed commit, before any execution.
+State storage and migration boundaries are owned by
+[Transactional trade state](../decisions/transactional-trade-state.md).
+`PaperIdeaExecutor.execute()` independently reloads
+the persisted idea and checks APPROVED state, approval actor, current system
+execution authority, hard expiry, open session and executable sizing. Human
+approval uses the human lane; system approval requires the recognized actor,
+execution opt-in and current bounded autonomy, including ratchet checks.
+
+The executor accepts only exact allowed paper/mock broker types. It records
+SUBMITTED before calling that broker and records fills through
+`PaperFillReconciler`. On restart, SUBMITTED/FILLED ideas cannot be executed
+again; an interrupted submission needs reconciliation, not blind retry. A
+previously approved idea can be refused after expiry or a system-authority
+change, even if an earlier admission check passed. The event lane's broker is
+in-memory; idea audit persistence does not imply broker-position recovery.
+
+Executable boundary evidence lives in
+`tests/unit/gpt_trader/features/live_trade/engines/test_strategy_routing_contract.py`,
+`tests/unit/gpt_trader/features/idea_execution/test_executor_restart_contract.py`
+and the existing `test_event_lane.py` / `test_executor_session_guard.py` suites.
+These mocked checks establish routing and refusal behavior, not operating
+liveness or the [measured promotion gates](../DIRECTION.md#graduation).
 
 ## Promotion scorecard and replay evidence (#1193)
 

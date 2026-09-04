@@ -141,9 +141,8 @@ async def handle_decision(
     position_state: dict[str, Any] | None,
 ) -> None:
     if engine._strategy_proposal_adapter is not None:
-        # Proposal-only mode: map the decision into a human-review trade idea
-        # and return before any broker interaction. This is the sole action
-        # taken while the gate is on — no orders are submitted for any action.
+        # The adapter route may continue into the gated paper lane. Always
+        # return before direct engine execution, including on route failure.
         _propose_strategy_decision(
             engine,
             symbol=symbol,
@@ -339,12 +338,12 @@ def _propose_strategy_decision(
 ) -> None:
     """Route a live decision into the approval-gated trade-idea workflow.
 
-    Proposal-only: this creates an auditable ``proposed`` trade idea through
-    ``TradeIdeaService.propose()`` and never calls the broker, approves an
-    idea, or submits an order. Only supported buy shapes map to an idea;
-    other actions (sell/close/hold) are recorded as skipped. Any mapping or
-    persistence failure is logged and swallowed so a broken proposal never
-    falls through to direct execution while the gate is on.
+    Create an auditable proposal, then process the optional gated paper lane.
+
+    Only supported buy shapes map to an idea; other actions are logged as
+    skipped. Mapping, persistence and lane failures never fall through to
+    direct engine execution. The adapter itself only proposes; the lane owns
+    any subsequent approval and paper execution.
     """
     assert engine._strategy_proposal_adapter is not None
     assert engine._trade_idea_service is not None
