@@ -9,57 +9,43 @@ An agent-developed, Coinbase-oriented trading system on a staged path toward bou
 
 ## Overview
 
-GPT-Trader is a command-line trading system for Coinbase, built as vertical feature slices behind a dependency-injection container, with layered risk management and an auditable trade-idea pipeline. The name reflects how AI assistants collaborate in developing this codebase; current trading strategies use technical analysis and rule-based decisioning, not LLM inference.
+GPT-Trader helps RJ inspect trading decisions through a reproducible local
+experiment: recorded bars become explained decisions, bounded simulated fills,
+and reconciled cash/positions. The current benchmark is fixed-rule arithmetic;
+AI assists development but does not generate its market decisions.
 
-**Direction.** The long-term goal is an autonomous trading entity — a bot that observes markets, does its own research, and manages funds inside machine-enforced limits. The accepted path is staged autonomy: AI-produced trade-idea records with human approval first, then bounded autonomy per strategy envelope once the risk, audit, and kill-switch rails have a track record. [Direction](docs/DIRECTION.md) owns the staged ladder and the execution gates; [Project Status](docs/STATUS.md) tracks where we actually are.
-
-**Scope.** Coinbase only, spot plus CFM futures. INTX perpetuals were removed, not frozen (see the [removal decision](docs/decisions/intx-default-derivatives-venue.md)). Existing live profiles and broker-specific paths are implementation assets, not approval to trade: expanding or enabling them requires explicit readiness, venue-capability, approval, and audit gates.
-
-### Trading Capabilities
-
-| Mode | Status | Description |
-|------|--------|-------------|
-| **Spot trading** | Implemented | Coinbase spot paths exist; use only with explicit profile and readiness gates |
-| **CFM futures** | Implemented, gated | US-regulated futures paths exist; require account, product, and risk-gate verification |
-| **INTX perpetuals** | Removed | `COINBASE_ENABLE_INTX_PERPS` survives only as a deprecated alias; semantics live in [Deprecations](docs/DEPRECATIONS.md) |
-| **AI-assisted execution** | Staged rollout | Human-approved trade ideas first; bounded autonomy is the accepted destination ([current state](docs/STATUS.md)) |
+[Direction](docs/DIRECTION.md) owns the longer-term autonomous destination and
+external execution gates. [Status](docs/STATUS.md) points to shipped behavior;
+the [paper guide](docs/paper_trading.md#recorded-experiment) explains operation
+and limitations. Retained broker/runtime assets are distinct from the local
+product and from approval to trade.
 
 ## Quick Start
 
 ```bash
-# Install dependencies
-uv sync
-
-# Run the trading bot
-uv run gpt-trader run --profile dev
+uv sync --all-extras --dev
+uv run gpt-trader experiment run --input config/experiments/ma-crossover-demo.json --root runtime_data/experiments/demo
+uv run gpt-trader experiment inspect --root runtime_data/experiments/demo
 ```
+
+The fixture is explicitly synthetic. It demonstrates mechanics and accounting,
+not historical market performance. No credentials or running service are needed.
+Resume a stopped run with the same `run --root ...` command, omitting `--input`;
+use `--max-bars 55` to pause after a bounded number of additional observations.
+Ctrl-C stops the foreground process; a new process resumes the last commit.
 
 ## Configuration
 
-### Trading Profiles
+The experiment input carries the recorded source and simulation settings; its
+journal binds a copy of them to the installed source. Changing either starts a
+new experiment. See [the input and fill contract](docs/paper_trading.md#recorded-experiment).
 
-| Profile | Broker | Use Case |
-|---------|--------|----------|
-| `dev` | DeterministicBroker (mock) | Local development |
-| `paper` | Mock execution | Real-data strategy checks without exchange orders |
-| `observe` | Real data, execution blocked | Read-only market/account observation |
-| `canary` | Real (tiny limits) | Production validation only after readiness review |
-| `prod` | Real | Legacy live profile; do not treat as approval for unrestricted production use |
-
-### Environment Setup
-
-Copy the template and configure your credentials:
-
-```bash
-cp config/environments/.env.template .env
-```
-
-Key variables:
-- `COINBASE_CREDENTIALS_FILE`, or `COINBASE_CDP_API_KEY` + `COINBASE_CDP_PRIVATE_KEY` — JWT credentials
-- `--profile` (CLI flag) — trading profile (`dev`/`paper`/`observe`/`canary`/`prod`)
-
-See [config/environments/.env.template](config/environments/.env.template) for minimal operator defaults and
-[var/agents/configuration/environment_variables.md](var/agents/configuration/environment_variables.md) for the full, code-derived inventory.
+Retained runtime profiles and credential configuration serve separately
+selected, authorized operations. Their source is
+[profile configuration](config/profiles/) and the
+[environment template](config/environments/.env.template), with the
+[generated inventory](var/agents/configuration/environment_variables.md).
+Do not set up credentials or start a runtime to try the local product.
 
 ## Project Structure
 
@@ -69,6 +55,7 @@ src/gpt_trader/
 ├── backtesting/          # Backtesting framework (canonical)
 ├── cli/                  # Command-line interface
 ├── features/             # Vertical feature slices
+│   ├── experiment/       # Recorded-data decision and accounting loop
 │   ├── brokerages/       # Coinbase REST/WebSocket integration
 │   ├── data/             # Market data acquisition
 │   ├── intelligence/     # Strategy intelligence, Kelly sizing

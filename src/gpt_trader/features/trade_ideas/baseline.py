@@ -2,9 +2,9 @@
 
 Long-only moving-average crossover on point-in-time snapshots. Intentionally
 simple and fully deterministic — identical snapshots produce byte-identical
-records (stable decision ids and record hashes), which makes replay scoring
-and proposer-vs-proposer comparison trivial. If a future LLM proposer cannot
-outscore this on the same replayed snapshots, it is noise.
+records (stable decision ids and record hashes), which makes deterministic
+proposer comparison reproducible. Model-generated proposals require separate
+forward-only evaluation; replaying this benchmark does not establish model skill.
 """
 
 from __future__ import annotations

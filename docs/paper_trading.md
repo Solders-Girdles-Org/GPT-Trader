@@ -9,16 +9,95 @@ consolidates:
   - PAPER_TRADING_SESSION_REPORT.md
 ---
 
-## Overview
+## Recorded experiment
 
-Paper trading provides risk-free simulation of trading strategies using simulated execution.
-The `paper` and `dev` profiles run with `mock_broker` enabled, so no real orders
-or API calls are made.
+Start here to understand what GPT-Trader does. The recorded experiment runs a
+single hourly USD spot series through the existing deterministic crossover
+benchmark, bounded next-bar simulated execution, full cash/position settlement,
+and independently reconciled reporting. It needs no API key or service.
+
+```bash
+uv run gpt-trader experiment run --input config/experiments/ma-crossover-demo.json --root runtime_data/experiments/demo --max-bars 55
+uv run gpt-trader experiment inspect --root runtime_data/experiments/demo --format json
+uv run gpt-trader experiment run --root runtime_data/experiments/demo
+```
+
+`run` creates or resumes only the explicitly named experiment directory.
+`inspect` is read-only. Repeat a complete run to verify idempotence; it adds no
+fills. Ctrl-C rolls back any unfinished observation. `--max-bars` processes at
+most that many *additional* bars, making pause/resume deliberate. Nothing stays
+running after the foreground command returns. There is no schedule to disable.
+
+The JSON report includes data/settings identity, progress, pending plan, open
+position, decision counts, cash, marked equity, fees, realized/unrealized net
+P&L and independent reconciliation. An open position at input end stays open
+and marked; completion means the supplied data was processed, not that every
+position was liquidated. No signal, denied entry and drawdown halt are valid
+outcomes. The SQLite journal retains the full proposal, each bar, fills and
+state; it is the evidence source, not a second report database.
+
+### Input and execution contract
+
+Use [the fixture](../config/experiments/ma-crossover-demo.json) as the format
+example. It is artificial data, clearly labelled. For recorded market data,
+retain the original dataset and source provenance; create a separate input
+copy. Each input has `schema_version: 1`, `source`, `symbol`, `recorded_at`,
+`candles`, and optional `settings`. Hourly bars contain `ts`, `open`, `high`,
+`low`, `close`, `volume`; timestamps require timezones. Supply 1–2000 ordered,
+contiguous, finite valid bars. All must have closed by `recorded_at`, with the
+last bar less than one hour old at that recorded cutoff. This is historical
+freshness against the input clock, never a claim about live market freshness.
+
+[Typed settings](../src/gpt_trader/features/experiment/inputs.py) own defaults and
+validation: starting cash, estimated risk fraction, exposure fraction,
+peak drawdown fraction, fees/slippage in basis points and quantity increment.
+They configure an isolated simulation; they do not amend any operating budget.
+No environment/profile override is read. The source digest and input/settings
+bind the journal. A changed implementation or dataset requires a new directory;
+retain the pinned source revision with old evidence to inspect/resume it.
+
+The benchmark sees completed history and writes a structured entry/stop/target.
+Its emitted size is advisory. On the next open, the simulator checks the entry
+zone and recalculates executable size from current cash, exposure, and estimated
+stop loss including round-trip costs; quantity rounds down. Entry and exit fees
+are charged once in USD, and slippage changes each fill price once. If a bar
+hits both stop and target, stop wins. Stop gaps execute at the worse opening
+price. Fill timestamps encode this simulation ordering, not actual fills.
+
+Risk limits bound admission; gaps can exceed an estimated stop loss. Peak
+relative drawdown halts new entries persistently while existing exits remain
+managed. This is one long spot position with full fills: no shorting, leverage,
+liquidity/queue model, exchange rejection, partial fills, funding or taxes.
+Proposer price precision is a modelling assumption, not evidence of historical
+venue rules. Costs/assumptions, manufactured fixtures and surviving open positions
+must accompany any comparison. Neither the demo nor green tests establish alpha,
+model skill, profitable trading or operational readiness.
+
+### Verification and next use
+
+```bash
+uv run pytest tests/unit/gpt_trader/features/experiment -q
+uv run local-ci
+```
+
+The [product decision](decisions/recorded-experiment-product.md) owns what was
+reused/replaced and the next evidence milestone. Agents handle local engineering,
+simulation, review and gated integration. RJ chooses actual operational risk,
+external access and cutover. No human approval is fabricated for local steps.
+
+## Retained paper-runtime procedures
+
+The remaining sections describe compatibility workflows, not the default local
+product. Their profiles may collect external market data even though fills are
+simulated; effective configuration must be inspected before selecting them.
+The [pending cutover](decisions/paper-runtime-cutover.md) records the observed
+failing hourly job and the consequential choice. Do not run these procedures
+merely to test the recorded experiment or wording changes.
 
 ## Implementation
 
 ### Deterministic Broker
-The default paper workflow uses the deterministic broker stub:
+The retained mock execution workflow uses the deterministic broker stub:
 - Deterministic fills for testing
 - Synthetic quotes (no external market data calls)
 - Immediate execution with predictable order IDs

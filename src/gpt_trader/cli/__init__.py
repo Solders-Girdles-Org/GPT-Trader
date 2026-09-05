@@ -29,6 +29,7 @@ from gpt_trader.cli.commands import (  # noqa: E402
     coinbase,
     console,
     controls,
+    experiment,
     ideas,
     optimize,
     orders,
@@ -44,6 +45,7 @@ from . import services as _cli_services  # noqa: E402, F401
 from .response import CliErrorCode, CliResponse, RawCliOutput, format_response  # noqa: E402
 
 COMMAND_NAMES = {
+    "experiment",
     "run",
     "account",
     "broker-check",
@@ -194,6 +196,7 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     run.register(subparsers)
+    experiment.register(subparsers)
     record.register(subparsers)
     account.register(subparsers)
     coinbase.register(subparsers)
