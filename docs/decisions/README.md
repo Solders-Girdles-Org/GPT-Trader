@@ -68,6 +68,7 @@ markers. Regenerating cannot drift from the files.
 <!-- BEGIN GENERATED DECISION INDEX -->
 | Date | Decision | Status |
 |------|----------|--------|
+| 2026-09-04 | [Transactional trade state](transactional-trade-state.md) | accepted |
 | 2026-07-12 | [Real-account capability — authenticated reads and non-binding previews only](real-account-read-preview-capability.md) | accepted |
 | 2026-07-08 | [Alpha layer builds toward agentic reasoning — TA demoted to benchmark and feature inputs](adopt-agentic-alpha-direction.md) | accepted |
 | 2026-07-04 | [Adopt an event-driven execution topology — rails as kernel, not workflow](adopt-event-driven-execution-topology.md) | accepted |

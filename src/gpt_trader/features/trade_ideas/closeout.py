@@ -14,10 +14,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
+from io import StringIO
 from pathlib import Path
 from typing import Any
 
 from gpt_trader.errors import ValidationError
+from gpt_trader.features.trade_ideas.persistence import StateRepository
 
 
 class CloseoutResolution(str, Enum):
@@ -217,14 +219,21 @@ class CloseoutAttribution:
 class CloseoutAttributionLog:
     """Append-only JSONL log keyed by decision id."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, repository: StateRepository | None = None) -> None:
         self._path = path
+        self._repository = repository or StateRepository(path.parent)
 
     @property
     def path(self) -> Path:
         return self._path
 
     def append(self, record: CloseoutAttribution) -> CloseoutAttribution:
+        if self._repository.active:
+            with self._repository.transaction(write=True):
+                return self._append(record)
+        return self._append(record)
+
+    def _append(self, record: CloseoutAttribution) -> CloseoutAttribution:
         existing = self.get(record.decision_id)
         if existing is not None:
             if existing == record:
@@ -237,6 +246,9 @@ class CloseoutAttributionLog:
 
         self._path.parent.mkdir(parents=True, exist_ok=True)
         line = json.dumps(record.to_dict(), sort_keys=True, separators=(",", ":"))
+        if self._repository.active:
+            self._repository.append(self._path.name, line)
+            return record
         with self._path.open("a", encoding="utf-8") as handle:
             handle.write(line + "\n")
         return record
@@ -247,11 +259,15 @@ class CloseoutAttributionLog:
         return None
 
     def read_records(self, decision_id: str | None = None) -> list[CloseoutAttribution]:
-        if not self._path.exists():
+        if not self._repository.active and not self._path.exists():
             return []
         records: list[CloseoutAttribution] = []
         seen: dict[str, CloseoutAttribution] = {}
-        with self._path.open("r", encoding="utf-8") as handle:
+        with (
+            StringIO("\n".join(self._repository.lines(self._path.name)))
+            if self._repository.active
+            else self._path.open("r", encoding="utf-8")
+        ) as handle:
             for line_number, raw_line in enumerate(handle, start=1):
                 line = raw_line.strip()
                 if not line:

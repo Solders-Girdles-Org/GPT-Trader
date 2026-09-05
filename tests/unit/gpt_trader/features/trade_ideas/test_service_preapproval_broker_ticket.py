@@ -121,10 +121,10 @@ def test_resubmit_rejects_preapproval_broker_ticket_before_mutation(
     idea = build_trade_idea()
     service.propose(idea, actor_id="idea-generator-v1")
     service.request_changes(idea.decision_id, actor_id="rj", reason="Tighten the invalidation")
-    latest_path = root / "records" / idea.decision_id / "latest.json"
-    audit_path = root / "audit.jsonl"
-    original_latest = latest_path.read_text(encoding="utf-8")
-    original_audit = audit_path.read_text(encoding="utf-8")
+    root / "records" / idea.decision_id / "latest.json"
+    root / "audit.jsonl"
+    original_latest = service._store.load_latest(idea.decision_id).to_dict()
+    original_audit = [event.to_dict() for event in service.audit_log.read_events()]
     revised = build_trade_idea(
         invalidation="Daily close below 59000",
         broker_ticket=broker_ticket,
@@ -135,8 +135,8 @@ def test_resubmit_rejects_preapproval_broker_ticket_before_mutation(
 
     assert exc_info.value.context["field"] == "broker_ticket"
     assert exc_info.value.context["value"] == broker_ticket.to_dict()
-    assert latest_path.read_text(encoding="utf-8") == original_latest
-    assert audit_path.read_text(encoding="utf-8") == original_audit
+    assert service._store.load_latest(idea.decision_id).to_dict() == original_latest
+    assert [event.to_dict() for event in service.audit_log.read_events()] == original_audit
     view = service.get(idea.decision_id)
     assert view.state is TradeIdeaState.NEEDS_CHANGES
     assert view.idea.broker_ticket == BrokerTicket()

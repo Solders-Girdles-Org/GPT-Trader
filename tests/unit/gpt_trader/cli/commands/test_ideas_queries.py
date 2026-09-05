@@ -19,6 +19,7 @@ from gpt_trader.features.trade_ideas import (
     TradeIdeaService,
     TradeIdeaStore,
 )
+from tests.support.trade_state_files import corrupt_state_file, read_state_file
 from tests.unit.gpt_trader.cli.commands.conftest import attest_ideas_root
 from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
 
@@ -234,7 +235,7 @@ def test_show_rejects_absolute_decision_id_before_store_lookup(
     outside_dir = tmp_path / "outside-record"
     outside_dir.mkdir()
     payload = _idea_payload(decision_id="trade-20350612-outside")
-    (outside_dir / "latest.json").write_text(json.dumps(payload), encoding="utf-8")
+    corrupt_state_file(outside_dir / "latest.json", json.dumps(payload))
 
     exit_code, response = _run_json(
         capsys,
@@ -279,7 +280,7 @@ def test_list_show_and_reject_refuse_unaudited_interrupted_resubmit(
     service.propose(idea, actor_id="idea-generator-v1")
     service.request_changes(idea.decision_id, actor_id="rj", reason="Need tighter risk")
     audit_path = root / "audit.jsonl"
-    original_audit = audit_path.read_text(encoding="utf-8")
+    original_audit = read_state_file(audit_path)
     unaudited_revision = build_trade_idea(
         decision_id=idea.decision_id,
         invalidation="Daily close below 59000",
@@ -306,7 +307,7 @@ def test_list_show_and_reject_refuse_unaudited_interrupted_resubmit(
         assert response["errors"][0]["code"] == CliErrorCode.OPERATION_FAILED.value
         assert "does not match latest audit record_hash" in response["errors"][0]["message"]
 
-    assert audit_path.read_text(encoding="utf-8") == original_audit
+    assert read_state_file(audit_path) == original_audit
 
 
 def test_audit_verify_ok_and_tampered_line_failure(
@@ -320,8 +321,7 @@ def test_audit_verify_ok_and_tampered_line_failure(
     assert exit_code == 0
     assert response["data"]["event_count"] == 1
 
-    with (root / "audit.jsonl").open("a", encoding="utf-8") as handle:
-        handle.write("not-json\n")
+    corrupt_state_file(root / "audit.jsonl", read_state_file(root / "audit.jsonl") + "not-json\n")
 
     exit_code, response = _run_json(capsys, ["ideas", "audit", "verify", *_root_args(root)])
     assert exit_code == 1

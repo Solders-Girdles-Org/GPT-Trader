@@ -10,6 +10,7 @@ import pytest
 from gpt_trader import cli
 from gpt_trader.cli.response import CliErrorCode
 from gpt_trader.features.trade_ideas import TimeHorizon
+from tests.support.trade_state_files import corrupt_state_file, read_state_file, state_file_exists
 from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
 
 
@@ -84,8 +85,8 @@ def test_propose_duplicate_rejects_without_overwriting_record_or_audit(
     decision_dir = root / "records" / payload["decision_id"]
     latest_path = decision_dir / "latest.json"
     audit_path = root / "audit.jsonl"
-    original_latest = latest_path.read_text(encoding="utf-8")
-    original_audit = audit_path.read_text(encoding="utf-8")
+    original_latest = read_state_file(latest_path)
+    original_audit = read_state_file(audit_path)
     original_hash = first_response["data"]["record_hash"]
     revised_payload = {**payload, "thesis": "Edited thesis that must not persist"}
     revised_path = _write_idea(tmp_path / "duplicate-edited.json", revised_payload)
@@ -106,10 +107,10 @@ def test_propose_duplicate_rejects_without_overwriting_record_or_audit(
     assert exit_code == 1
     assert response["errors"][0]["code"] == CliErrorCode.VALIDATION_ERROR.value
     assert response["errors"][0]["details"]["field"] == "decision_id"
-    assert latest_path.read_text(encoding="utf-8") == original_latest
-    assert audit_path.read_text(encoding="utf-8") == original_audit
-    assert json.loads(latest_path.read_text(encoding="utf-8"))["thesis"] == payload["thesis"]
-    audit_lines = audit_path.read_text(encoding="utf-8").splitlines()
+    assert read_state_file(latest_path) == original_latest
+    assert read_state_file(audit_path) == original_audit
+    assert json.loads(read_state_file(latest_path))["thesis"] == payload["thesis"]
+    audit_lines = read_state_file(audit_path).splitlines()
     assert len(audit_lines) == 1
     assert json.loads(audit_lines[0])["record_hash"] == original_hash
 
@@ -139,7 +140,7 @@ def test_propose_timezone_naive_expiry_returns_invalid_argument_without_writes(
     assert response["errors"][0]["code"] == CliErrorCode.INVALID_ARGUMENT.value
     assert "time_horizon.expires_at must include a timezone" in response["errors"][0]["message"]
     assert not (root / "records" / payload["decision_id"]).exists()
-    assert not (root / "audit.jsonl").exists()
+    assert not state_file_exists(root / "audit.jsonl")
 
 
 def test_propose_rejects_path_traversal_decision_id_without_writes(
@@ -168,7 +169,7 @@ def test_propose_rejects_path_traversal_decision_id_without_writes(
     assert "decision_id must be a safe path segment" in response["errors"][0]["message"]
     assert not (root / "records").exists()
     assert not (tmp_path / "outside-record").exists()
-    assert not (root / "audit.jsonl").exists()
+    assert not state_file_exists(root / "audit.jsonl")
 
 
 def test_propose_rejects_non_finite_preview_numbers_without_writes(
@@ -196,7 +197,7 @@ def test_propose_rejects_non_finite_preview_numbers_without_writes(
     assert response["errors"][0]["code"] == CliErrorCode.INVALID_ARGUMENT.value
     assert "max_loss.percent_of_account must be finite" in response["errors"][0]["message"]
     assert not (root / "records" / payload["decision_id"]).exists()
-    assert not (root / "audit.jsonl").exists()
+    assert not state_file_exists(root / "audit.jsonl")
 
 
 def test_propose_malformed_nested_section_returns_invalid_argument_without_writes(
@@ -224,7 +225,7 @@ def test_propose_malformed_nested_section_returns_invalid_argument_without_write
     assert response["errors"][0]["code"] == CliErrorCode.INVALID_ARGUMENT.value
     assert "entry_zone must be a JSON object" in response["errors"][0]["message"]
     assert not (root / "records" / payload["decision_id"]).exists()
-    assert not (root / "audit.jsonl").exists()
+    assert not state_file_exists(root / "audit.jsonl")
 
 
 @pytest.mark.parametrize(
@@ -299,7 +300,7 @@ def test_propose_rejects_malformed_string_sequences_without_writes(
     assert response["errors"][0]["code"] == CliErrorCode.INVALID_ARGUMENT.value
     assert message in response["errors"][0]["message"]
     assert not (root / "records" / payload["decision_id"]).exists()
-    assert not (root / "audit.jsonl").exists()
+    assert not state_file_exists(root / "audit.jsonl")
 
 
 @pytest.mark.parametrize(
@@ -349,7 +350,7 @@ def test_propose_rejects_malformed_scalar_strings_without_writes(
     assert response["errors"][0]["code"] == CliErrorCode.INVALID_ARGUMENT.value
     assert message in response["errors"][0]["message"]
     assert not (root / "records" / payload["decision_id"]).exists()
-    assert not (root / "audit.jsonl").exists()
+    assert not state_file_exists(root / "audit.jsonl")
 
 
 def test_propose_preview_budget_failure_happens_before_record_or_audit_write(
@@ -357,7 +358,7 @@ def test_propose_preview_budget_failure_happens_before_record_or_audit_write(
 ) -> None:
     root = tmp_path / "ideas"
     root.mkdir()
-    (root / "risk_budget.jsonl").write_text("{malformed budget json}\n", encoding="utf-8")
+    corrupt_state_file(root / "risk_budget.jsonl", "{malformed budget json}\n")
     payload = _idea_payload(decision_id="trade-20350612-bad-budget-preview")
     path = _write_idea(tmp_path / "bad-budget-preview.json", payload)
 
@@ -375,6 +376,6 @@ def test_propose_preview_budget_failure_happens_before_record_or_audit_write(
     )
 
     assert exit_code == 1
-    assert response["errors"][0]["code"] == CliErrorCode.OPERATION_FAILED.value
+    assert response["errors"][0]["code"] == CliErrorCode.VALIDATION_ERROR.value
     assert not (root / "records" / payload["decision_id"]).exists()
-    assert not (root / "audit.jsonl").exists()
+    assert not state_file_exists(root / "audit.jsonl")

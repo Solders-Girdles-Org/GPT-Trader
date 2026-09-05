@@ -147,3 +147,18 @@ def paper_fill_event(
         status="filled",
         decision_id=decision_id,
     )
+
+
+def corrupt_closeout_rows(service: TradeIdeaService, payloads: list[dict[str, Any]]) -> None:
+    """Simulate storage corruption outside the supported append-only API."""
+    import json
+
+    with service._repository.transaction(write=True):
+        connection = service._repository.connection
+        connection.execute("DROP TRIGGER immutable_events_delete")
+        connection.execute("DELETE FROM events WHERE stream='closeout_attributions.jsonl'")
+        connection.execute(
+            "CREATE TRIGGER immutable_events_delete BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT,'append-only events'); END"
+        )
+        for payload in payloads:
+            service._repository.append("closeout_attributions.jsonl", json.dumps(payload))

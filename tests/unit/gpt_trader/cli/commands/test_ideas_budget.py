@@ -15,6 +15,7 @@ from gpt_trader.features.trade_ideas import (
     resolve_ideas_root,
     resolve_trade_idea_actor_id,
 )
+from tests.support.trade_state_files import state_file_exists
 
 
 def _run_json(capsys: pytest.CaptureFixture[str], argv: list[str]) -> tuple[int, dict[str, Any]]:
@@ -108,7 +109,7 @@ def test_budget_set_rejects_non_finite_decimal_before_budget_write(
 
     assert exc_info.value.code == 2
     assert "decimal value must be finite" in capsys.readouterr().err
-    assert not (root / "risk_budget.jsonl").exists()
+    assert not state_file_exists(root / "risk_budget.jsonl")
 
 
 @pytest.mark.parametrize(
@@ -148,7 +149,7 @@ def test_budget_set_rejects_negative_limit_flags_before_budget_write(
 
     assert exc_info.value.code == 2
     assert expected_error in capsys.readouterr().err
-    assert not (root / "risk_budget.jsonl").exists()
+    assert not state_file_exists(root / "risk_budget.jsonl")
 
 
 def test_shared_root_and_actor_resolution_helpers(

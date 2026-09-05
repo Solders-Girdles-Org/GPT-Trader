@@ -44,6 +44,7 @@ from gpt_trader.features.idea_execution.executor import (
 from gpt_trader.features.trade_ideas import (
     AUTO_APPROVAL_ENV_VAR,
     ActorType,
+    PolicyViolationError,
     TradeIdeaService,
     TradeIdeaView,
     resolve_auto_approval_enabled,
@@ -114,9 +115,9 @@ class EventDrivenIdeaLane:
     def process(self, view: TradeIdeaView, *, mark: Decimal) -> EventLaneOutcome:
         """Route one freshly proposed idea to its audited terminal stage.
 
-        Every deny is recorded on the idea's audit trail through the kernel;
-        the returned outcome is a log/telemetry summary, never the record of
-        truth.
+        Kernel denials are audited. A concurrent policy change at atomic commit
+        refuses admission and returns its violations; no execution is attempted.
+        The returned outcome is telemetry, not a replacement for state records.
         """
         idea = view.idea
         decision_id = idea.decision_id
@@ -149,16 +150,24 @@ class EventDrivenIdeaLane:
                 violations=approval_check.violations,
             )
 
-        self._service.kernel.record_approval(
-            idea,
-            approval_check,
-            actor_id=self._actor_id,
-            reason=(
-                f"{EVENT_LANE_REASON_PREFIX}zero approval-policy violations inside "
-                f"the budget envelope of risk budget version {approval_check.budget_version}"
-            ),
-            evidence=approval_check.admission_evidence(),
-        )
+        try:
+            self._service.kernel.record_approval(
+                idea,
+                approval_check,
+                actor_id=self._actor_id,
+                reason=(
+                    f"{EVENT_LANE_REASON_PREFIX}zero approval-policy violations inside "
+                    "the current budget envelope"
+                ),
+                evidence=approval_check.admission_evidence(),
+            )
+        except PolicyViolationError as error:
+            return EventLaneOutcome(
+                decision_id=decision_id,
+                stage=EventLaneStage.APPROVAL_DENIED,
+                detail="policy changed before atomic approval; idea remains proposed",
+                violations=tuple(error.violations),
+            )
 
         if not resolve_auto_execution_enabled():
             return EventLaneOutcome(

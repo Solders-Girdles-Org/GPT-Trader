@@ -11,10 +11,8 @@ from gpt_trader.features.trade_ideas import (
     ActorType,
     AutonomyMode,
     BudgetIntegrityError,
-    BudgetLogEntry,
     PolicyViolationError,
     RiskBudget,
-    RiskBudgetLog,
 )
 from gpt_trader.features.trade_ideas.service import TradeIdeaService
 
@@ -31,33 +29,16 @@ def test_budget_seeds_defaults_on_first_use(service: TradeIdeaService) -> None:
     assert service.current_budget() == DEFAULT_RISK_BUDGET
 
 
-def test_current_budget_adopts_concurrent_seed(
-    service: TradeIdeaService, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    real_append = RiskBudgetLog.append
+def test_current_budget_adopts_concurrent_seed(service: TradeIdeaService) -> None:
+    from concurrent.futures import ThreadPoolExecutor
 
-    def racing_append(self: RiskBudgetLog, entry: BudgetLogEntry) -> None:
-        # A concurrent process seeds first, so this append loses the version
-        # race under the log lock instead of duplicating version 1.
-        winner = RiskBudgetLog(self.path)
-        real_append(
-            winner,
-            BudgetLogEntry(
-                timestamp=datetime(2026, 6, 12, 10, 0, tzinfo=UTC),
-                actor_type=ActorType.SYSTEM,
-                actor_id="other-process",
-                budget=DEFAULT_RISK_BUDGET,
-            ),
-        )
-        real_append(self, entry)
-
-    monkeypatch.setattr(RiskBudgetLog, "append", racing_append)
-
-    assert service.current_budget() == DEFAULT_RISK_BUDGET
-
+    service._repository.initialize()
+    other = TradeIdeaService(service.root)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda client: client.current_budget(), [service, other]))
+    assert results[0] == results[1]
     history = service.budget_log.history()
-    assert [entry.budget.version for entry in history] == [1]
-    assert history[0].actor_id == "other-process"
+    assert len(history) == 1
 
 
 def test_budget_resolution_fails_closed_on_corrupt_log(service: TradeIdeaService) -> None:
@@ -65,8 +46,9 @@ def test_budget_resolution_fails_closed_on_corrupt_log(service: TradeIdeaService
     # resolution rather than fall back to the seeded defaults.
     service.current_budget()
     path = service.budget_log.path
-    line = path.read_text(encoding="utf-8")
-    path.write_text(line + line, encoding="utf-8")
+    with service._repository.transaction(write=True):
+        line = service._repository.lines(path.name)[0]
+        service._repository.append(path.name, line)
 
     with pytest.raises(BudgetIntegrityError):
         service.peek_budget()

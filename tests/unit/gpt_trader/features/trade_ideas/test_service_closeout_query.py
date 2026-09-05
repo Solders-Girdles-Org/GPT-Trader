@@ -6,7 +6,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
+from tests.unit.gpt_trader.features.trade_ideas.conftest import (
+    build_trade_idea,
+    corrupt_closeout_rows,
+)
 
 from gpt_trader.features.trade_ideas import (
     CloseoutAttributionIntegrityError,
@@ -46,10 +49,11 @@ def _write_closeout_payload(
     *,
     append: bool = False,
 ) -> None:
-    service.closeout_log.path.parent.mkdir(parents=True, exist_ok=True)
-    mode = "a" if append else "w"
-    with service.closeout_log.path.open(mode, encoding="utf-8") as handle:
-        handle.write(json.dumps(payload) + "\n")
+    if append:
+        with service._repository.transaction(write=True):
+            service._repository.append("closeout_attributions.jsonl", json.dumps(payload))
+    else:
+        corrupt_closeout_rows(service, [payload])
 
 
 def test_query_closeout_records_excludes_orphaned_log_records(
@@ -88,16 +92,7 @@ def test_query_closeout_records_scoped_decision_ignores_unrelated_tampered_close
     )
     tampered_payload = tampered_closeout.to_dict()
     tampered_payload["record_hash"] = "stale-record-hash"
-    service.closeout_log.path.write_text(
-        "\n".join(
-            (
-                json.dumps(healthy_closeout.to_dict()),
-                json.dumps(tampered_payload),
-            )
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    corrupt_closeout_rows(service, [healthy_closeout.to_dict(), tampered_payload])
 
     page = service.query_closeout_records(decision_id=healthy_closeout.decision_id)
 

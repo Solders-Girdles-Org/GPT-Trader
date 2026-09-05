@@ -10,6 +10,7 @@ import pytest
 from gpt_trader import cli
 from gpt_trader.cli.response import CliErrorCode
 from gpt_trader.features.trade_ideas import TimeHorizon
+from tests.support.trade_state_files import corrupt_state_file, read_state_file
 from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
 
 
@@ -99,8 +100,8 @@ def test_resubmit_malformed_nested_section_returns_invalid_argument_without_writ
     _request_changes(capsys, root, payload["decision_id"])
     latest_path = root / "records" / payload["decision_id"] / "latest.json"
     audit_path = root / "audit.jsonl"
-    original_latest = latest_path.read_text(encoding="utf-8")
-    original_audit = audit_path.read_text(encoding="utf-8")
+    original_latest = read_state_file(latest_path)
+    original_audit = read_state_file(audit_path)
     revised = {**payload, "invalidation": "Daily close below 58000"}
     revised["max_loss"] = []
     revised_path = _write_idea(tmp_path / "bad-resubmit-section.json", revised)
@@ -121,8 +122,8 @@ def test_resubmit_malformed_nested_section_returns_invalid_argument_without_writ
     assert exit_code == 1
     assert response["errors"][0]["code"] == CliErrorCode.INVALID_ARGUMENT.value
     assert "max_loss must be a JSON object" in response["errors"][0]["message"]
-    assert latest_path.read_text(encoding="utf-8") == original_latest
-    assert audit_path.read_text(encoding="utf-8") == original_audit
+    assert read_state_file(latest_path) == original_latest
+    assert read_state_file(audit_path) == original_audit
 
 
 @pytest.mark.parametrize(
@@ -178,8 +179,8 @@ def test_resubmit_rejects_malformed_string_sequences_without_writes(
     _request_changes(capsys, root, payload["decision_id"])
     latest_path = root / "records" / payload["decision_id"] / "latest.json"
     audit_path = root / "audit.jsonl"
-    original_latest = latest_path.read_text(encoding="utf-8")
-    original_audit = audit_path.read_text(encoding="utf-8")
+    original_latest = read_state_file(latest_path)
+    original_audit = read_state_file(audit_path)
     revised = {**payload, "invalidation": "Daily close below 58000"}
     if field_path == "max_loss.assumptions":
         revised["max_loss"]["assumptions"] = malformed_value
@@ -205,8 +206,8 @@ def test_resubmit_rejects_malformed_string_sequences_without_writes(
     assert exit_code == 1
     assert response["errors"][0]["code"] == CliErrorCode.INVALID_ARGUMENT.value
     assert message in response["errors"][0]["message"]
-    assert latest_path.read_text(encoding="utf-8") == original_latest
-    assert audit_path.read_text(encoding="utf-8") == original_audit
+    assert read_state_file(latest_path) == original_latest
+    assert read_state_file(audit_path) == original_audit
 
 
 @pytest.mark.parametrize(
@@ -242,8 +243,8 @@ def test_resubmit_rejects_malformed_scalar_strings_without_writes(
     _request_changes(capsys, root, payload["decision_id"])
     latest_path = root / "records" / payload["decision_id"] / "latest.json"
     audit_path = root / "audit.jsonl"
-    original_latest = latest_path.read_text(encoding="utf-8")
-    original_audit = audit_path.read_text(encoding="utf-8")
+    original_latest = read_state_file(latest_path)
+    original_audit = read_state_file(audit_path)
     revised = json.loads(json.dumps(payload))
     _set_payload_field(revised, field_path, malformed_value)
     revised_path = _write_idea(
@@ -266,8 +267,8 @@ def test_resubmit_rejects_malformed_scalar_strings_without_writes(
     assert exit_code == 1
     assert response["errors"][0]["code"] == CliErrorCode.INVALID_ARGUMENT.value
     assert message in response["errors"][0]["message"]
-    assert latest_path.read_text(encoding="utf-8") == original_latest
-    assert audit_path.read_text(encoding="utf-8") == original_audit
+    assert read_state_file(latest_path) == original_latest
+    assert read_state_file(audit_path) == original_audit
 
 
 def test_resubmit_preview_budget_failure_happens_before_record_or_audit_write(
@@ -279,9 +280,9 @@ def test_resubmit_preview_budget_failure_happens_before_record_or_audit_write(
     _request_changes(capsys, root, payload["decision_id"])
     latest_path = root / "records" / payload["decision_id"] / "latest.json"
     audit_path = root / "audit.jsonl"
-    original_latest = latest_path.read_text(encoding="utf-8")
-    original_audit = audit_path.read_text(encoding="utf-8")
-    (root / "risk_budget.jsonl").write_text("{malformed budget json}\n", encoding="utf-8")
+    original_latest = read_state_file(latest_path)
+    original_audit = read_state_file(audit_path)
+    corrupt_state_file(root / "risk_budget.jsonl", "{malformed budget json}\n")
     revised = {**payload, "invalidation": "Daily close below 58000"}
     revised_path = _write_idea(tmp_path / "bad-budget-resubmit.json", revised)
 
@@ -300,5 +301,5 @@ def test_resubmit_preview_budget_failure_happens_before_record_or_audit_write(
 
     assert exit_code == 1
     assert response["errors"][0]["code"] == CliErrorCode.OPERATION_FAILED.value
-    assert latest_path.read_text(encoding="utf-8") == original_latest
-    assert audit_path.read_text(encoding="utf-8") == original_audit
+    assert read_state_file(latest_path) == original_latest
+    assert read_state_file(audit_path) == original_audit

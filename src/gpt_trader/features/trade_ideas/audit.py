@@ -16,10 +16,12 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from io import StringIO
 from pathlib import Path
 from typing import Any
 
 from gpt_trader.errors import ValidationError
+from gpt_trader.features.trade_ideas.persistence import StateRepository
 from gpt_trader.features.trade_ideas.workflow import (
     InvalidTransitionError,
     TradeIdeaState,
@@ -130,14 +132,22 @@ class TradeIdeaAuditLog:
     event cannot silently corrupt workflow history.
     """
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, repository: StateRepository | None = None) -> None:
         self._path = path
+        self._repository = repository or StateRepository(path.parent)
 
     @property
     def path(self) -> Path:
         return self._path
 
     def append(self, event: AuditEvent) -> None:
+        if self._repository.active:
+            with self._repository.transaction(write=True):
+                self._append(event)
+        else:
+            self._append(event)
+
+    def _append(self, event: AuditEvent) -> None:
         last_state = self.current_state(event.decision_id)
         if event.before_state != last_state:
             recorded = last_state.value if last_state else "none"
@@ -153,14 +163,21 @@ class TradeIdeaAuditLog:
 
         self._path.parent.mkdir(parents=True, exist_ok=True)
         line = json.dumps(event.to_dict(), sort_keys=True, separators=(",", ":"))
+        if self._repository.active:
+            self._repository.append(self._path.name, line)
+            return
         with self._path.open("a", encoding="utf-8") as handle:
             handle.write(line + "\n")
 
     def read_events(self, decision_id: str | None = None) -> list[AuditEvent]:
-        if not self._path.exists():
+        if not self._repository.active and not self._path.exists():
             return []
         events: list[AuditEvent] = []
-        with self._path.open("r", encoding="utf-8") as handle:
+        with (
+            StringIO("\n".join(self._repository.lines(self._path.name, decision_id)))
+            if self._repository.active
+            else self._path.open("r", encoding="utf-8")
+        ) as handle:
             for line in handle:
                 line = line.strip()
                 if not line:
@@ -172,12 +189,16 @@ class TradeIdeaAuditLog:
 
     def verify(self) -> list[AuditEvent]:
         """Read the full log and verify per-decision state sequencing."""
-        if not self._path.exists():
+        if not self._repository.active and not self._path.exists():
             return []
 
         events: list[AuditEvent] = []
         states: dict[str, TradeIdeaState | None] = {}
-        with self._path.open("r", encoding="utf-8") as handle:
+        with (
+            StringIO("\n".join(self._repository.lines(self._path.name)))
+            if self._repository.active
+            else self._path.open("r", encoding="utf-8")
+        ) as handle:
             for line_number, raw_line in enumerate(handle, start=1):
                 line = raw_line.strip()
                 if not line:

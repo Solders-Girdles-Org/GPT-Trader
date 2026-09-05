@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import getpass
 import os
-import shutil
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -78,6 +77,7 @@ from gpt_trader.features.trade_ideas.closeout import (
     MaxLossSnapshot,
 )
 from gpt_trader.features.trade_ideas.kernel import (
+    KernelCheck,
     RiskKernel,
     autonomy_resolution_violations,
 )
@@ -92,6 +92,7 @@ from gpt_trader.features.trade_ideas.monitors import (
     PortfolioMonitorSnapshot,
     compute_portfolio_monitors,
 )
+from gpt_trader.features.trade_ideas.persistence import StateRepository, state_transaction
 from gpt_trader.features.trade_ideas.policy import (
     ApprovalBudgetContext,
     ApprovalPolicy,
@@ -345,11 +346,16 @@ class TradeIdeaService:
         calendar_resolver: SessionCalendarResolver = get_calendar_for_instrument,
     ) -> None:
         self._root = root
-        self._store = TradeIdeaStore(root / "records")
-        self._audit = TradeIdeaAuditLog(root / "audit.jsonl")
-        self._closeouts = CloseoutAttributionLog(root / "closeout_attributions.jsonl")
-        self._budget_log = RiskBudgetLog(root / "risk_budget.jsonl")
-        self._autonomy_log = AutonomyStateLog(root / "autonomy_state.jsonl")
+        self._repository = StateRepository(root)
+        self._store = TradeIdeaStore(root / "records", repository=self._repository)
+        self._audit = TradeIdeaAuditLog(root / "audit.jsonl", repository=self._repository)
+        self._closeouts = CloseoutAttributionLog(
+            root / "closeout_attributions.jsonl", repository=self._repository
+        )
+        self._budget_log = RiskBudgetLog(root / "risk_budget.jsonl", repository=self._repository)
+        self._autonomy_log = AutonomyStateLog(
+            root / "autonomy_state.jsonl", repository=self._repository
+        )
         self._now = now_factory
         self._calendar_resolver = calendar_resolver
         self._kernel = RiskKernel(self, now_factory=self._now)
@@ -434,10 +440,12 @@ class TradeIdeaService:
 
     # -- budget ----------------------------------------------------------
 
+    @state_transaction(write=False)
     def peek_budget(self) -> RiskBudget:
         """Return the active budget without seeding the log (read-only paths)."""
         return self._budget_log.current() or DEFAULT_RISK_BUDGET
 
+    @state_transaction(write=True)
     def current_budget(self) -> RiskBudget:
         """Return the active budget, seeding the accepted defaults on first use."""
         budget = self._budget_log.current()
@@ -463,10 +471,12 @@ class TradeIdeaService:
 
     # -- autonomy ----------------------------------------------------------
 
+    @state_transaction(write=False)
     def peek_autonomy(self) -> AutonomyResolution:
         """Resolve the active autonomy mode without seeding the log (read-only paths)."""
         return resolve_autonomy(self._autonomy_log)
 
+    @state_transaction(write=True)
     def current_autonomy(self) -> AutonomyResolution:
         """Resolve the active mode, seeding the accepted default on first use."""
         resolution = self.peek_autonomy()
@@ -499,10 +509,12 @@ class TradeIdeaService:
             source=AUTONOMY_SOURCE_LOG,
         )
 
+    @state_transaction(write=False)
     def autonomy_history(self) -> list[AutonomyStateEntry]:
         """Return the full audited autonomy-level history (raises on a broken log)."""
         return self._autonomy_log.history()
 
+    @state_transaction(write=True, commit_denial=True)
     def set_autonomy_mode(
         self,
         mode: AutonomyMode,
@@ -546,6 +558,7 @@ class TradeIdeaService:
         self._autonomy_log.append(entry)
         return entry
 
+    @state_transaction(write=True)
     def decision_autonomy(
         self,
         *,
@@ -614,10 +627,12 @@ class TradeIdeaService:
             source=AUTONOMY_SOURCE_LOG,
         )
 
+    @state_transaction(write=True)
     def resolve_execution_autonomy(self, *, now: datetime | None = None) -> AutonomyResolution:
         """Resolve autonomy at an execution decision boundary, applying the ratchet."""
         return self.decision_autonomy(now=now or self._now())
 
+    @state_transaction(write=True)
     def approval_violations(
         self,
         idea: TradeIdea,
@@ -636,6 +651,7 @@ class TradeIdeaService:
             budget=self.current_budget(),
         )
 
+    @state_transaction(write=False)
     def peek_approval_violations(
         self,
         idea: TradeIdea,
@@ -681,6 +697,7 @@ class TradeIdeaService:
             ),
         ]
 
+    @state_transaction(write=False)
     def approval_budget_context(
         self,
         *,
@@ -826,6 +843,7 @@ class TradeIdeaService:
             ),
         }
 
+    @state_transaction(write=False)
     def closeout_terminal_times(self) -> dict[str, datetime]:
         """Map audit event ids to timestamps for folding closeouts at resolution time.
 
@@ -841,6 +859,7 @@ class TradeIdeaService:
             if event.action is not AuditAction.FILLED
         }
 
+    @state_transaction(write=False)
     def paper_accounting(self) -> PaperAccountingSummary:
         """Read-only paper equity / HWM / drawdown-from-peak from the trail."""
         return compute_paper_accounting(
@@ -849,6 +868,7 @@ class TradeIdeaService:
             terminal_times=self.closeout_terminal_times(),
         )
 
+    @state_transaction(write=False)
     def equity_ledger_points(self) -> list[EquityLedgerPoint]:
         """Read-only resolved equity/peak series for windowed monitor reads."""
         return equity_ledger(
@@ -857,6 +877,7 @@ class TradeIdeaService:
             terminal_times=self.closeout_terminal_times(),
         )
 
+    @state_transaction(write=False)
     def portfolio_monitors(self, *, now: datetime | None = None) -> PortfolioMonitorSnapshot:
         """One snapshot of the continuous portfolio monitors (#1192).
 
@@ -905,6 +926,7 @@ class TradeIdeaService:
             )
         validate_transition(current_state, TradeIdeaState.PROPOSED)
 
+    @state_transaction(write=True, commit_denial=True)
     def update_budget(self, budget: RiskBudget, actor_type: ActorType, actor_id: str) -> None:
         """Enact a new budget version, subject to the autonomy-mode policy."""
         now = self._now()
@@ -934,6 +956,7 @@ class TradeIdeaService:
 
     # -- lifecycle actions -------------------------------------------------
 
+    @state_transaction(write=True)
     def propose(
         self,
         idea: TradeIdea,
@@ -955,6 +978,7 @@ class TradeIdeaService:
         )
         return self.get(idea.decision_id)
 
+    @state_transaction(write=True)
     def propose_batch(
         self,
         ideas: tuple[TradeIdea, ...],
@@ -969,32 +993,14 @@ class TradeIdeaService:
         if not ideas:
             return []
 
-        audit_path = self._audit.path
-        original_audit = audit_path.read_bytes() if audit_path.exists() else None
-        created_decision_ids: list[str] = []
-        try:
-            views: list[TradeIdeaView] = []
-            for idea in ideas:
-                created_decision_ids.append(idea.decision_id)
-                self._store.save(idea)
-                self.append_audit(
-                    idea,
-                    action=AuditAction.PROPOSED,
-                    after_state=TradeIdeaState.PROPOSED,
-                    actor_type=actor_type,
-                    actor_id=actor_id,
-                    reason=reason,
-                    evidence=evidence,
-                )
-                views.append(self.get(idea.decision_id))
-        except Exception:
-            self._restore_failed_proposal_batch(
-                created_decision_ids=tuple(created_decision_ids),
-                original_audit=original_audit,
+        return [
+            self.propose(
+                idea, actor_id=actor_id, actor_type=actor_type, reason=reason, evidence=evidence
             )
-            raise
-        return views
+            for idea in ideas
+        ]
 
+    @state_transaction(write=True)
     def request_changes(self, decision_id: str, actor_id: str, reason: str) -> TradeIdeaView:
         idea = self._require_idea(decision_id)
         self.append_audit(
@@ -1007,6 +1013,7 @@ class TradeIdeaService:
         )
         return self.get(decision_id)
 
+    @state_transaction(write=True)
     def resubmit(
         self,
         idea: TradeIdea,
@@ -1026,6 +1033,42 @@ class TradeIdeaService:
         )
         return self.get(idea.decision_id)
 
+    @state_transaction(write=True, commit_denial=True)
+    def commit_approval(
+        self,
+        idea: TradeIdea,
+        check: KernelCheck,
+        *,
+        actor_id: str,
+        reason: str,
+        evidence: tuple[str, ...] = (),
+    ) -> None:
+        """Revalidate advisory kernel results in the transaction that records admission."""
+        current = self._require_idea(idea.decision_id)
+        if current.record_hash() != idea.record_hash() or check.decision_id != idea.decision_id:
+            raise PolicyViolationError(
+                "Approval input is stale or belongs to another decision", ["stale approval input"]
+            )
+        fresh = self._kernel.check_approval(current, actor_type=check.actor_type)
+        if not fresh.admitted:
+            raise PolicyViolationError(
+                "Approval refused: " + "; ".join(fresh.violations), list(fresh.violations)
+            )
+        # Replace policy evidence supplied by a stale preview with the committed check.
+        committed_evidence = (
+            fresh.admission_evidence() if evidence == check.admission_evidence() else evidence
+        )
+        self.append_audit(
+            current,
+            action=AuditAction.APPROVED,
+            after_state=TradeIdeaState.APPROVED,
+            actor_type=fresh.actor_type,
+            actor_id=actor_id,
+            reason=reason,
+            evidence=committed_evidence,
+        )
+
+    @state_transaction(write=True, commit_denial=True)
     def approve(self, decision_id: str, actor_id: str, reason: str) -> TradeIdeaView:
         """Human-review client of the risk kernel: deny raises, admit is recorded."""
         idea = self._require_idea(decision_id)
@@ -1038,6 +1081,7 @@ class TradeIdeaService:
         self._kernel.record_approval(idea, check, actor_id=actor_id, reason=reason)
         return self.get(decision_id)
 
+    @state_transaction(write=True, commit_denial=True)
     def auto_approve_sweep(
         self,
         *,
@@ -1123,6 +1167,7 @@ class TradeIdeaService:
             skipped=tuple(skipped),
         )
 
+    @state_transaction(write=True)
     def reject(
         self,
         decision_id: str,
@@ -1141,6 +1186,7 @@ class TradeIdeaService:
         )
         return self.get(decision_id)
 
+    @state_transaction(write=True)
     def cancel(
         self,
         decision_id: str,
@@ -1159,6 +1205,7 @@ class TradeIdeaService:
         )
         return self.get(decision_id)
 
+    @state_transaction(write=True)
     def expire(
         self,
         decision_id: str,
@@ -1177,6 +1224,7 @@ class TradeIdeaService:
         )
         return self.get(decision_id)
 
+    @state_transaction(write=True)
     def expire_due_ideas(
         self,
         *,
@@ -1222,6 +1270,7 @@ class TradeIdeaService:
                 )
         return expired
 
+    @state_transaction(write=True)
     def record_submission(
         self,
         decision_id: str,
@@ -1247,6 +1296,7 @@ class TradeIdeaService:
         )
         return self.get(decision_id)
 
+    @state_transaction(write=True)
     def record_fill(
         self,
         decision_id: str,
@@ -1272,6 +1322,7 @@ class TradeIdeaService:
         )
         return self.get(decision_id)
 
+    @state_transaction(write=True)
     def record_closeout_attribution(
         self,
         decision_id: str,
@@ -1321,6 +1372,7 @@ class TradeIdeaService:
         )
         return self._closeouts.append(record)
 
+    @state_transaction(write=True)
     def auto_attribute_expired_ideas(
         self,
         *,
@@ -1361,9 +1413,11 @@ class TradeIdeaService:
             )
         return recorded
 
+    @state_transaction(write=False)
     def get_closeout_attribution(self, decision_id: str) -> CloseoutAttribution | None:
         return self.get(decision_id).closeout_attribution
 
+    @state_transaction(write=True, commit_denial=True)
     def export_broker_ticket_payload(
         self,
         decision_id: str,
@@ -1434,6 +1488,7 @@ class TradeIdeaService:
             approval_policy_violations=policy_violations,
         )
 
+    @state_transaction(write=False)
     def load_record_version(self, decision_id: str, record_hash: str) -> TradeIdea:
         """Load the exact record version referenced by an audit event."""
         try:
@@ -1482,6 +1537,7 @@ class TradeIdeaService:
 
     # -- queries -----------------------------------------------------------
 
+    @state_transaction(write=False)
     def get(self, decision_id: str) -> TradeIdeaView:
         idea = self._require_idea(decision_id)
         events = tuple(self._audit.read_events(decision_id))
@@ -1499,10 +1555,12 @@ class TradeIdeaService:
             closeout_attribution=self._validated_closeout_attribution(idea, events),
         )
 
+    @state_transaction(write=False)
     def list_views(self, state: TradeIdeaState | None = None) -> list[TradeIdeaView]:
         """Return stored views, preserving the historical optional state filter."""
         return list(self.list_view_result(TradeIdeaListQuery(state=state)).views)
 
+    @state_transaction(write=False)
     def list_view_result(
         self,
         query: TradeIdeaListQuery | None = None,
@@ -1525,6 +1583,7 @@ class TradeIdeaService:
             has_more=start + len(page) < total_count,
         )
 
+    @state_transaction(write=False)
     def queue_status(self, *, warning_window_hours: int = 24) -> TradeIdeaQueueStatus:
         """Return read-only approval queue counts and upcoming pending expirations."""
         if warning_window_hours < 0:
@@ -1585,6 +1644,7 @@ class TradeIdeaService:
             upcoming_expirations=upcoming,
         )
 
+    @state_transaction(write=False)
     def list_audit_events(
         self,
         *,
@@ -1613,6 +1673,7 @@ class TradeIdeaService:
         )
         return _page_items(events, limit=limit, offset=offset)
 
+    @state_transaction(write=False)
     def query_closeout_records(
         self,
         *,
@@ -1655,6 +1716,7 @@ class TradeIdeaService:
         )
         return _page_items(ordered_records, limit=limit, offset=offset)
 
+    @state_transaction(write=False)
     def open_approved_count(self) -> int:
         approved_count = 0
         for decision_id, event in self._latest_audit_events_by_decision_id().items():
@@ -1804,7 +1866,11 @@ class TradeIdeaService:
 
     def _require_idea(self, decision_id: str) -> TradeIdea:
         try:
-            idea = self._store.load_latest(decision_id)
+            if self._repository.active:
+                record_hash = self._repository.latest_hash(decision_id)
+                idea = self.load_record_version(decision_id, record_hash) if record_hash else None
+            else:
+                idea = self._store.load_latest(decision_id)
         except (InvalidOperation, TypeError, ValueError) as error:
             raise ValidationError(
                 f"Stored trade idea '{decision_id}' is invalid: {error}",
@@ -1845,25 +1911,6 @@ class TradeIdeaService:
                 value=decision_id,
             )
 
-    def _restore_failed_proposal_batch(
-        self,
-        *,
-        created_decision_ids: tuple[str, ...],
-        original_audit: bytes | None,
-    ) -> None:
-        for decision_id in created_decision_ids:
-            try:
-                shutil.rmtree(self._store.root / decision_id)
-            except FileNotFoundError:
-                pass
-
-        audit_path = self._audit.path
-        if original_audit is None:
-            audit_path.unlink(missing_ok=True)
-            return
-        audit_path.parent.mkdir(parents=True, exist_ok=True)
-        audit_path.write_bytes(original_audit)
-
     def _require_default_preapproval_broker_ticket(self, idea: TradeIdea) -> None:
         broker_ticket = idea.broker_ticket
         if (
@@ -1879,6 +1926,7 @@ class TradeIdeaService:
             value=broker_ticket.to_dict(),
         )
 
+    @state_transaction(write=False)
     def review_started_at(self, decision_id: str) -> datetime | None:
         return self._review_started_at_from_events(tuple(self._audit.read_events(decision_id)))
 
@@ -1893,6 +1941,7 @@ class TradeIdeaService:
                 return event.timestamp
         return None
 
+    @state_transaction(write=True)
     def append_audit(
         self,
         idea: TradeIdea,

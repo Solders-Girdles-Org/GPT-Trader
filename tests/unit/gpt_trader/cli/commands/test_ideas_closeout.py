@@ -10,6 +10,7 @@ import pytest
 from gpt_trader import cli
 from gpt_trader.cli.response import CliErrorCode
 from gpt_trader.features.trade_ideas import TimeHorizon
+from tests.support.trade_state_files import state_file_exists
 from tests.unit.gpt_trader.cli.commands.conftest import attest_ideas_root
 from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
 
@@ -178,7 +179,7 @@ def test_closeout_record_and_show_for_filled_idea(
     assert closeout["realized_profit_loss_unavailable_reason"] == ""
     assert closeout["max_loss"] == payload["max_loss"]
     assert closeout["evidence"] == ["statement:order-123", "chart:target-hit"]
-    assert (root / "closeout_attributions.jsonl").exists()
+    assert state_file_exists(root / "closeout_attributions.jsonl")
 
     exit_code, show_response = _run_json(
         capsys,
@@ -262,7 +263,7 @@ def test_closeout_record_rejects_non_terminal_idea(
     assert exit_code == 1
     assert response["errors"][0]["code"] == CliErrorCode.VALIDATION_ERROR.value
     assert "must be terminal" in response["errors"][0]["message"]
-    assert not (root / "closeout_attributions.jsonl").exists()
+    assert not state_file_exists(root / "closeout_attributions.jsonl")
 
 
 def test_closeout_record_requires_profit_loss_or_unavailable_reason(
@@ -291,7 +292,7 @@ def test_closeout_record_requires_profit_loss_or_unavailable_reason(
     assert exit_code == 1
     assert response["errors"][0]["code"] == CliErrorCode.MISSING_ARGUMENT.value
     assert response["errors"][0]["details"]["field"] == "realized_profit_loss"
-    assert not (root / "closeout_attributions.jsonl").exists()
+    assert not state_file_exists(root / "closeout_attributions.jsonl")
 
 
 def test_closeout_show_without_attribution_is_successful_noop(

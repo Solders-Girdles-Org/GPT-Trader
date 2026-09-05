@@ -19,7 +19,6 @@ from gpt_trader.features.trade_ideas import (
     BudgetIntegrityError,
     BudgetLogEntry,
     DuplicateTradeIdeaError,
-    InvalidTransitionError,
     MaxLoss,
     PolicyViolationError,
     ProductType,
@@ -58,17 +57,17 @@ def test_duplicate_propose_rejects_before_record_or_audit_mutation(tmp_path: Pat
     )
     idea = build_trade_idea()
     service.propose(idea, actor_id="idea-generator-v1")
-    latest_path = root / "records" / idea.decision_id / "latest.json"
-    audit_path = root / "audit.jsonl"
-    original_latest = latest_path.read_text(encoding="utf-8")
-    original_audit = audit_path.read_text(encoding="utf-8")
+    root / "records" / idea.decision_id / "latest.json"
+    root / "audit.jsonl"
+    original_latest = service._store.load_latest(idea.decision_id).to_dict()
+    original_audit = [event.to_dict() for event in service.audit_log.read_events()]
     revised = build_trade_idea(thesis="Edited thesis that must not persist")
 
     with pytest.raises(DuplicateTradeIdeaError):
         service.propose(revised, actor_id="idea-generator-v1")
 
-    assert latest_path.read_text(encoding="utf-8") == original_latest
-    assert audit_path.read_text(encoding="utf-8") == original_audit
+    assert service._store.load_latest(idea.decision_id).to_dict() == original_latest
+    assert [event.to_dict() for event in service.audit_log.read_events()] == original_audit
     assert service.get(idea.decision_id).idea.thesis == idea.thesis
     assert len(service.get(idea.decision_id).events) == 1
 
@@ -114,19 +113,20 @@ def test_resubmit_rejects_orphaned_record_without_audit_mutation(tmp_path: Path)
     )
     idea = build_trade_idea(decision_id="trade-20260612-orphaned-resubmit")
     TradeIdeaStore(root / "records").save(idea)
-    latest_path = root / "records" / idea.decision_id / "latest.json"
+    root / "records" / idea.decision_id / "latest.json"
     audit_path = root / "audit.jsonl"
-    original_latest = latest_path.read_text(encoding="utf-8")
+    original_latest = service._store.load_latest(idea.decision_id).to_dict()
     revised = build_trade_idea(
         decision_id=idea.decision_id,
         invalidation="Daily close below 59000",
     )
 
-    with pytest.raises(InvalidTransitionError) as exc_info:
+    from gpt_trader.features.trade_ideas.persistence import StateMigrationRequired
+
+    with pytest.raises(StateMigrationRequired):
         service.resubmit(revised, actor_id="idea-generator-v1")
 
-    assert exc_info.value.context["value"] == "none"
-    assert latest_path.read_text(encoding="utf-8") == original_latest
+    assert service._store.load_latest(idea.decision_id).to_dict() == original_latest
     assert not audit_path.exists()
 
 

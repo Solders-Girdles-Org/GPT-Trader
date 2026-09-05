@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -9,6 +8,7 @@ import pytest
 from tests.unit.gpt_trader.features.trade_ideas.conftest import (
     attest_account_equity,
     build_trade_idea,
+    corrupt_closeout_rows,
 )
 
 from gpt_trader.features.trade_ideas import (
@@ -65,7 +65,7 @@ def _write_closeout_payload(
     }
     payload.update(overrides)
     service.closeout_log.path.parent.mkdir(parents=True, exist_ok=True)
-    service.closeout_log.path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    corrupt_closeout_rows(service, [payload])
 
 
 def test_record_closeout_attribution_for_filled_idea(service: TradeIdeaService) -> None:
@@ -325,7 +325,7 @@ def test_persisted_closeout_log_rejects_non_object_max_loss_with_line_context(
         "evidence": [],
     }
     service.closeout_log.path.parent.mkdir(parents=True, exist_ok=True)
-    service.closeout_log.path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    corrupt_closeout_rows(service, [payload])
 
     with pytest.raises(
         CloseoutAttributionIntegrityError,
@@ -380,7 +380,7 @@ def test_persisted_closeout_log_rejects_negative_max_loss_values_with_line_conte
         "evidence": [],
     }
     service.closeout_log.path.parent.mkdir(parents=True, exist_ok=True)
-    service.closeout_log.path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    corrupt_closeout_rows(service, [payload])
 
     expected = f"Closeout attribution log line 1 is malformed: {message}"
     with pytest.raises(CloseoutAttributionIntegrityError, match=expected) as log_exc_info:
