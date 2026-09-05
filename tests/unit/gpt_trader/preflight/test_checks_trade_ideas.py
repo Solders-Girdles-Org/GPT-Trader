@@ -67,7 +67,7 @@ def _append_proposed_event(ideas_root: Path) -> None:
     _propose_legacy(ideas_root, idea)
 
 
-def test_trade_ideas_readiness_passes_with_seeded_budget_and_empty_audit(
+def test_trade_ideas_readiness_requires_migration_for_valid_legacy_state(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     ideas_root = tmp_path / "trade_ideas"

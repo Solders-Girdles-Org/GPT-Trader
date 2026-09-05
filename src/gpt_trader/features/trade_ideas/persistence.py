@@ -11,7 +11,7 @@ import os
 import sqlite3
 import tempfile
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from functools import wraps
 from pathlib import Path
 from threading import local
@@ -74,7 +74,7 @@ class StateRepository:
         os.close(descriptor)
         temporary = Path(name)
         try:
-            with sqlite3.connect(temporary, timeout=30) as connection:
+            with closing(sqlite3.connect(temporary, timeout=30)) as connection:
                 connection.executescript(SCHEMA)
             try:
                 os.link(temporary, self.path)
