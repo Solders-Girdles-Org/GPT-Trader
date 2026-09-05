@@ -526,12 +526,7 @@ def _symbol_matches(view: TradeIdeaView, event: PaperFillEvent) -> bool:
 
 
 def _side_matches(view: TradeIdeaView, event: PaperFillEvent) -> bool:
-    side = event.side.lower()
-    if view.idea.direction is TradeDirection.LONG:
-        return side == "buy"
-    if view.idea.direction is TradeDirection.SHORT:
-        return side == "sell"
-    return False
+    return event.side.lower() == _expected_side(view)
 
 
 def _matched_payload_conflict(
@@ -561,11 +556,10 @@ def _matched_payload_conflict(
 
 
 def _expected_side(view: TradeIdeaView) -> str | None:
-    if view.idea.direction is TradeDirection.LONG:
-        return "buy"
-    if view.idea.direction is TradeDirection.SHORT:
-        return "sell"
-    return None
+    opening = {TradeDirection.LONG: "buy", TradeDirection.SHORT: "sell"}.get(view.idea.direction)
+    if view.idea.position_operation is not None:
+        return {"buy": "sell", "sell": "buy"}.get(opening or "")
+    return opening
 
 
 def _submission_reason(event: PaperFillEvent) -> str:

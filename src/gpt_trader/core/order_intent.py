@@ -6,11 +6,44 @@ trading authority. Reductions preserve side, quantity and reduce-only exactly.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
 from gpt_trader.core.trading import OrderSide, OrderType
+
+
+@dataclass(frozen=True, slots=True)
+class PositionOperation:
+    """Explicit reduction of one immutable entry, never an opening short."""
+
+    action: str
+    target_decision_id: str
+    target_record_hash: str
+    resolution: str = "thesis_target"
+
+    def __post_init__(self) -> None:
+        if self.resolution not in {"thesis_target", "invalidation", "expiry"}:
+            raise ValueError("Position operation requires a supported resolution")
+        if self.action not in {"reduce", "close"}:
+            raise ValueError("Position operation must reduce or close")
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", self.target_decision_id):
+            raise ValueError("Position operation requires a safe target decision ID")
+        if not re.fullmatch(r"[0-9a-f]{64}", self.target_record_hash):
+            raise ValueError("Position operation requires an immutable target record hash")
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "action": self.action,
+            "target_decision_id": self.target_decision_id,
+            "target_record_hash": self.target_record_hash,
+            "resolution": self.resolution,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> PositionOperation:
+        return cls(**payload)
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +58,7 @@ class OrderIntent:
     tif: str | None = None
     reduce_only: bool = False
     leverage: int | None = None
+    position_operation: PositionOperation | None = None
 
     def __post_init__(self) -> None:
         if not self.client_order_id.strip() or not self.symbol.strip():
@@ -35,12 +69,14 @@ class OrderIntent:
             raise ValueError("Order intent requires explicit side and order type")
         if not isinstance(self.reduce_only, bool):
             raise ValueError("Order intent reduce_only must be boolean")
+        if self.position_operation is not None and not self.reduce_only:
+            raise ValueError("Position-targeted intents must be reduce-only")
         for value in (self.price, self.stop_price):
             if value is not None and (not value.is_finite() or value <= 0):
                 raise ValueError("Order intent prices must be finite and positive")
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "client_order_id": self.client_order_id,
             "symbol": self.symbol,
             "side": self.side.value.lower(),
@@ -52,6 +88,10 @@ class OrderIntent:
             "reduce_only": self.reduce_only,
             "leverage": self.leverage,
         }
+
+        if self.position_operation is not None:
+            payload["position_operation"] = self.position_operation.to_dict()
+        return payload
 
     def broker_kwargs(self) -> dict[str, Any]:
         return {
@@ -126,4 +166,9 @@ class OrderIntent:
             tif=payload.get("tif"),
             reduce_only=payload.get("reduce_only", False),
             leverage=payload.get("leverage"),
+            position_operation=(
+                PositionOperation.from_dict(payload["position_operation"])
+                if "position_operation" in payload
+                else None
+            ),
         )

@@ -21,6 +21,7 @@ from enum import Enum
 from typing import Any
 
 from gpt_trader.core.instruments import Instrument, ProductType
+from gpt_trader.core.order_intent import PositionOperation
 
 _SAFE_DECISION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
@@ -350,10 +351,21 @@ class TradeIdea:
     do_not_trade_if: tuple[str, ...] = ()
     broker_ticket: BrokerTicket = field(default_factory=BrokerTicket)
     exit_plan: ExitPlan | None = None
+    position_operation: PositionOperation | None = None
 
     def __post_init__(self) -> None:
         if not is_safe_decision_id(self.decision_id):
             raise ValueError("decision_id must be a safe path segment")
+        if self.position_operation is not None:
+            if self.position_operation.target_decision_id == self.decision_id:
+                raise ValueError("Position operation cannot target itself")
+            if self.direction not in {TradeDirection.LONG, TradeDirection.SHORT}:
+                raise ValueError("Position operation requires its target direction")
+            if self.position_operation.action == "reduce" and (
+                self.sizing_recommendation.quantity is None
+                or self.sizing_recommendation.quantity <= 0
+            ):
+                raise ValueError("Reduction requires an explicit positive quantity")
 
     @property
     def instrument_info(self) -> Instrument:
@@ -392,6 +404,8 @@ class TradeIdea:
         # existed, so audit integrity over the pre-existing trail is preserved.
         if self.exit_plan is not None:
             payload["exit_plan"] = self.exit_plan.to_dict()
+        if self.position_operation is not None:
+            payload["position_operation"] = self.position_operation.to_dict()
         return payload
 
     @classmethod
@@ -418,6 +432,11 @@ class TradeIdea:
             broker_ticket=BrokerTicket.from_dict(payload.get("broker_ticket", {})),
             exit_plan=(
                 ExitPlan.from_dict(payload["exit_plan"]) if "exit_plan" in payload else None
+            ),
+            position_operation=(
+                PositionOperation.from_dict(payload["position_operation"])
+                if "position_operation" in payload
+                else None
             ),
         )
 

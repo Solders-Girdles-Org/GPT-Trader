@@ -59,6 +59,9 @@ def validate(root: Path) -> dict[str, int]:
         for entry in journal.values():
             idea = service.load_record_version(entry.decision_id, entry.record_hash)
             service.execution_journal.validate_binding(entry, idea)
+        from gpt_trader.features.trade_ideas.position_operations import positions
+
+        positions(service)  # Admitted audit/journal bijection; unadmitted proposals remain history.
         if repository.active:
             if repository.connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                 raise ValueError("SQLite integrity check failed")

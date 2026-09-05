@@ -86,7 +86,7 @@ def build_stage_promotion_scorecard(
     """Score the Stage 1 → 2 gates from the idea-level trail."""
     current_time = now or datetime.now(UTC)
     tuned = thresholds or ScorecardThresholds()
-    views = service.list_views()
+    views = [view for view in service.list_views() if view.idea.position_operation is None]
 
     window_start = _observation_window_start(views, now=current_time, thresholds=tuned)
     # A FILLED idea inside its horizon is an open position, not a closed trade:
