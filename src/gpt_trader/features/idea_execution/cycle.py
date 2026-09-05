@@ -121,7 +121,13 @@ def busy_instruments(service: TradeIdeaService) -> dict[str, BusyInstrument]:
                 decision_id=view.idea.decision_id,
                 reason="instrument already has an open idea",
             )
-        elif view.state is TradeIdeaState.FILLED and view.closeout_attribution is None:
+        elif (
+            view.state is TradeIdeaState.FILLED
+            and view.idea.position_operation is None
+            and view.closeout_attribution is None
+        ):
+            # Filled reductions belong to the original target's aggregate
+            # closeout; they never receive a separate trade attribution.
             busy.setdefault(
                 instrument_key,
                 BusyInstrument(
@@ -585,7 +591,23 @@ class PaperCycleRunner:
                 skipped_closed.append(closed_skip)
                 continue
             instrument_key = _instrument_key(idea.instrument)
-            blocker = busy.get(instrument_key)
+            # A targeted reduction manages the already-filled position that
+            # makes an instrument busy. Reuse target admission validation;
+            # approval and submission still recheck authority and reserve the
+            # current quantity transactionally. Opening ideas keep the busy gate.
+            operation = idea.position_operation
+            if operation is not None:
+                violations = self._service.position_operation_violations(idea)
+                if violations:
+                    skipped.append(
+                        {
+                            "instrument": idea.instrument,
+                            "reason": "; ".join(violations),
+                            "existing_decision_id": operation.target_decision_id,
+                        }
+                    )
+                    continue
+            blocker = busy.get(instrument_key) if operation is None else None
             if blocker is not None:
                 skipped.append(
                     {
@@ -597,18 +619,24 @@ class PaperCycleRunner:
                 continue
             admitted.append(idea)
             known_decision_ids.add(idea.decision_id)
-            busy[instrument_key] = BusyInstrument(
-                instrument=idea.instrument,
-                decision_id=idea.decision_id,
-                reason="instrument already has an open idea",
-            )
+            if operation is None:
+                busy[instrument_key] = BusyInstrument(
+                    instrument=idea.instrument,
+                    decision_id=idea.decision_id,
+                    reason="instrument already has an open idea",
+                )
 
         proposed_decision_ids: tuple[str, ...] = ()
         if admitted:
             batch = tuple(admitted)
             for idea in batch:
                 quantity = idea.sizing_recommendation.quantity
-                if quantity is not None and quantity > 0 and idea.exit_plan is None:
+                if (
+                    idea.position_operation is None
+                    and quantity is not None
+                    and quantity > 0
+                    and idea.exit_plan is None
+                ):
                     return ProposerTurn(
                         proposer_id=proposer.proposer_id,
                         proposal_count=0,
