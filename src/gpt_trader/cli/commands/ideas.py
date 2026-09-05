@@ -1232,8 +1232,8 @@ def register(subparsers: Any) -> None:
         type=_positive_decimal_value,
         default=Decimal("0.01"),
         help=(
-            "Price quantization step for proposal price levels this turn; "
-            "pass a finer value for sub-cent symbols"
+            "Fallback price increment for offline snapshots without venue metadata; "
+            "captured Coinbase price increments always take precedence"
         ),
     )
     cycle.add_argument(
@@ -3261,6 +3261,15 @@ def _handle_cycle(args: Namespace) -> CliResponse:
         f"pending={result.queue.get('pending_total')}",
     )
     was_noop = proposed_total == 0 and executed_total == 0 and not result.expired_decision_ids
+    if result.outcome == "partial":
+        response = _failure(
+            command,
+            args,
+            CliErrorCode.OPERATION_FAILED,
+            f"Paper cycle {result.run_id} partially completed; inspect proposer/execution errors",
+            data=result.to_dict(),
+        )
+        return response
     return _success(command, args, result.to_dict(), text, was_noop=was_noop)
 
 

@@ -174,6 +174,7 @@ class SnapshotStrategyProposer:
             strategy_name=self._strategy_name,
             data_source=f"{snapshot.source}:{series.granularity}",
             product_type=self._product_type,
+            price_increment=series.proposal_increment(self._adapter.price_precision),
         )
         return self._adapter.map_decision(decision, context)
 

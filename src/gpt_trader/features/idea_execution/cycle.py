@@ -34,12 +34,13 @@ from typing import Any
 
 from filelock import FileLock, Timeout
 
+from gpt_trader.core.errors import BrokerageError, RateLimitError
 from gpt_trader.core.instruments import InstrumentParseError
 from gpt_trader.core.trading_calendar import (
     SessionCalendarResolver,
     get_calendar_for_instrument,
 )
-from gpt_trader.errors import ValidationError
+from gpt_trader.errors import NetworkError, ValidationError
 from gpt_trader.features.brokerages.mock import DeterministicBroker
 from gpt_trader.features.idea_execution.executor import (
     IdeaNotExecutableError,
@@ -181,10 +182,13 @@ class ProposerTurn:
     proposed_decision_ids: tuple[str, ...]
     skipped_open_instruments: tuple[dict[str, str], ...]
     skipped_closed_sessions: tuple[dict[str, str], ...] = ()
+    error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "proposer_id": self.proposer_id,
+            "outcome": "failed" if self.error else "completed",
+            "error": self.error,
             "proposal_count": self.proposal_count,
             "proposed_decision_ids": list(self.proposed_decision_ids),
             "skipped_open_instruments": list(self.skipped_open_instruments),
@@ -199,18 +203,20 @@ class ExecutionTurn:
     enabled: bool
     executed: tuple[dict[str, Any], ...] = ()
     skipped: tuple[dict[str, str], ...] = ()
+    failed: tuple[dict[str, str], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "enabled": self.enabled,
             "executed": list(self.executed),
+            "failed": list(self.failed),
             "skipped": list(self.skipped),
         }
 
 
 @dataclass(frozen=True, slots=True)
 class PaperCycleResult:
-    """One completed turn; failed turns raise and leave only a manifest row."""
+    """A completed or partial turn; unrecoverable failures leave a manifest row."""
 
     run_id: str
     started_at: datetime
@@ -227,12 +233,32 @@ class PaperCycleResult:
     exit_monitor_skipped_closed_sessions: tuple[dict[str, str], ...] = ()
     exit_monitor_unresolved: tuple[dict[str, str], ...] = ()
 
+    @property
+    def outcome(self) -> str:
+        return (
+            "partial"
+            if any(turn.error for turn in self.proposer_turns) or self.execution.failed
+            else "completed"
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "run_id": self.run_id,
             "started_at": self.started_at.isoformat(),
             "finished_at": self.finished_at.isoformat(),
-            "outcome": "completed",
+            "outcome": self.outcome,
+            "error": "; ".join(
+                [
+                    f"proposer {turn.proposer_id}: {turn.error}"
+                    for turn in self.proposer_turns
+                    if turn.error
+                ]
+                + [
+                    f"execution {failure['decision_id']}: {failure['error']}"
+                    for failure in self.execution.failed
+                ]
+            )
+            or None,
             "snapshot": self.snapshot,
             "session_gate": [dict(decision) for decision in self.session_gate],
             "expired_decision_ids": list(self.expired_decision_ids),
@@ -502,7 +528,23 @@ class PaperCycleRunner:
         snapshot_reference: str,
         moment: datetime,
     ) -> ProposerTurn:
-        candidates = proposer.propose(snapshot)
+        # Only proposal generation is isolated here: storage/approval integrity
+        # errors below remain fatal. Generation has no write authority.
+        try:
+            for series in snapshot.series:
+                if series.price_increment_error:
+                    raise ValidationError(
+                        f"{series.symbol}: {series.price_increment_error}", field="price_increment"
+                    )
+            candidates = proposer.propose(snapshot)
+        except Exception as error:
+            return ProposerTurn(
+                proposer_id=proposer.proposer_id,
+                proposal_count=0,
+                proposed_decision_ids=(),
+                skipped_open_instruments=(),
+                error=f"{type(error).__name__}: {error}",
+            )
 
         busy = busy_instruments(self._service)
         known_decision_ids = {view.idea.decision_id for view in self._service.list_views()}
@@ -552,6 +594,17 @@ class PaperCycleRunner:
         proposed_decision_ids: tuple[str, ...] = ()
         if admitted:
             batch = tuple(admitted)
+            for idea in batch:
+                quantity = idea.sizing_recommendation.quantity
+                if quantity is not None and quantity > 0 and idea.exit_plan is None:
+                    return ProposerTurn(
+                        proposer_id=proposer.proposer_id,
+                        proposal_count=0,
+                        proposed_decision_ids=(),
+                        skipped_open_instruments=tuple(skipped),
+                        skipped_closed_sessions=tuple(skipped_closed),
+                        error=f"Executable machine proposal {idea.decision_id} requires a structured exit_plan",
+                    )
             self._service.validate_new_proposals(batch)
             views = self._service.propose_batch(
                 batch,
@@ -586,6 +639,7 @@ class PaperCycleRunner:
             if series.candles
         }
         executed: list[dict[str, Any]] = []
+        failed: list[dict[str, str]] = []
         skipped: list[dict[str, str]] = []
         for decision_id in approved_before_turn:
             view = self._service.get(decision_id)
@@ -635,11 +689,28 @@ class PaperCycleRunner:
             self._broker.set_mark(view.idea.instrument, mark)
             try:
                 result = self._executor.execute(decision_id, actor_id=self._actor_id)
-            except (IdeaNotExecutableError, PaperExecutionError) as error:
+            except IdeaNotExecutableError as error:
                 # Typed refusals are the lane's admission rules working (for
                 # example the idea expired between sweep and execution); they
                 # are evidence, not turn failures.
                 skipped.append({"decision_id": decision_id, "reason": str(error)})
+                continue
+            except (
+                PaperExecutionError,
+                ConnectionError,
+                TimeoutError,
+                NetworkError,
+                BrokerageError,
+                RateLimitError,
+            ) as error:
+                # Only operational failures are isolated. Storage/policy integrity
+                # errors (including SQLite, schema and I/O failures) stay fatal.
+                # A broker/reconciliation failure can leave a durable SUBMITTED
+                # intent. Never retry it here or pretend admission was refused;
+                # other approved ideas and existing-position exits still run.
+                failed.append(
+                    {"decision_id": decision_id, "error": f"{type(error).__name__}: {error}"}
+                )
                 continue
             executed.append(
                 {
@@ -653,7 +724,9 @@ class PaperCycleRunner:
                     "final_state": result.final_state,
                 }
             )
-        return ExecutionTurn(enabled=True, executed=tuple(executed), skipped=tuple(skipped))
+        return ExecutionTurn(
+            enabled=True, executed=tuple(executed), skipped=tuple(skipped), failed=tuple(failed)
+        )
 
     def _persist_snapshot(
         self,

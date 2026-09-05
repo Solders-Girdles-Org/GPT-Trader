@@ -127,6 +127,27 @@ def _symbol_series_from_payload(payload: Any, index: int) -> SymbolSeries:
             "granularity",
             f"{field_prefix}.granularity",
         ),
+        price_increment=(
+            _required_payload_decimal(
+                series_payload, "price_increment", f"{field_prefix}.price_increment"
+            )
+            if "price_increment" in series_payload
+            else None
+        ),
+        price_increment_source=(
+            _required_payload_string(
+                series_payload, "price_increment_source", f"{field_prefix}.price_increment_source"
+            )
+            if "price_increment_source" in series_payload
+            else None
+        ),
+        price_increment_error=(
+            _required_payload_string(
+                series_payload, "price_increment_error", f"{field_prefix}.price_increment_error"
+            )
+            if "price_increment_error" in series_payload
+            else None
+        ),
         candles=tuple(
             _candle_from_payload(candle_payload, f"{field_prefix}.candles[{candle_index}]")
             for candle_index, candle_payload in enumerate(candle_payloads)
