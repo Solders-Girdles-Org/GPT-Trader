@@ -197,6 +197,9 @@ CROSS_SLICE_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset(
         # Paper execution lane consumes APPROVED ideas via TradeIdeaService and
         # drives paper/mock brokers only (docs/decisions/adopt-five-role-composition.md).
         ("idea_execution", "trade_ideas"),
+        # Recorded experiments reuse pure proposal/snapshot contracts, never
+        # the scheduled runtime or broker adapters (recorded-experiment decision).
+        ("experiment", "trade_ideas"),
         ("idea_execution", "brokerages"),
         # engines/strategy.py drives the in-process event-driven paper lane
         # (EventDrivenIdeaLane) per decision under the risk kernel
@@ -297,11 +300,26 @@ def _cross_slice_rule(slice_name: str) -> ImportRule:
     )
 
 
+_EXPERIMENT_RULE = ImportRule(
+    name="experiment_offline_dependencies",
+    description="Recorded experiments may use only their own slice, core, and pure benchmark/snapshot contracts; never brokers or runtime services.",
+    source_root=_FEATURES_ROOT / "experiment",
+    forbidden_prefixes=("gpt_trader",),
+    allowlist_import_prefixes=(
+        "gpt_trader.features.experiment",
+        "gpt_trader.core",
+        "gpt_trader.features.trade_ideas.baseline",
+        "gpt_trader.features.trade_ideas.snapshot",
+    ),
+)
+
+
 RULES: tuple[ImportRule, ...] = (
     *(_entrypoint_guard_rule(package, label) for package, label in _ENTRYPOINT_GUARDED_PACKAGES),
     _MONITORING_FEATURES_RULE,
     _TRADE_IDEAS_RULE,
     _WEB_CONSOLE_RULE,
+    _EXPERIMENT_RULE,
     *(_cross_slice_rule(slice_name) for slice_name in _discover_feature_slices()),
 )
 

@@ -12,14 +12,14 @@ need to review historical practices.
 
 - **Vertical slices**: Add features within `src/gpt_trader/features/<slice>/` and
   keep cross-slice coupling minimal.
-- **Explicit wiring**: Register new dependencies in `ApplicationContainer`
+- **Explicit wiring**: The recorded experiment uses explicit function/library dependencies. Register retained runtime services in `ApplicationContainer`
   (`src/gpt_trader/app/container.py`) instead of hidden imports. See
   `docs/DI_POLICY.md` for detailed guidance on when to use container vs
   singletons.
 - **Public surfaces**: Prefer importing across slices/tests via surface modules
   (e.g., `gpt_trader.security.validate`, `gpt_trader.features.intelligence.regime`)
   instead of deep/internal modules. Add new exports to the surface when needed.
-- **Configuration-first**: Extend `BotConfig` when new runtime options are
+- **Configuration-first**: Recorded experiments use a bound input document with no environment overrides. Extend `BotConfig` when retained runtime options are
   required; expose overrides through the CLI when appropriate.
 - **Modular refactoring**: Extract large modules (>500 lines) into focused
   subpackages or module-local collaborators with clear separation of concerns.
@@ -27,12 +27,16 @@ need to review historical practices.
   `features/live_trade/risk/`, and the `features/live_trade/engines/`
   collaborators (telemetry, equity, order-record mapping) as examples. Decompose
   one reviewable seam at a time:
-  - Keep the public class/import stable as a **facade**; move logic behind
+  - When preserving an adopted runtime interface, keep the public class/import stable as a **facade**; move logic behind
     private collaborators (free functions or classes) that it delegates to.
-  - Extract the **lowest-risk seam first** — pure, IO-free helpers before
+  - For incremental changes, extract the **lowest-risk seam first** — pure, IO-free helpers before
     stateful or async ones.
   - The acceptance signal is **behavior tests for the moved responsibility**,
     not line counts (line counts are supporting evidence only).
+
+The [recorded-product decision](decisions/recorded-experiment-product.md) authorizes
+replacement of obsolete local workflows and their dependent tests together; a
+facade or compatibility shim is not mandatory solely because an interface exists.
 
 ## Slice Scaffolding
 

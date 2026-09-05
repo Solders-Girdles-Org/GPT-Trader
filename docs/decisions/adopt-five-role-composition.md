@@ -1,11 +1,11 @@
 # Five-role runtime composition — trade-idea spine, recorder and executor as separate arms
 
 ---
-status: accepted
+status: superseded
 date: 2026-07-02
 deciders: rj
 supersedes:
-superseded-by:
+superseded-by: recorded-experiment-product
 ---
 
 ## Context

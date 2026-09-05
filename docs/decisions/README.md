@@ -68,6 +68,8 @@ markers. Regenerating cannot drift from the files.
 <!-- BEGIN GENERATED DECISION INDEX -->
 | Date | Decision | Status |
 |------|----------|--------|
+| 2026-09-05 | [Paper runtime cutover](paper-runtime-cutover.md) | proposed |
+| 2026-09-05 | [Recorded experiment as the owner-facing product](recorded-experiment-product.md) | accepted |
 | 2026-09-04 | [Transactional trade state](transactional-trade-state.md) | accepted |
 | 2026-07-12 | [Real-account capability — authenticated reads and non-binding previews only](real-account-read-preview-capability.md) | accepted |
 | 2026-07-08 | [Alpha layer builds toward agentic reasoning — TA demoted to benchmark and feature inputs](adopt-agentic-alpha-direction.md) | accepted |
@@ -82,7 +84,7 @@ markers. Regenerating cannot drift from the files.
 | 2026-07-02 | [Adopt a measured-outcome operating rubric](adopt-measured-outcome-rubric.md) | accepted |
 | 2026-07-02 | [Canonical risk-limit vocabulary — budget vs runtime limits](canonical-risk-limit-vocabulary.md) | accepted |
 | 2026-07-02 | [Event JSONL: accepted fallback or import-only historical data](event-jsonl-compatibility.md) | accepted |
-| 2026-07-02 | [Five-role runtime composition — trade-idea spine, recorder and executor as separate arms](adopt-five-role-composition.md) | accepted |
+| 2026-07-02 | [Five-role runtime composition — trade-idea spine, recorder and executor as separate arms](adopt-five-role-composition.md) | superseded |
 | 2026-07-02 | [Meaning of the prod and canary profiles under the approval ladder](prod-canary-profile-meaning.md) | accepted |
 | 2026-07-02 | [Operator web console — a thin adapter over the trade-idea spine](adopt-operator-web-console.md) | accepted |
 | 2026-07-01 | [Remove the unwired account manager and strategy-dev lab](remove-unwired-account-manager-and-strategy-lab.md) | accepted |

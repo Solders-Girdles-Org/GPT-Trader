@@ -8,9 +8,11 @@ This document defines when and how to wire dependencies in GPT-Trader.
 
 ## Overview
 
-GPT-Trader uses `ApplicationContainer` as the canonical composition root. All
-application services should be resolved through the container rather than
-through module-level singletons.
+The retained bot runtime uses `ApplicationContainer` as its composition root.
+The [recorded experiment](decisions/recorded-experiment-product.md) composes
+its pure transition and explicit journal directly; it has no shared service
+lifecycle. Pass dependencies explicitly. Neither route uses module-level
+singletons to hide state.
 
 ## Decision Matrix
 

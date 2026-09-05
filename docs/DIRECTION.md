@@ -22,6 +22,30 @@ Authenticated observation may include officially reviewed non-execution venues
 under the scoped
 [real-account-read-preview-capability](decisions/real-account-read-preview-capability.md).
 
+## Immediate product outcome
+
+The current engineering target is a **reproducible recorded-data experiment**:
+RJ can inspect what a decision did to simulated cash, positions and risk, with
+independent reconciliation and a reliable resume path. The
+[accepted product decision](decisions/recorded-experiment-product.md) replaces
+mandatory legacy composition with a single local loop and owns the comparison,
+component disposition and success criteria. Use the
+[paper guide](paper_trading.md#recorded-experiment) to run it.
+
+The autonomous destination above remains an ambition to evaluate, not an
+instruction to retain every intermediate architecture. Fixed-rule simulations
+establish mechanics; forward evidence must establish any model's added value.
+The next meaningful milestone is an independently reconciled held-out recorded
+market experiment with disclosed costs, missing-data treatment and no-trade/loss
+cases. Its result should tell RJ whether further investment is useful, not
+merely satisfy a process gate.
+
+Ordinary local simulations do not require per-trade human approval or create
+operational autonomy grants. Existing scheduled/live lanes retain their own
+recorded authority. The [paper-runtime cutover](decisions/paper-runtime-cutover.md)
+is a separate pending operator decision; this source redesign changes no job,
+account, service, live permission or operational store.
+
 ## Charter
 
 ### Risk philosophy (owner-accepted)
@@ -75,7 +99,7 @@ The autonomy modes in full:
 | Mode | AI may produce | AI may submit orders |
 |------|----------------|----------------------|
 | `research_only` | Research notes, theses, watchlists | No |
-| `human_approved_execution` *(current)* | Broker-ready tickets + risk records | No — explicit approval required first |
+| `human_approved_execution` *(approval-gated lane)* | Broker-ready tickets + risk records | No — explicit approval required first |
 | `bounded_autonomy` *(destination)* | Tickets inside pre-approved envelopes | Yes — only inside hard limits |
 
 ## Graduation

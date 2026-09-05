@@ -31,6 +31,9 @@ logs/
 # Runtime data directories
 runtime_data/
 experiments/
+!config/experiments/
+config/experiments/*
+!config/experiments/ma-crossover-demo.json
 
 # Ephemeral per-task planning/audit artifacts (see docs/INFORMATION_ARCHITECTURE.md)
 work/

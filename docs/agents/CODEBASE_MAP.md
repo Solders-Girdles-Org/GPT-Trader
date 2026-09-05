@@ -10,7 +10,8 @@ Use this as a “where do I start?” index when you already know what you’re 
 
 | Task | Start Here | Key Files / Notes |
 |------|------------|-------------------|
-| Run the bot (CLI) | `src/gpt_trader/cli/__init__.py` | Commands live in `src/gpt_trader/cli/commands/` (start with `run.py`); config build + container wiring in `src/gpt_trader/cli/services.py` |
+| Inspect/run the local product | `src/gpt_trader/cli/commands/experiment.py` | `features/experiment/` owns recorded input, transition and journal; see [paper guide](../paper_trading.md#recorded-experiment) |
+| Run the retained bot (CLI) | `src/gpt_trader/cli/__init__.py` | Commands live in `src/gpt_trader/cli/commands/` (start with `run.py`); config build + container wiring in `src/gpt_trader/cli/services.py` |
 | Wire services / composition root | `src/gpt_trader/app/container.py` | `ApplicationContainer` is the canonical DI entry point |
 | Configure profiles / BotConfig | `src/gpt_trader/app/config/bot_config.py` | `ProfileLoader` in `src/gpt_trader/app/config/profile_loader.py`; YAML profiles in `config/profiles/` |
 | Spot/CFM symbols + gating | `src/gpt_trader/features/live_trade/symbols.py` | `trading_modes`, `derivatives_enabled`, `cfm_enabled`, allowlists, `CFM_SYMBOL_MAPPING` |
@@ -24,7 +25,7 @@ Use this as a “where do I start?” index when you already know what you’re 
 
 ## Golden Path
 
-- Use `ApplicationContainer` (`src/gpt_trader/app/container.py`) for all dependency wiring.
+- Use explicit library dependencies for the recorded experiment; use `ApplicationContainer` (`src/gpt_trader/app/container.py`) for retained bot lifecycle wiring.
 - Use `build_bot()` or `bot_from_profile()` from `bootstrap.py` for simple bot creation.
 - If you need to understand historical architecture decisions, use git history (PRs/commits) plus `docs/ARCHITECTURE.md`.
 

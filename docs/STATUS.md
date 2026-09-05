@@ -16,7 +16,28 @@ cannot override observed behavior or an accepted decision.
 accepted next work. Source integration is separate from runtime deployment,
 migration, authorization and measured promotion.
 
-## Source snapshot (2026-09-04)
+## Local product and continuation
+
+The [recorded experiment](paper_trading.md#recorded-experiment) is the default
+owner entrypoint. Its [implementation](../src/gpt_trader/features/experiment/)
+and [failure tests](../tests/unit/gpt_trader/features/experiment/) demonstrate
+observation, rule-based decision, bounded fills, independent accounting and
+resume. The [product decision](decisions/recorded-experiment-product.md) owns
+component disposition and the [cutover proposal](decisions/paper-runtime-cutover.md)
+owns the unresolved operational choice. Source integration does not migrate the
+installed hourly paper job.
+
+Latest retained-runtime source also includes [durable execution receipts](../src/gpt_trader/features/idea_execution/executor.py),
+[identified fill accounting](../src/gpt_trader/core/fill_accounting.py), and
+[targeted reductions](../src/gpt_trader/features/trade_ideas/position_operations.py).
+Their exact limitations live in the [paper contracts](paper_trading.md#durable-direct-fill-accounting).
+
+Continue by inspecting/running the local product, then evaluating the milestone
+in [Direction](DIRECTION.md#immediate-product-outcome). Do not start the old
+runtime, use its approval grants for the new product, or infer a deployment from
+this page.
+
+## Retained source pointers (2026-09-04 baseline)
 
 Pointers checked against `main` through the merged transactional state,
 strategy routing and paper cycle changes

@@ -7,6 +7,8 @@ allowlists so an edge cannot appear or vanish without a reviewed diff here.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import scripts.ci.check_import_boundaries as check_import_boundaries
 
 
@@ -19,6 +21,8 @@ def test_cross_slice_allowlist_is_frozen_topology() -> None:
             # Paper execution lane consumes APPROVED ideas and drives paper/mock
             # brokers only (docs/decisions/adopt-five-role-composition.md).
             ("idea_execution", "trade_ideas"),
+            # Offline benchmark/snapshot reuse; broker imports remain forbidden.
+            ("experiment", "trade_ideas"),
             ("idea_execution", "brokerages"),
             # engines/strategy.py drives the in-process event-driven paper lane
             # per decision under the risk kernel
@@ -83,3 +87,22 @@ def test_trade_ideas_allowed_prefixes_are_frozen() -> None:
         "gpt_trader.features.intelligence.sizing",
         "gpt_trader.features.trade_ideas",
     )
+
+
+def test_experiment_reuses_benchmark_but_cannot_import_runtime(tmp_path, monkeypatch):
+    root = tmp_path / "src" / "gpt_trader" / "features" / "experiment"
+    root.mkdir(parents=True)
+    module = root / "probe.py"
+    rule = next(
+        rule
+        for rule in check_import_boundaries.RULES
+        if rule.name == "experiment_offline_dependencies"
+    )
+    monkeypatch.setattr(check_import_boundaries, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_import_boundaries, "SRC_ROOT", tmp_path / "src")
+    monkeypatch.setattr(check_import_boundaries, "RULES", (replace(rule, source_root=root),))
+    module.write_text("from gpt_trader.features.trade_ideas.baseline import BaselineProposer\n")
+    assert check_import_boundaries.scan([str(root)]) == 0
+    for dependency in ("trade_ideas.service", "brokerages.mock", "live_trade.bot"):
+        module.write_text(f"import gpt_trader.features.{dependency}\n")
+        assert check_import_boundaries.scan([str(root)]) == 1

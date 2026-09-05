@@ -596,7 +596,7 @@
       ],
       "code_references": [
         {
-          "line": 232,
+          "line": 235,
           "path": "src/gpt_trader/cli/__init__.py",
           "reader": "_env_flag"
         },
@@ -2381,7 +2381,7 @@
       ],
       "code_references": [
         {
-          "line": 232,
+          "line": 235,
           "path": "src/gpt_trader/cli/__init__.py",
           "reader": "_env_flag"
         },
