@@ -640,6 +640,77 @@ Old writers cannot maintain the new accounting records; rollback requires an
 offline compatible copy, not mixed writer versions. The modernization source PR
 does not run this upgrade, submit orders, or change runtime configuration.
 
-Position-targeted TradeIdea partial reductions and final-close accounting remain
-a separate migration. A new SHORT entry is not a reduction of an existing long;
-direct SELL/CLOSE paths remain until that target and accounting parity is proven.
+### Position-targeted paper reductions
+
+A new TradeIdea can carry a structured `position_operation` with `action`
+(`reduce` or `close`), `target_decision_id`, `target_record_hash`, and `resolution`
+(`thesis_target`, `invalidation`, or `expiry`; the default is `thesis_target`).
+Its instrument, product type and direction must match the original filled entry.
+For a long target, execution derives a reduce-only SELL; for a short target, a
+reduce-only BUY. An opening SHORT retains its existing naked-short budget gate.
+The operation has its own immutable decision ID and ordinary proposal/approval
+trail. Historical ideas omit this field and retain their original hashes.
+
+REDUCE requires an explicit positive `sizing_recommendation.quantity`. CLOSE
+freezes the full unreserved remainder inside submission admission; an explicitly
+supplied close quantity must equal that remainder. Another pending reduction
+keeps its reservation until an observed filled or definitive zero-fill terminal
+receipt resolves it. Approval and actual submission validate the target and its
+available quantity; submission rechecks current authority, budget, expiry and
+session. Reductions do not add fictitious opening notional, but cannot bypass
+unavailable loss/exposure evidence or the existing limits. No budget cap changes.
+
+The existing paper execution stream owns admitted intents, broker receipts and
+reconciliation markers. Independent writers serialize the target reservation
+and submission in the same StateRepository transaction. Recovery consumes
+confirmed receipts without another broker call or a new authorization decision.
+A missing or conflicting receipt remains uncertain. New targeted receipts bind
+an observation timestamp; execution must fall between recorded submission and
+that observation. Impossible timestamps are refused before receipt persistence. Manual submission/fill
+helpers cannot manufacture targeted execution without its durable paper intent
+and matching receipt. Live broker ticket export refuses these operations; the
+exact paper/mock broker type restriction is unchanged.
+
+Confirmed reduction receipts determine remaining quantity and realized gross
+PnL using the original confirmed entry basis. Partial loss events retain their
+own accounting-session dates and original account-percentage denominator.
+Remaining exposure scales only after confirmed reductions; pending intent alone
+never releases risk. Equity and high-water-mark reads fold each realization
+once. Equity settlement proceeds use each portion's confirmed entry basis and
+realized amount. At zero remaining with no pending reservation, reconciliation
+records one final aggregate CloseoutAttribution, stamped at the last reduction's
+resolution time. Per-fill accounting replaces this aggregate in equity and loss
+calculations, so final close cannot double-count earlier portions. Trade reports
+and promotion scorecards count the original trade, not its reduction operations.
+
+The candle exit monitor uses remaining quantity and refuses to close a target
+with an uncertain reduction reservation. A scored close is explicitly stored as
+`simulated_candle_resolution` in the same stream, with its price, quantity,
+resolution time and evidence; it is not a broker acknowledgment. Resolution and
+final attribution commit together. Earlier candles cannot close inventory
+already reduced at a later observed fill. Historical full closeouts remain
+readable and unchanged. The labeled legacy price/quantity estimator remains for
+old candle-replay reporting; it cannot authorize a new executable reduction
+without a confirmed original fill quantity and price.
+
+This is local paper-state accounting, not consolidated venue inventory, funding
+or fee-adjusted account PnL. The spot-only HybridPaperBroker refuses short-target reductions before dispatch
+and may reject a long reduction if its current simulated inventory is unavailable; a clipped terminal response is
+uncertain rather than falsely accepted as the complete intent. Restart does not
+invent or rehydrate broker inventory from the journal. Direct SELL/CLOSE routes
+remain available with their existing guards; no aggregate venue position is
+assigned an invented TradeIdea target.
+
+Read-time and migration validation reconcile admitted operation audits with
+their journal intents and exact fill evidence, including crash states with a
+committed receipt still awaiting audit reconciliation. Removing admitted facts
+cannot silently restore full inventory or erase realized loss. Unadmitted or
+denied proposals remain valid history and do not require executable targets.
+Validation also checks target bindings, receipt hashes, remaining quantities
+and final aggregates. The existing
+import/export path preserves historical bytes and carries the added paper-stream
+events; no second truth ledger is introduced. New readers must be deployed with
+all writers quiesced and compatible state preserved, because old readers cannot
+interpret targeted or simulated-resolution events. Rollback uses a compatible
+preserved copy with writers stopped. This source delivery does not activate
+execution or migrate a running database.

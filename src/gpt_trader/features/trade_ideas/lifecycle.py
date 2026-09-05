@@ -34,6 +34,8 @@ class LifecycleClassification(str, Enum):
 
 def classify_lifecycle(view: TradeIdeaView, *, now: datetime) -> LifecycleClassification:
     """Classify one view; ``now`` decides whether an open fill is overdue."""
+    if view.idea.position_operation is not None:
+        return LifecycleClassification.NOT_APPLICABLE
     if view.state not in TERMINAL_STATES:
         return LifecycleClassification.NOT_APPLICABLE
     if view.closeout_attribution is not None:

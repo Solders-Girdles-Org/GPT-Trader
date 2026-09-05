@@ -69,6 +69,8 @@ class KernelRuntime(Protocol):
         evidence: tuple[str, ...] = (),
     ) -> None: ...
 
+    def position_operation_violations(self, idea: TradeIdea) -> tuple[str, ...]: ...
+
     def current_budget(self) -> RiskBudget: ...
 
     def approval_budget_context(
@@ -233,9 +235,18 @@ class RiskKernel:
         review_started_at = self._runtime.review_started_at(idea.decision_id)
         violations = (
             *autonomy_resolution_violations(resolution),
+            *(
+                self._runtime.position_operation_violations(idea)
+                if idea.position_operation is not None
+                else ()
+            ),
             *policy.approval_violations(
                 idea,
                 actor_type=actor_type,
+                position_operation_validated=(
+                    idea.position_operation is not None
+                    and not self._runtime.position_operation_violations(idea)
+                ),
                 budget=budget,
                 open_approved_count=self._runtime.open_approved_count(),
                 now=evaluated_at,

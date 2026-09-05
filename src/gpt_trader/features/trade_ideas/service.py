@@ -11,6 +11,7 @@ from __future__ import annotations
 import getpass
 import os
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -681,9 +682,14 @@ class TradeIdeaService:
         review_started_at = self.review_started_at(idea.decision_id)
         return [
             *autonomy_resolution_violations(resolution),
+            *self.position_operation_violations(idea),
             *policy.approval_violations(
                 idea,
                 actor_type=actor_type,
+                position_operation_validated=(
+                    idea.position_operation is not None
+                    and not self.position_operation_violations(idea)
+                ),
                 budget=budget,
                 open_approved_count=self.open_approved_count(),
                 now=now,
@@ -712,7 +718,18 @@ class TradeIdeaService:
         open_ideas: list[TradeIdea] = []
         same_day_closeouts: list[tuple[TradeIdea, CloseoutAttribution]] = []
         daily_loss_session_dates: set[str] = set()
+        from gpt_trader.features.trade_ideas.position_operations import (
+            position,
+            reduction_records,
+            scaled_idea,
+        )
+
+        realized_reductions = reduction_records(self)
+        reduced_targets = {record.decision_id for _, record in realized_reductions}
         for decision_id, event in latest_events.items():
+            recorded_idea = self.load_record_version(decision_id, event.record_hash)
+            if recorded_idea.position_operation is not None:
+                continue  # An exit operation never creates another opening exposure.
             if event.after_state in OPEN_BUDGET_EXPOSURE_STATES:
                 if decision_id == exclude_decision_id:
                     continue
@@ -728,8 +745,17 @@ class TradeIdeaService:
                 and closeout is None
                 and decision_id != exclude_decision_id
             ):
-                open_ideas.append(idea)
+                if decision_id in reduced_targets:
+                    projected = position(self, decision_id)
+                    if projected.remaining > 0:
+                        open_ideas.append(
+                            scaled_idea(idea, projected.remaining / projected.entry_quantity)
+                        )
+                else:
+                    open_ideas.append(idea)
                 continue
+            if decision_id in reduced_targets:
+                continue  # Per-fill events replace the final aggregate for accounting.
             same_session = False
             session_date = ""
             if closeout is not None:
@@ -745,6 +771,13 @@ class TradeIdeaService:
                 ):
                     same_day_closeouts.append((idea, closeout))
                     daily_loss_session_dates.add(session_date)
+        for portion, record in realized_reductions:
+            same_session, session_date = self._same_accounting_session(
+                portion, record.timestamp, evaluation_time
+            )
+            if same_session:
+                same_day_closeouts.append((portion, record))
+                daily_loss_session_dates.add(session_date)
         closeouts = [closeout for _, closeout in same_day_closeouts]
         account_equity_snapshot = self._account_equity_snapshot(
             # Non-mutating read: building a budget context (e.g. during a
@@ -861,21 +894,51 @@ class TradeIdeaService:
             if event.action is not AuditAction.FILLED
         }
 
+    def _accounting_closeouts(self) -> tuple[CloseoutAttribution, ...]:
+        from gpt_trader.features.trade_ideas.position_operations import reduction_records
+
+        reductions = tuple(record for _, record in reduction_records(self))
+        targets = {record.decision_id for record in reductions}
+        return (
+            tuple(
+                record
+                for record in self.query_closeout_records().items
+                if record.decision_id not in targets
+            )
+            + reductions
+        )
+
+    def position_operation_violations(self, idea: TradeIdea) -> tuple[str, ...]:
+        if idea.position_operation is None:
+            return ()
+        from gpt_trader.features.trade_ideas.position_operations import (
+            PositionOperationAdmissionError,
+            intent_for_idea,
+        )
+
+        try:
+            intent_for_idea(self, idea)
+        except (PositionOperationAdmissionError, ValueError, KeyError) as error:
+            return (f"position operation: {error}",)
+        return ()
+
     @state_transaction(write=False)
     def paper_accounting(self) -> PaperAccountingSummary:
         """Read-only paper equity / HWM / drawdown-from-peak from the trail."""
-        return compute_paper_accounting(
+        summary = compute_paper_accounting(
             self.budget_log.history(),
-            self.query_closeout_records().items,
+            self._accounting_closeouts(),
             terminal_times=self.closeout_terminal_times(),
         )
+
+        return replace(summary, closeout_count=len(self.query_closeout_records().items))
 
     @state_transaction(write=False)
     def equity_ledger_points(self) -> list[EquityLedgerPoint]:
         """Read-only resolved equity/peak series for windowed monitor reads."""
         return equity_ledger(
             self.budget_log.history(),
-            self.query_closeout_records().items,
+            self._accounting_closeouts(),
             terminal_times=self.closeout_terminal_times(),
         )
 
@@ -1285,6 +1348,13 @@ class TradeIdeaService:
     ) -> TradeIdeaView:
         venue = _validate_audit_venue(venue)
         idea = self._require_idea(decision_id)
+        if idea.position_operation is not None:
+            entry = self.execution_journal.entries().get(decision_id)
+            if venue != "paper" or entry is None:
+                raise InvalidTransitionError(
+                    "Targeted submission requires an admitted paper intent"
+                )
+            self.execution_journal.validate_binding(entry, idea)
         self.append_audit(
             idea,
             action=AuditAction.SUBMITTED,
@@ -1311,6 +1381,16 @@ class TradeIdeaService:
     ) -> TradeIdeaView:
         venue = _validate_audit_venue(venue)
         idea = self._require_idea(decision_id)
+        if idea.position_operation is not None:
+            entry = self.execution_journal.entries().get(decision_id)
+            if (
+                venue != "paper"
+                or entry is None
+                or entry.receipt is None
+                or entry.receipt["status"] != "filled"
+            ):
+                raise InvalidTransitionError("Targeted fill requires a durable paper receipt")
+            self.execution_journal.validate_binding(entry, idea)
         self.append_audit(
             idea,
             action=AuditAction.FILLED,
@@ -1322,7 +1402,27 @@ class TradeIdeaService:
             venue=venue,
             external_order_id=external_order_id,
         )
-        return self.get(decision_id)
+        result = self.get(decision_id)
+        if idea.position_operation is not None:
+            from gpt_trader.features.trade_ideas.execution_journal import (
+                ExecutionJournalIntegrityError,
+            )
+            from gpt_trader.features.trade_ideas.fill_evidence import recorded_fill_from_view
+
+            fill = recorded_fill_from_view(result)
+            assert entry is not None and entry.receipt is not None
+            receipt = entry.receipt
+            if (
+                fill is None
+                or fill.quantity != Decimal(receipt["quantity"])
+                or fill.price != Decimal(receipt["price"])
+                or fill.external_order_id != receipt["order_id"]
+                or fill.filled_at != datetime.fromisoformat(receipt["filled_at"])
+            ):
+                raise ExecutionJournalIntegrityError(
+                    "Targeted audit fill conflicts with durable receipt"
+                )
+        return result
 
     @state_transaction(write=True)
     def record_closeout_attribution(
@@ -1336,6 +1436,7 @@ class TradeIdeaService:
         realized_profit_loss_unavailable_reason: str = "",
         evidence: tuple[str, ...] = (),
         actor_type: ActorType = ActorType.HUMAN,
+        resolved_at: datetime | None = None,
     ) -> CloseoutAttribution:
         """Record why a terminal idea resolved and its realized profit/loss evidence."""
         view = self.get(decision_id)
@@ -1347,10 +1448,32 @@ class TradeIdeaService:
                 value=view.state.value,
             )
 
+        if view.idea.position_operation is not None:
+            raise InvalidTransitionError("A reduction is accounted against its target entry")
+        from gpt_trader.features.trade_ideas.position_operations import positions
+
+        projected = positions(self).get(decision_id)
+        if projected is not None and projected.reserved:
+            raise InvalidTransitionError("Pending reduction reservation prevents final attribution")
+        has_reductions = projected is not None and bool(projected.reductions)
+        if resolved_at is not None and not has_reductions:
+            raise InvalidTransitionError(
+                "Explicit resolution time requires durable reduction facts"
+            )
+        if has_reductions:
+            assert projected is not None
+            fact_time = max(fact.timestamp for fact in projected.reductions)
+            if resolved_at is not None and resolved_at != fact_time:
+                raise InvalidTransitionError("Resolution time must match final reduction fact")
+            resolved_at = fact_time
+            if projected.remaining != 0 or realized_profit_loss_amount != projected.realized_total:
+                raise InvalidTransitionError(
+                    "Final closeout must match fully closed reduction facts"
+                )
         terminal_event = view.events[-1]
         record = CloseoutAttribution(
             decision_id=decision_id,
-            timestamp=self._now(),
+            timestamp=resolved_at or self._now(),
             actor_type=actor_type.value,
             actor_id=actor_id,
             terminal_event_id=terminal_event.event_id,
@@ -1401,6 +1524,8 @@ class TradeIdeaService:
         """
         recorded: list[CloseoutAttribution] = []
         for view in self.list_views(TradeIdeaState.EXPIRED):
+            if view.idea.position_operation is not None:
+                continue
             if view.closeout_attribution is not None:
                 continue
             recorded.append(
@@ -1431,6 +1556,11 @@ class TradeIdeaService:
     ) -> dict[str, object]:
         """Render a deterministic broker-neutral ticket without mutating records."""
         view = self.get(decision_id)
+        if view.idea.position_operation is not None:
+            raise PolicyViolationError(
+                "Position-targeted operations use the paper executor only",
+                ["no live reduction ticket adapter is authorized"],
+            )
         budget = self._budget_log.current()
         budget_source = "risk_budget_log" if budget is not None else "default"
         effective_budget = budget or DEFAULT_RISK_BUDGET

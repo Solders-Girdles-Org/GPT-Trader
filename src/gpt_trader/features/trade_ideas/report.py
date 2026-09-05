@@ -51,7 +51,7 @@ def build_trade_idea_track_record_report(
     report_cutoff = until or current_time
     views = _snapshot_views_by_window(
         service,
-        service.list_views(),
+        [view for view in service.list_views() if view.idea.position_operation is None],
         since=since,
         until=report_cutoff,
     )

@@ -57,16 +57,24 @@ class ExecutionJournal:
                 path = self.repository.root / EXECUTION_STREAM
                 lines = path.read_text().splitlines() if path.exists() else []
             entries: dict[str, ExecutionJournalEntry] = {}
+            simulated_ids: set[str] = set()
             try:
                 for line in lines:
                     if not line.strip():
                         continue
                     event = json.loads(line)
+                    if event["kind"] == "simulated_resolution":
+                        self._validate_simulated_resolution(event)
+                        operation_id = event["resolution"]["operation_id"]
+                        if operation_id in simulated_ids or operation_id in entries:
+                            raise ValueError("Duplicate simulated operation identity")
+                        simulated_ids.add(operation_id)
+                        continue
                     decision_id = event["decision_id"]
                     kind = event["kind"]
                     current = entries.get(decision_id)
                     if kind == "intent":
-                        if current is not None:
+                        if current is not None or decision_id in simulated_ids:
                             raise ValueError("duplicate intent")
                         intent = event["intent"]
                         OrderIntent.from_dict(intent)
@@ -81,7 +89,10 @@ class ExecutionJournal:
                         if (
                             not intent["symbol"]
                             or intent["order_type"] != "market"
-                            or intent["reduce_only"] is not False
+                            or (
+                                intent["reduce_only"] is not False
+                                and "position_operation" not in intent
+                            )
                         ):
                             raise ValueError("unsupported paper entry intent")
                         if event["intent_hash"] != payload_hash(intent):
@@ -132,9 +143,21 @@ class ExecutionJournal:
     def validate_binding(entry: ExecutionJournalEntry, idea: TradeIdea) -> None:
         side = {"long": OrderSide.BUY, "short": OrderSide.SELL}.get(idea.direction.value)
         quantity = idea.sizing_recommendation.quantity
+        if idea.position_operation is not None:
+            side = {"long": OrderSide.SELL, "short": OrderSide.BUY}.get(idea.direction.value)
+            if idea.position_operation.action == "close" and quantity is None:
+                quantity = Decimal(entry.intent["quantity"])  # Frozen at serialized admission.
         if side is None or quantity is None:
             raise ExecutionJournalIntegrityError("Execution intent conflicts with idea")
-        expected = OrderIntent(idea.decision_id, idea.instrument, side, OrderType.MARKET, quantity)
+        expected = OrderIntent(
+            idea.decision_id,
+            idea.instrument,
+            side,
+            OrderType.MARKET,
+            quantity,
+            reduce_only=idea.position_operation is not None,
+            position_operation=idea.position_operation,
+        )
         if (
             entry.record_hash != idea.record_hash()
             or OrderIntent.from_dict(entry.intent) != expected
@@ -162,6 +185,15 @@ class ExecutionJournal:
         timestamp = datetime.fromisoformat(receipt["filled_at"])
         if timestamp.utcoffset() is None:
             raise PaperReceiptConflictError("Receipt timestamp requires timezone")
+        if "position_operation" in entry.intent:
+            try:
+                observed_at = datetime.fromisoformat(receipt["observed_at"])
+                if observed_at.utcoffset() is None or timestamp > observed_at:
+                    raise ValueError("execution cannot occur after observation")
+            except (KeyError, TypeError, ValueError) as error:
+                raise PaperReceiptConflictError(
+                    "Targeted receipt requires valid observation time"
+                ) from error
 
     def record_intent(self, decision_id: str, record_hash: str, intent: dict[str, Any]) -> None:
         with self.repository.transaction(write=True):
@@ -223,3 +255,70 @@ class ExecutionJournal:
                     }
                 ),
             )
+
+    @staticmethod
+    def _validate_simulated_resolution(event: dict[str, Any]) -> None:
+        from gpt_trader.core.order_intent import PositionOperation
+        from gpt_trader.features.trade_ideas.closeout import CloseoutResolution
+
+        payload = event["resolution"]
+        PositionOperation("close", payload["target_decision_id"], payload["target_record_hash"])
+        if event["checksum"] != payload_hash(payload) or not payload["operation_id"]:
+            raise ExecutionJournalIntegrityError("Invalid simulated resolution identity/checksum")
+        for field in ("quantity", "price"):
+            value = Decimal(payload[field])
+            if not value.is_finite() or value <= 0:
+                raise ExecutionJournalIntegrityError("Invalid simulated resolution value")
+        if payload["operation_id"] != f"simulated-close-{payload['target_record_hash']}":
+            raise ExecutionJournalIntegrityError("Simulated close identity does not pin target")
+        if datetime.fromisoformat(
+            payload["observed_at"]
+        ).utcoffset() is None or datetime.fromisoformat(
+            payload["resolved_at"]
+        ) > datetime.fromisoformat(
+            payload["observed_at"]
+        ):
+            raise ExecutionJournalIntegrityError(
+                "Simulated resolution cannot precede observation evidence"
+            )
+        if datetime.fromisoformat(payload["resolved_at"]).utcoffset() is None:
+            raise ExecutionJournalIntegrityError("Simulated resolution requires timestamp")
+        CloseoutResolution(payload["resolution"])
+        if payload["source"] != "simulated_candle_resolution" or not payload["evidence"]:
+            raise ExecutionJournalIntegrityError("Simulated resolution requires explicit evidence")
+
+    def simulated_resolutions(self) -> tuple[dict[str, Any], ...]:
+        with self.repository.transaction():
+            self.entries()
+            if self.repository.active:
+                lines = self.repository.lines(EXECUTION_STREAM)
+            else:
+                path = self.repository.root / EXECUTION_STREAM
+                lines = path.read_text().splitlines() if path.exists() else []
+            records: dict[str, dict[str, Any]] = {}
+            for line in lines:
+                if not line.strip():
+                    continue
+                event = json.loads(line)
+                if event["kind"] != "simulated_resolution":
+                    continue
+                payload = event["resolution"]
+                if payload["operation_id"] in records:
+                    raise ExecutionJournalIntegrityError("Duplicate simulated resolution identity")
+                records[payload["operation_id"]] = payload
+            return tuple(records.values())
+
+    def record_simulated_resolution(self, payload: dict[str, Any]) -> None:
+        with self.repository.transaction(write=True):
+            for existing in self.simulated_resolutions():
+                if existing["operation_id"] == payload["operation_id"]:
+                    if existing != payload:
+                        raise ExecutionJournalIntegrityError("Conflicting simulated resolution")
+                    return
+            event = {
+                "kind": "simulated_resolution",
+                "resolution": payload,
+                "checksum": payload_hash(payload),
+            }
+            self._validate_simulated_resolution(event)
+            self.repository.append(EXECUTION_STREAM, json.dumps(event))

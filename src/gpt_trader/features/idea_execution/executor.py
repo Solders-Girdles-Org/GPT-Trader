@@ -34,6 +34,7 @@ from gpt_trader.features.trade_ideas import (
     AuditAction,
     AuditEvent,
     AutonomyResolution,
+    CloseoutResolution,
     PaperFillEvent,
     PaperFillReconciler,
     PaperFillReconciliationEntry,
@@ -279,6 +280,42 @@ class PaperIdeaExecutor:
                 value=expires_at.isoformat(),
             )
 
+        if view.idea.position_operation is not None:
+            if (
+                type(self._broker) is HybridPaperBroker
+                and view.idea.direction is TradeDirection.SHORT
+            ):
+                raise IdeaNotExecutableError(
+                    "HybridPaperBroker cannot reduce a short target: spot-long inventory only"
+                )
+            from gpt_trader.features.trade_ideas.policy import ApprovalPolicy
+
+            evaluated_at = self._now_factory()
+            budget = self._service.current_budget()
+            context = self._service.approval_budget_context(
+                exclude_decision_id=decision_id, now=evaluated_at
+            )
+            resolution = self._service.decision_autonomy(
+                now=evaluated_at, budget=budget, budget_context=context
+            )
+            violations = [
+                *self._service.position_operation_violations(view.idea),
+                *ApprovalPolicy(resolution.mode).approval_violations(
+                    view.idea,
+                    actor_type=approval_event.actor_type if approval_event else ActorType.SYSTEM,
+                    budget=budget,
+                    open_approved_count=max(0, self._service.open_approved_count() - 1),
+                    now=evaluated_at,
+                    budget_context=context,
+                    position_operation_validated=not self._service.position_operation_violations(
+                        view.idea
+                    ),
+                ),
+            ]
+            if violations:
+                raise IdeaNotExecutableError(
+                    "Position operation no longer admitted: " + "; ".join(violations)
+                )
         session_refusal = self._closed_session_refusal(decision_id, view.idea.instrument)
         if session_refusal is not None:
             raise session_refusal
@@ -349,8 +386,20 @@ class PaperIdeaExecutor:
             view = admission.view
             symbol = view.idea.instrument
             side = _order_side(view.idea)
-            quantity = _order_quantity(view.idea)
+            if view.idea.position_operation is not None:
+                from gpt_trader.features.trade_ideas.position_operations import intent_for_idea
+
+                intent = intent_for_idea(self._service, view.idea)
+                side = intent.side.value.lower()
+                quantity = intent.quantity
+            else:
+                quantity = _order_quantity(view.idea)
+                intent = OrderIntent(
+                    decision_id, symbol, OrderSide(side.upper()), OrderType.MARKET, quantity
+                )
             client_order_id = decision_id
+            if view.idea.position_operation is not None:
+                journal.record_intent(decision_id, view.idea.record_hash(), intent.to_dict())
             self._service.record_submission(
                 decision_id,
                 actor_id=actor_id,
@@ -360,12 +409,17 @@ class PaperIdeaExecutor:
                 actor_type=ActorType.SYSTEM,
                 evidence=admission.submission_evidence,
             )
-            intent = OrderIntent(
-                client_order_id, symbol, OrderSide(side.upper()), OrderType.MARKET, quantity
-            )
-            journal.record_intent(decision_id, view.idea.record_hash(), intent.to_dict())
+            if view.idea.position_operation is None:
+                journal.record_intent(decision_id, view.idea.record_hash(), intent.to_dict())
 
         order = self._broker.place_order(**intent.broker_kwargs())
+        try:
+            intent.validate_receipt(order)
+        except ValueError as error:
+            raise PaperExecutionError(
+                f"Paper fill was not recorded: receipt conflicts with admitted intent: {error}",
+                field="receipt",
+            ) from error
 
         fill_event = PaperFillEvent(
             order_id=order.id,
@@ -378,10 +432,24 @@ class PaperIdeaExecutor:
             decision_id=decision_id,
             filled_at=order.updated_at or order.submitted_at or self._now_factory(),
         )
+        receipt_payload = fill_event.to_dict()
+        if view.idea.position_operation is not None:
+            observed_at = self._now_factory()
+            submitted_at = self._service.get(decision_id).events[-1].timestamp
+            if (
+                fill_event.filled_at is None
+                or fill_event.filled_at.utcoffset() is None
+                or fill_event.filled_at > observed_at
+                or fill_event.filled_at < submitted_at
+            ):
+                raise PaperExecutionError(
+                    "Targeted receipt has impossible execution time", field="receipt"
+                )
+            receipt_payload["observed_at"] = observed_at.isoformat()
         # Commit the observed broker result before any lifecycle reconciliation.
         # A crash after this point can recover without another broker call.
         try:
-            journal.record_receipt(decision_id, fill_event.to_dict())
+            journal.record_receipt(decision_id, receipt_payload)
         except PaperReceiptConflictError as error:
             raise PaperExecutionError(
                 f"Paper fill for idea {decision_id} was not recorded: {error}", field="receipt"
@@ -453,6 +521,15 @@ class PaperIdeaExecutor:
                     "Reconciliation did not produce an audited fill"
                 )
             journal.mark_reconciled(decision_id)
+            if view.idea.position_operation is not None:
+                from gpt_trader.features.trade_ideas.position_operations import finalize_position
+
+                finalize_position(
+                    self._service,
+                    view.idea.position_operation.target_decision_id,
+                    actor_id=actor_id,
+                    resolution=CloseoutResolution(view.idea.position_operation.resolution),
+                )
             return (report.matched or report.skipped)[0]
 
     def recover_receipts(

@@ -192,6 +192,7 @@ class ApprovalPolicy:
         review_started_at: datetime | None = None,
         review_deadline: datetime | None = None,
         budget_context: ApprovalBudgetContext | None = None,
+        position_operation_validated: bool = False,
     ) -> list[str]:
         """Return every reason this approval must be refused; empty means allowed."""
         violations: list[str] = []
@@ -233,7 +234,12 @@ class ApprovalPolicy:
                 "cannot be verified"
             )
 
-        percent = idea.max_loss.percent_of_account
+        reducing = idea.position_operation is not None
+        if reducing and not position_operation_validated:
+            violations.append(
+                "position operation requires a verified runtime target and available quantity"
+            )
+        percent = Decimal(0) if reducing else idea.max_loss.percent_of_account
         if percent is None:
             violations.append(
                 "max_loss.percent_of_account is required to verify the idea against the budget"
@@ -269,7 +275,7 @@ class ApprovalPolicy:
                     "sizing_recommendation.notional; max_open_notional_pct budget "
                     "exposure cannot be verified"
                 )
-            candidate_notional = idea.sizing_recommendation.notional
+            candidate_notional = Decimal(0) if reducing else idea.sizing_recommendation.notional
             if candidate_notional is None:
                 violations.append(
                     "sizing_recommendation.notional is required to verify "
@@ -302,14 +308,23 @@ class ApprovalPolicy:
                                 f"(projected_open_notional={_format_decimal(projected_notional)}, "
                                 f"account_equity_snapshot={_format_decimal(account_equity)})"
                             )
-            violations.extend(_equity_buying_power_violations(idea, budget, budget_context))
+            if not reducing:
+                violations.extend(_equity_buying_power_violations(idea, budget, budget_context))
 
-        if idea.product_type is ProductType.FUTURES and not budget.allow_futures_leverage:
+        if (
+            not reducing
+            and idea.product_type is ProductType.FUTURES
+            and not budget.allow_futures_leverage
+        ):
             violations.append(
                 "product_type futures requires risk budget allow_futures_leverage=true"
             )
 
-        if idea.direction is TradeDirection.SHORT and not budget.allow_naked_shorts:
+        if (
+            not reducing
+            and idea.direction is TradeDirection.SHORT
+            and not budget.allow_naked_shorts
+        ):
             violations.append("direction short requires risk budget allow_naked_shorts=true")
 
         if open_approved_count >= budget.max_concurrent_approved_tickets:

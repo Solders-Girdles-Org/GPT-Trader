@@ -114,7 +114,7 @@ def resolve_filled_ideas(
     skipped_closed: list[dict[str, str]] = []
     unresolved: list[dict[str, str]] = []
     for view in service.list_views(TradeIdeaState.FILLED):
-        if view.closeout_attribution is not None:
+        if view.idea.position_operation is not None or view.closeout_attribution is not None:
             continue
         closed_skip = _closed_session_skip(view, resolver, now)
         if closed_skip is not None:
@@ -220,6 +220,23 @@ def _resolve_one(
     if quantity is None:
         return None, "no fill or sizing quantity recorded; realized P&L cannot be computed"
 
+    projected = None
+    if (
+        recorded_fill.price is not None
+        and recorded_fill.quantity is not None
+        and not recorded_fill.corrupt_keys
+    ):
+        from gpt_trader.features.trade_ideas.position_operations import position
+
+        projected = position(service, idea.decision_id)
+        if projected.reserved:
+            return (
+                None,
+                "pending reduction reserves quantity; no simulated close before receipt resolution",
+            )
+        quantity = projected.remaining
+        if projected.reductions:
+            filled_at = max(filled_at, *(fact.timestamp for fact in projected.reductions))
     try:
         result = score_filled_trade_idea(
             idea,
@@ -259,6 +276,25 @@ def _resolve_one(
     if recorded_fill.corrupt_keys:
         # Destroyed evidence must never masquerade as a by-design estimate.
         evidence.append(f"evidence_corrupt_keys={','.join(recorded_fill.corrupt_keys)}")
+    if projected is not None:
+        if result.exit_time is None:
+            return None, "scoring produced no resolution timestamp"
+        from gpt_trader.features.trade_ideas.position_operations import record_simulated_close
+
+        return (
+            record_simulated_close(
+                service,
+                idea.decision_id,
+                quantity=quantity,
+                price=result.exit_price,
+                resolved_at=result.exit_time,
+                observed_at=now,
+                resolution=resolution,
+                evidence=tuple(evidence),
+                actor_id=actor_id,
+            ),
+            None,
+        )
     attribution = service.record_closeout_attribution(
         idea.decision_id,
         actor_id=actor_id,
