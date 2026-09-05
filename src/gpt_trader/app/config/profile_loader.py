@@ -436,14 +436,16 @@ class ProfileLoader:
                     exception=exc,
                 )
                 logger.warning(
-                    "Failed to load profile YAML, using defaults",
+                    "Failed to load profile YAML",
                     operation="profile_load",
                     profile=profile.value,
                     path=str(yaml_path),
                     error=payload["reason"],
                     details=payload,
                 )
-                return defaults
+                raise ProfileValidationError(
+                    f"Cannot load profile '{profile.value}' from {yaml_path}: {payload['reason']}"
+                ) from exc
 
         payload = profile_yaml_missing_payload(profile=profile.value, path=yaml_path)
         logger.warning(

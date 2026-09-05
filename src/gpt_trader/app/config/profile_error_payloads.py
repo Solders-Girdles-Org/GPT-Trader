@@ -91,7 +91,7 @@ def profile_yaml_parse_error_payload(
     reason = _sanitize_text(str(exception), fallback="YAML parsing failed")
     remediation = (
         f"Inspect {path or profile} for syntax issues or invalid values and retry."
-        " Defaults are provided if the file cannot be repaired."
+        " Profile loading is blocked until the file is repaired."
     )
     return format_profile_error_payload(
         profile=profile,

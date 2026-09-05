@@ -20,6 +20,7 @@ from gpt_trader.app.config.profile_loader import (
     is_dev_profile,
     resolve_profile_override,
 )
+from gpt_trader.app.config.profile_schema import ProfileValidationError
 from gpt_trader.config.types import Profile
 
 
@@ -115,9 +116,9 @@ monitoring:
         yaml_path.write_text("invalid: [")
 
         loader = ProfileLoader(profiles_dir=tmp_path)
-        schema = loader.load(Profile.DEV)
+        with pytest.raises(ProfileValidationError, match="Cannot load profile 'dev'"):
+            loader.load(Profile.DEV)
 
-        assert schema.profile_name == "dev"
         assert mock_logger.warning.call_count == 1
         logged_kwargs = mock_logger.warning.call_args.kwargs
         details = logged_kwargs.get("details", {})
@@ -127,7 +128,7 @@ monitoring:
         reason = details["reason"]
         assert "while parsing" in reason
         assert "\n" not in reason
-        assert "Defaults are provided" in details["remediation"]
+        assert "blocked until the file is repaired" in details["remediation"]
         assert "\n" not in details["remediation"]
 
     def test_logs_payload_when_profile_missing(
