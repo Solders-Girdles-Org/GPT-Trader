@@ -8,8 +8,9 @@ Two rules keep this repo from sprawling:
 
 1. **State each fact once; link, don't copy.** The authority on where every kind
    of fact lives is [docs/INFORMATION_ARCHITECTURE.md](docs/INFORMATION_ARCHITECTURE.md).
-2. **Opening a PR is not merging.** Merge is a separate, later, explicitly
-   approved step (see [Merge discipline](#merge-discipline)).
+2. **Opening a PR is not merging.** Merge is a separate readiness-gated step
+   covered by the standing approval in [Merge discipline](#merge-discipline);
+   do not request another sign-off when that gate passes.
 
 ## Where do I go?
 

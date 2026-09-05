@@ -1,143 +1,59 @@
-# Project Status — Where We Actually Are
+# Project Status — Source Pointers
 
 ---
 status: current
 ---
 
-The factual **current-state** tracker: what is actually shipped, as distinct from
-[DIRECTION.md](DIRECTION.md) (the destination and gates) and
-[decisions/](decisions/README.md) (what was decided and why). This doc stays
-small and points at the source of truth — it does **not** restate the ladder, the
-backlog, or any decision. When a stage description elsewhere disagrees with
-observed code, this doc wins until the other is reconciled.
+This page points to implemented capabilities and their evidence.
+[Information Architecture](INFORMATION_ARCHITECTURE.md) gives code, tests,
+generated inventories and live GitHub state precedence over status prose.
+If a pointer or claim disagrees with those sources, reconcile this page; it
+cannot override observed behavior or an accepted decision.
 
-Verify file/function/issue references before relying on them; they reflect the
-dated snapshot below. The next work is the live GitHub issue queue,
-never a list copied here.
+[Direction](DIRECTION.md) owns the destination and execution gates,
+[decisions](decisions/README.md) own durable choices, and the
+[issue tracker](https://github.com/Solders-Girdles-Org/GPT-Trader/issues) owns
+accepted next work. Source integration is separate from runtime deployment,
+migration, authorization and measured promotion.
 
-## Snapshot (2026-07-03)
+## Source snapshot (2026-09-04)
 
-Stage definitions live in [DIRECTION.md](DIRECTION.md#the-ladder); this is only
-the state per stage.
+Pointers checked against `main` through the merged transactional state,
+strategy routing and paper cycle changes
+([#1277](https://github.com/Solders-Girdles-Org/GPT-Trader/pull/1277),
+[#1275](https://github.com/Solders-Girdles-Org/GPT-Trader/pull/1275),
+[#1278](https://github.com/Solders-Girdles-Org/GPT-Trader/pull/1278)). No account,
+operational state, runtime migration or graduation result was inspected for
+this source snapshot.
 
-| Stage | State |
-|-------|-------|
-| **0 — Rails** | **Complete** — all rubric evidence shipped and tested |
-| **1 — Human-approved loop** | **In progress (runtime routing wired, default-off)** — reviewer tooling, attribution, real-data snapshot proposal (#1031), paper-fill reconciliation (#1035), and the strategy-signal adapter are operator-usable; the live strategy path can now be routed through the approval workflow behind a default-off gate (#1033), but that gate ships off |
-| **2 — Bounded autonomy** | Mechanisms started, operational promotion not entered — default-off auto-approval and paper auto-execution gates exist for system-approved ideas, but enabling them remains an operator act gated on measured outcomes |
-| **3 — Self-directed entity** | Not started |
+| Implemented surface | Source and evidence |
+| --- | --- |
+| Trade-idea records, approval workflow, policy, budgets, audit and attribution | [Service](../src/gpt_trader/features/trade_ideas/service.py) and [feature tests](../tests/unit/gpt_trader/features/trade_ideas/) |
+| Transactional admission and persistent trade state | [Persistence](../src/gpt_trader/features/trade_ideas/persistence.py), [transaction tests](../tests/unit/gpt_trader/features/trade_ideas/test_state_transactions.py), and accepted [storage/migration contract](decisions/transactional-trade-state.md) |
+| Strategy-to-idea routing and in-process paper continuation | [Routing contract](specs/TRADE_IDEA_INTERFACES_DESIGN_NOTES.md#live-strategy-signal-routing-default-off), [routing tests](../tests/unit/gpt_trader/features/live_trade/engines/test_strategy_routing_contract.py), and [event lane](../src/gpt_trader/features/idea_execution/event_lane.py) |
+| Paper-cycle failure isolation and venue price increments | [Paper execution contract](paper_trading.md#product-increments-and-partial-cycle-results), [cycle tests](../tests/unit/gpt_trader/features/idea_execution/test_cycle_failure_isolation.py), and [snapshot increment tests](../tests/unit/gpt_trader/features/recorder/test_snapshot_increments.py) |
+| Portfolio monitors, approval policy and measured promotion scoring | [Monitors](../src/gpt_trader/features/trade_ideas/monitors.py), [policy](../src/gpt_trader/features/trade_ideas/policy.py), [scorecard](../src/gpt_trader/features/trade_ideas/scorecard.py), and [measured-outcome decision](decisions/adopt-measured-outcome-rubric.md) |
 
-## Stage 0 — Rails (complete)
+## Reading source and operational state separately
 
-Every Stage 0 capability has shipped, tested evidence in
-`src/gpt_trader/features/trade_ideas/`: broker-neutral record + hashing
-(`models.py`), approval-gated state machine (`workflow.py`), append-only audit log
-(`audit.py`), eligibility + approval policy (`eligibility.py`, `policy.py`),
-versioned risk budget (`budget.py`), outcome attribution (`closeout.py`), and
-operator lifecycle controls (`service.py`). The full lifecycle is exposed through
-the `gpt-trader ideas` CLI.
+The [transactional-state decision](decisions/transactional-trade-state.md#adoption-and-rollback)
+owns migration, writer coordination and rollback. Committed SQLite support does
+not prove that an existing runtime store has been migrated.
 
-## Stage 1 — Human-approved loop (in progress)
+The [routing contract](specs/TRADE_IDEA_INTERFACES_DESIGN_NOTES.md#live-strategy-signal-routing-default-off)
+owns gate precedence and submission boundaries. Tracked
+[paper configuration](../config/profiles/paper.yaml) is an implementation input;
+a documentation review does not establish the effective mode of a running bot.
 
-The shipped surfaces turn the rails into most of a loop: reviewer tooling
-(CLI), outcome attribution, the track-record report, real-data
-`MarketSnapshot` proposal (`ideas snapshot build` → `ideas propose-baseline`,
-issue `#1031` closed 2026-06-28), paper-fill reconciliation onto the audit trail
-(`ideas reconcile-paper-fills`, #1035 closed 2026-06-28), and a default-off
-library adapter that maps supported strategy buy decisions into proposed trade
-ideas through `TradeIdeaService.propose()` only.
+The [staged ladder](DIRECTION.md#the-ladder) and
+[graduation contract](DIRECTION.md#graduation) require operational evidence and
+recorded decisions. Existing mechanisms and green source tests do not by
+themselves prove entry into bounded autonomy or approval for live orders.
 
-**Runtime strategy-signal routing exists** (#1033), with optional in-process
-paper continuation (#1191). The
-[decision routing contract](specs/TRADE_IDEA_INTERFACES_DESIGN_NOTES.md#live-strategy-signal-routing-default-off)
-owns configuration precedence, submission boundaries and recovery behavior.
-Track precise per-ticket status in the issue queue, not here.
+## Keeping this page current
 
-## Stage 2 — Bounded autonomy (mechanisms started, not operationally entered)
-
-The first Stage 2 mechanisms now exist as default-off paper-only gates:
-`ideas approve --auto-sweep` can write system approvals inside the budget
-envelope only when `GPT_TRADER_IDEAS_AUTO_APPROVAL` is enabled and the audited
-autonomy log resolves to `bounded_autonomy`; the paper execution lane admits
-those system approvals only when `GPT_TRADER_IDEAS_AUTO_EXECUTION` is also
-enabled and the autonomy log still resolves to `bounded_autonomy` at execution
-time. The execution gate reuses the daily-loss ratchet, so a breach lowers the
-mode before remaining system-approved ideas can execute.
-
-**Portfolio-level risk is a continuous monitor** (#1192): HWM,
-drawdown-from-peak, and open exposure are derived from the attested-equity
-ledger and the open-idea trail (`features/trade_ideas/monitors.py`) and read
-through one library call (`TradeIdeaService.portfolio_monitors`) by both
-`gpt-trader ideas monitors` and the console accountant page. The
-drawdown-from-peak appetite is a budget lever (`max_drawdown_from_peak_pct`,
-unset by default); a breach at any decision boundary ratchets autonomy down
-through the same audited path as the daily-loss trigger. On the operational
-`paper` profile the lever is **seeded at 15%** (1.5x the 10% daily-loss cap;
-owner-approved 2026-07-07, budget version 3, #1217). The seed is a starting
-value, not an owner constant: per the [charter](DIRECTION.md), the durable
-owner of this lever is the agent, which renegotiates it through the same
-audited budget workflow as track record accumulates (the Stage 2 -> 3
-"budget renegotiation exercised" gate).
-
-**The budget vocabulary carries a cash-account buying-power dimension**
-(#1231): the `max_equity_buying_power_pct` lever (unset by default; 100 =
-cash-account fidelity) caps projected equity buying-power usage — open equity
-notional, the candidate idea, and equity sale proceeds still inside their
-settlement window — as a percent of the attested `account_equity`, enforced at
-approval time beside the notional check (`features/trade_ideas/policy.py`).
-Settlement lag is data derived from `Instrument.asset_class`
-(`core/instruments.py`: crypto spot settles immediately, equities T+1), so
-crypto-spot approval outcomes are unchanged (test-pinned) and no product
-boolean was added. With the lever configured, anything the check cannot verify
-— an unclassifiable instrument, missing notional, unattested equity — refuses
-the approval loudly. Margin, pattern-day-trading, and the options defined-risk
-half stay deferred. The paper executor and exit monitor now refuse equity fills
-and closeout resolution outside XNYS regular hours, leaving the idea open and
-recording the skip in cycle manifest evidence; crypto retains 24x7 behavior and
-unclassifiable instruments fail closed. The paper budget now groups realized
-losses by each closeout instrument's session date (XNYS for equities, UTC day
-for 24x7 crypto), and equity review-latency clocks pause while XNYS is closed.
-Hard idea expiries remain immutable, but the sweep cannot expire an equity idea
-until its session is open. Only the operator-gated equity-universe flip remains
-in #1232.
-
-**The promotion gates are now measurable in one command** (`ideas scorecard`,
-#1193): the Stage 1 -> 2 gates of the
-[measured-outcome rubric](decisions/adopt-measured-outcome-rubric.md) score
-pass/fail from the idea-level closeout/audit trail
-(`features/trade_ideas/scorecard.py`) with the observation-window rule
-applied, never from the batch cycle's run artifacts (test-enforced).
-Replay-derived calibration/edge over recorded snapshot windows reports
-alongside -- labeled, never blended into -- the wall-clock gates.
-Drawdown-from-peak now scores from the same equity ledger the monitors read
-(#1192); it stays not-yet-measurable on any profile whose budget leaves the
-`max_drawdown_from_peak_pct` lever unset, so the scorecard cannot claim
-promotability until that appetite is configured. With the paper-profile seed
-in place (#1217), the gate is scoreable there.
-
-**The in-process event-driven lane exists behind a default-off gate**
-(`event_driven_paper_lane_enabled`, #1191) and is **operator-enabled on the
-`paper` profile** (recorded approval 2026-07-07; `config/profiles/paper.yaml`).
-With the gate on, the live engine carries each proposed idea through the risk
-kernel — system
-approval, then an execution-time autonomy re-check — into paper execution in
-the same engine cycle (`features/idea_execution/event_lane.py`), honoring the
-same two env gates and the audited autonomy mode per decision. Kernel denials
-land on the idea audit trail (`auto_approval_skipped` /
-`auto_execution_skipped`), so a ratchet-down or kill-switch takes effect on
-the next event, not the next hourly turn. The hourly batch cycle continues
-unchanged as the evidence harness
-([adopt-event-driven-execution-topology](decisions/adopt-event-driven-execution-topology.md)).
-
-This is not a promotion claim. Live order submission remains out of scope; the
-lane is paper-only and still bounded by the two env gates, the audited
-autonomy mode, and the budget envelope at event time.
-
-## How to keep this doc honest
-
-- Update it when a capability moves between missing / partial / done — ideally in
-  the same PR that changes the state.
-- Prefer concrete pointers (file, function, issue number) over prose claims, and
-  route volatile specifics (open-issue lists, per-ticket status) to the tracker.
-- When this doc and a direction doc disagree, fix the direction doc or open a
-  `proposed` decision; don't let the gap persist silently.
+Update a source pointer when its capability changes, preferably in the same PR.
+Keep detailed behavior in its owning contract, volatile work in GitHub issues
+and PRs, and runtime evidence in its prescribed local stores. Preserve accepted
+direction while correcting stale status text; an observed implementation does
+not silently amend a policy or grant authority.
