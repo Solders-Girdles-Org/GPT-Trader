@@ -675,7 +675,7 @@ class TradingBot:
             metadata=metadata,
         )
         try:
-            upsert(record)
+            upsert(record, raise_on_error=True)
         except Exception as exc:
             logger.error(
                 "Failed to persist emergency flatten close-order record",

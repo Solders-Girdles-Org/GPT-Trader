@@ -25,6 +25,7 @@ LOG_NAMES = (
     "risk_budget.jsonl",
     "autonomy_state.jsonl",
     "closeout_attributions.jsonl",
+    "paper_execution.jsonl",
 )
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -144,6 +145,24 @@ class StateRepository:
             return False
         return True
 
+    @contextmanager
+    def admission_transaction(self, denial_types: tuple[type[Exception], ...]) -> Iterator[None]:
+        """Commit only audited safety downratchets when an admission is refused."""
+        failure = None
+        with self.transaction(write=True):
+            before = self.admission_revision()
+            autonomy_before = self.lines("autonomy_state.jsonl")
+            try:
+                yield
+            except denial_types as error:
+                if self.admission_revision() != before or not self.denial_autonomy_is_safe(
+                    autonomy_before
+                ):
+                    raise
+                failure = error
+        if failure is not None:
+            raise failure
+
     def admission_revision(self) -> tuple[object, ...]:
         """Detect writes outside the autonomy log before allowing denial to commit."""
         connection = self.connection
@@ -244,24 +263,13 @@ def state_transaction(
             # This option is confined to decision operations, never proposal batches.
             from gpt_trader.features.trade_ideas.policy import PolicyViolationError
 
-            failure: PolicyViolationError | None = None
-            with owner._repository.transaction(write=write):
-                before = owner._repository.admission_revision() if commit_denial else None
-                autonomy_before = (
-                    owner._repository.lines("autonomy_state.jsonl") if commit_denial else []
-                )
-                try:
-                    return method(*args, **kwargs)
-                except PolicyViolationError as error:
-                    if (
-                        not commit_denial
-                        or owner._repository.admission_revision() != before
-                        or not owner._repository.denial_autonomy_is_safe(autonomy_before)
-                    ):
-                        raise
-                    failure = error
-            assert failure is not None
-            raise failure
+            transaction = (
+                owner._repository.admission_transaction((PolicyViolationError,))
+                if commit_denial
+                else owner._repository.transaction(write=write)
+            )
+            with transaction:
+                return method(*args, **kwargs)
 
         return wrapped
 

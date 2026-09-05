@@ -134,8 +134,6 @@
       "order_update_persist",
       "orders_init",
       "orders_store_init",
-      "orders_store_lookup",
-      "orders_store_persist",
       "pnl_process_fill",
       "record_trade_event",
       "save_order",
@@ -1299,7 +1297,7 @@
         "INFO",
         "WARNING"
       ],
-      "occurrence_count": 14,
+      "occurrence_count": 13,
       "source_files": [
         "features/live_trade/engines/strategy.py",
         "features/live_trade/execution/order_event_recorder.py",
@@ -1367,39 +1365,6 @@
       "occurrence_count": 2,
       "source_files": [
         "features/live_trade/engines/strategy.py",
-        "features/live_trade/execution/order_submission.py"
-      ],
-      "statuses": null
-    },
-    "orders_store_lookup": {
-      "common_fields": [
-        "client_order_id",
-        "error_message",
-        "error_type"
-      ],
-      "components": null,
-      "levels": [
-        "WARNING"
-      ],
-      "occurrence_count": 1,
-      "source_files": [
-        "features/live_trade/execution/order_submission.py"
-      ],
-      "statuses": null
-    },
-    "orders_store_persist": {
-      "common_fields": [
-        "client_order_id",
-        "error_message",
-        "error_type",
-        "order_id"
-      ],
-      "components": null,
-      "levels": [
-        "WARNING"
-      ],
-      "occurrence_count": 1,
-      "source_files": [
         "features/live_trade/execution/order_submission.py"
       ],
       "statuses": null
@@ -2288,7 +2253,6 @@
     },
     "verify_integrity": {
       "common_fields": [
-        "expected",
         "order_id",
         "stored"
       ],
@@ -2369,20 +2333,20 @@
     "action": 14,
     "attempt": 4,
     "client_ip": 4,
-    "client_order_id": 22,
+    "client_order_id": 19,
     "consecutive_failures": 6,
     "details": 5,
     "environment": 12,
     "error": 57,
-    "error_message": 87,
-    "error_type": 87,
+    "error_message": 85,
+    "error_type": 85,
     "event_type": 7,
     "flatten_operation_id": 9,
     "granularity": 6,
     "issue_type": 4,
     "latency_seconds": 5,
     "max_attempts": 4,
-    "order_id": 30,
+    "order_id": 28,
     "order_type": 4,
     "outcome": 5,
     "path": 12,
@@ -2392,9 +2356,9 @@
     "reason": 27,
     "secret_ref": 6,
     "service": 9,
-    "side": 25,
-    "stage": 135,
-    "symbol": 83,
+    "side": 24,
+    "stage": 134,
+    "symbol": 82,
     "timestamp": 4
   },
   "level_distribution": {
@@ -2402,8 +2366,8 @@
     "DEBUG": 37,
     "ERROR": 115,
     "INFO": 86,
-    "WARNING": 102
+    "WARNING": 99
   },
-  "total_event_types": 128,
+  "total_event_types": 126,
   "version": "1.0"
 }

@@ -76,6 +76,7 @@ from gpt_trader.features.trade_ideas.closeout import (
     CloseoutResolution,
     MaxLossSnapshot,
 )
+from gpt_trader.features.trade_ideas.execution_journal import ExecutionJournal
 from gpt_trader.features.trade_ideas.kernel import (
     KernelCheck,
     RiskKernel,
@@ -347,6 +348,7 @@ class TradeIdeaService:
     ) -> None:
         self._root = root
         self._repository = StateRepository(root)
+        self.execution_journal = ExecutionJournal(self._repository)
         self._store = TradeIdeaStore(root / "records", repository=self._repository)
         self._audit = TradeIdeaAuditLog(root / "audit.jsonl", repository=self._repository)
         self._closeouts = CloseoutAttributionLog(

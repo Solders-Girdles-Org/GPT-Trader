@@ -50,6 +50,7 @@ def test_successful_order_records_metric(
 ) -> None:
     from gpt_trader.monitoring.metrics_collector import get_metrics_collector
 
+    mock_order.client_id = "decision-123"
     mock_broker.place_order.return_value = mock_order
 
     submit_order_call(submitter)
@@ -69,6 +70,7 @@ def test_successful_order_increments_trades_executed_counter(
 ) -> None:
     from gpt_trader.monitoring.metrics_collector import get_metrics_collector
 
+    mock_order.client_id = "decision-123"
     mock_broker.place_order.return_value = mock_order
 
     submit_order_call(submitter)
@@ -134,6 +136,8 @@ def test_successful_submission_records_latency_histogram(
     mock_order,
     record_latency_mock: MagicMock,
 ) -> None:
+    mock_order.client_id = "decision-123"
+    mock_order.type = OrderType.MARKET
     mock_broker.place_order.return_value = mock_order
 
     submit_order_call(

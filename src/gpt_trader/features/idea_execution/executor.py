@@ -18,8 +18,9 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from gpt_trader.core import OrderStatus
+from gpt_trader.core import OrderSide, OrderStatus, OrderType
 from gpt_trader.core.instruments import InstrumentParseError
+from gpt_trader.core.order_intent import OrderIntent
 from gpt_trader.core.trading_calendar import (
     SessionCalendarResolver,
     get_calendar_for_instrument,
@@ -42,7 +43,13 @@ from gpt_trader.features.trade_ideas import (
     TradeIdeaService,
     TradeIdeaState,
     TradeIdeaView,
+    recorded_fill_from_view,
 )
+from gpt_trader.features.trade_ideas.execution_journal import (
+    ExecutionJournalIntegrityError,
+    PaperReceiptConflictError,
+)
+from gpt_trader.features.trade_ideas.policy import PolicyViolationError
 
 # The exhaustive set of broker types this lane may drive. Membership is
 # checked by exact type, not isinstance: a subclass could override fill
@@ -334,38 +341,31 @@ class PaperIdeaExecutor:
         reconciles persisted paper fills — so its payload-conflict and dedupe
         checks also guard the machine leg.
         """
-        admission = self._resolve_execution_admission(decision_id)
-        view = admission.view
-        symbol = view.idea.instrument
-        side = _order_side(view.idea)
-        quantity = _order_quantity(view.idea)
-        client_order_id = decision_id
-
-        self._service.record_submission(
-            decision_id,
-            actor_id=actor_id,
-            venue=PAPER_EXECUTION_VENUE,
-            external_order_id=client_order_id,
-            reason=f"Paper executor submitting market {side} {quantity} {symbol}",
-            actor_type=ActorType.SYSTEM,
-            evidence=admission.submission_evidence,
-        )
-
-        order = self._broker.place_order(
-            symbol,
-            side=side,
-            order_type="market",
-            quantity=quantity,
-            client_id=client_order_id,
-        )
-
-        if order.status is not OrderStatus.FILLED:
-            raise PaperExecutionError(
-                f"Paper broker did not fill order for idea {decision_id}: "
-                f"status is {order.status.value}; idea remains submitted",
-                field="order_status",
-                value=order.status.value,
+        journal = self._service.execution_journal
+        with journal.repository.admission_transaction(
+            (IdeaNotExecutableError, PolicyViolationError)
+        ):
+            admission = self._resolve_execution_admission(decision_id)
+            view = admission.view
+            symbol = view.idea.instrument
+            side = _order_side(view.idea)
+            quantity = _order_quantity(view.idea)
+            client_order_id = decision_id
+            self._service.record_submission(
+                decision_id,
+                actor_id=actor_id,
+                venue=PAPER_EXECUTION_VENUE,
+                external_order_id=client_order_id,
+                reason=f"Paper executor submitting market {side} {quantity} {symbol}",
+                actor_type=ActorType.SYSTEM,
+                evidence=admission.submission_evidence,
             )
+            intent = OrderIntent(
+                client_order_id, symbol, OrderSide(side.upper()), OrderType.MARKET, quantity
+            )
+            journal.record_intent(decision_id, view.idea.record_hash(), intent.to_dict())
+
+        order = self._broker.place_order(**intent.broker_kwargs())
 
         fill_event = PaperFillEvent(
             order_id=order.id,
@@ -374,26 +374,26 @@ class PaperIdeaExecutor:
             side=order.side.value.lower(),
             quantity=order.filled_quantity,
             price=order.avg_fill_price,
-            status="filled",
+            status=order.status.value.lower(),
             decision_id=decision_id,
             filled_at=order.updated_at or order.submitted_at or self._now_factory(),
         )
-        report = PaperFillReconciler(
-            self._service,
-            actor_id=actor_id,
-            venue=PAPER_EXECUTION_VENUE,
-        ).reconcile_fills((fill_event,), apply=True)
-
-        if report.recorded_count != 1:
-            entries = (*report.matched, *report.unmatched, *report.skipped)
-            reason = entries[0].reason if entries else "no reconciliation entry produced"
+        # Commit the observed broker result before any lifecycle reconciliation.
+        # A crash after this point can recover without another broker call.
+        try:
+            journal.record_receipt(decision_id, fill_event.to_dict())
+        except PaperReceiptConflictError as error:
             raise PaperExecutionError(
-                f"Paper fill for idea {decision_id} was not recorded: {reason}; "
-                "idea remains submitted",
-                field="reconciliation",
-                value=reason,
+                f"Paper fill for idea {decision_id} was not recorded: {error}", field="receipt"
+            ) from error
+        if order.status is not OrderStatus.FILLED:
+            raise PaperExecutionError(
+                f"Paper broker did not fill order for idea {decision_id}: "
+                f"status is {order.status.value}; idea remains submitted",
+                field="order_status",
+                value=order.status.value,
             )
-
+        reconciliation = self._reconcile_receipt(decision_id, actor_id=actor_id)
         final_view = self._service.get(decision_id)
         return PaperExecutionResult(
             decision_id=decision_id,
@@ -404,8 +404,85 @@ class PaperIdeaExecutor:
             quantity=order.filled_quantity,
             fill_price=order.avg_fill_price,
             final_state=final_view.state.value,
-            reconciliation=report.matched[0],
+            reconciliation=reconciliation,
         )
+
+    def _reconcile_receipt(
+        self, decision_id: str, *, actor_id: str
+    ) -> PaperFillReconciliationEntry:
+        journal = self._service.execution_journal
+        with journal.repository.transaction(write=True):
+            entry = journal.entries()[decision_id]
+            receipt = entry.receipt
+            if receipt is None or receipt["status"] != "filled":
+                raise PaperExecutionError("No terminal fill receipt available", field="receipt")
+            view = self._service.get(decision_id)
+            journal.validate_binding(entry, view.idea)
+            if view.state is TradeIdeaState.FILLED:
+                fill = recorded_fill_from_view(view)
+                if (
+                    fill is None
+                    or fill.price != Decimal(receipt["price"])
+                    or fill.quantity != Decimal(receipt["quantity"])
+                    or fill.external_order_id != receipt["order_id"]
+                    or fill.filled_at != datetime.fromisoformat(receipt["filled_at"])
+                ):
+                    raise ExecutionJournalIntegrityError(
+                        "Audited fill conflicts with durable broker receipt"
+                    )
+            event = PaperFillEvent(
+                order_id=receipt["order_id"],
+                client_order_id=receipt["client_order_id"],
+                symbol=receipt["symbol"],
+                side=receipt["side"],
+                quantity=Decimal(receipt["quantity"]),
+                price=Decimal(receipt["price"]),
+                status=receipt["status"],
+                decision_id=decision_id,
+                filled_at=datetime.fromisoformat(receipt["filled_at"]),
+            )
+            report = PaperFillReconciler(
+                self._service, actor_id=actor_id, venue=PAPER_EXECUTION_VENUE
+            ).reconcile_fills((event,), apply=True)
+            if report.unmatched or (not report.matched and not report.skipped):
+                raise ExecutionJournalIntegrityError(
+                    "Durable receipt cannot reconcile with current workflow"
+                )
+            if self._service.get(decision_id).state is not TradeIdeaState.FILLED:
+                raise ExecutionJournalIntegrityError(
+                    "Reconciliation did not produce an audited fill"
+                )
+            journal.mark_reconciled(decision_id)
+            return (report.matched or report.skipped)[0]
+
+    def recover_receipts(
+        self, *, actor_id: str = DEFAULT_PAPER_EXECUTION_ACTOR_ID
+    ) -> dict[str, Any]:
+        """Replay only durable observed fills; never query or resubmit to a broker."""
+        entries = self._service.execution_journal.entries()
+        recovered = []
+        unresolved = []
+        for entry in entries.values():
+            if entry.reconciled:
+                continue
+            if entry.receipt is not None and entry.receipt["status"] == "filled":
+                result = self._reconcile_receipt(entry.decision_id, actor_id=actor_id)
+                if result.recorded_fill:
+                    recovered.append(entry.decision_id)
+        for view in self._service.list_views(TradeIdeaState.SUBMITTED):
+            pending_entry = entries.get(view.idea.decision_id)
+            receipt = pending_entry.receipt if pending_entry is not None else None
+            unresolved.append(
+                {
+                    "decision_id": view.idea.decision_id,
+                    "reason": (
+                        "submission has no durable broker receipt; never automatically resend"
+                        if receipt is None
+                        else f"broker receipt status={receipt['status']}; no terminal fill"
+                    ),
+                }
+            )
+        return {"recovered_decision_ids": recovered, "unresolved": unresolved}
 
 
 def _order_side(idea: TradeIdea) -> str:

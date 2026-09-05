@@ -15,11 +15,13 @@ import sqlite3
 import threading
 import weakref
 from contextlib import suppress
+from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from gpt_trader.core.order_intent import OrderIntent
 from gpt_trader.persistence.durability import (
     WriteError,
     WriteResult,
@@ -294,6 +296,63 @@ class OrdersStore:
                 raise WriteError(error_msg) from e
             return WriteResult.fail(error_msg)
 
+    def reserve_submission(self, order: OrderRecord) -> OrderRecord | None:
+        """Atomically reserve a new client ID or return its existing request.
+
+        No network call belongs in this transaction. A committed pending record
+        survives uncertainty and must never be interpreted as permission to resend.
+        """
+        self._ensure_initialized()
+        connection = self._get_connection()
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            rows = connection.execute(
+                "SELECT * FROM orders WHERE client_order_id = ?",
+                (order.client_order_id,),
+            ).fetchall()
+            if len(rows) > 1:
+                raise WriteError("Multiple orders share one client order ID")
+            existing = self._row_to_record(rows[0]) if rows else None
+            if existing is None:
+                if self.get_order(order.order_id) is not None:
+                    raise WriteError("Order ID already belongs to another client identity")
+                result = self.save_order(order, raise_on_error=True)
+                if not result.success:
+                    raise WriteError(result.error or "Order reservation failed")
+            elif not existing.checksum_is_valid():
+                raise WriteError("Existing order checksum mismatch")
+            connection.commit()
+            return existing
+        except BaseException:
+            connection.rollback()
+            raise
+
+    @staticmethod
+    def _preserve_intent(existing: OrderRecord, order: OrderRecord) -> OrderRecord:
+        original_metadata = existing.metadata or {}
+        metadata = order.metadata or {}
+        if "intent" in original_metadata:
+            for key in ("intent", "record_checksum_version", "reduce_only", "leverage"):
+                if key in metadata and metadata[key] != original_metadata.get(key):
+                    raise WriteError(f"Order update conflicts with immutable {key}")
+            order = replace(
+                order,
+                metadata={**original_metadata, **metadata},
+                created_at=existing.created_at,
+            )
+            intent = OrderIntent.from_dict(original_metadata["intent"])
+            intent.validate_receipt(order)
+            if order.filled_quantity < existing.filled_quantity:
+                raise WriteError("Order update decreases observed fill quantity")
+            if existing.status is OrderStatus.FILLED and (
+                order.status is not OrderStatus.FILLED
+                or order.average_fill_price != existing.average_fill_price
+            ):
+                raise WriteError("Order update conflicts with terminal fill receipt")
+        elif (order.metadata or {}).get("record_checksum_version") == 2:
+            order = replace(order, created_at=existing.created_at)
+        return order
+
     def upsert_by_client_id(
         self, order: OrderRecord, *, raise_on_error: bool = False
     ) -> WriteResult:
@@ -306,6 +365,10 @@ class OrdersStore:
         self._ensure_initialized()
         try:
             connection = self._get_connection()
+            connection.execute("BEGIN IMMEDIATE")
+            existing = self.get_order_by_client_order_id(order.client_order_id)
+            if existing is not None:
+                order = self._preserve_intent(existing, order)
             checksum = order.compute_checksum()
             metadata = json.dumps(order.metadata) if order.metadata else None
 
@@ -366,6 +429,8 @@ class OrdersStore:
                     ),
                 )
 
+            connection.commit()
+
             logger.debug(
                 "Order upserted",
                 operation="upsert_order",
@@ -376,12 +441,18 @@ class OrdersStore:
 
             return WriteResult.ok(checksum=checksum)
 
-        except sqlite3.Error as e:
+        except (sqlite3.Error, WriteError, ValueError, ArithmeticError) as e:
+            if "connection" in locals():
+                connection.rollback()
             error_msg = f"Failed to upsert order {order.order_id}: {e}"
             logger.error(error_msg, operation="upsert_order", error=str(e))
             if raise_on_error:
                 raise WriteError(error_msg) from e
             return WriteResult.fail(error_msg)
+        except BaseException:
+            if "connection" in locals():
+                connection.rollback()
+            raise
 
     def get_order(self, order_id: str) -> OrderRecord | None:
         """
@@ -421,11 +492,15 @@ class OrdersStore:
             "SELECT * FROM orders WHERE client_order_id = ?",
             (client_order_id,),
         )
-        row = cursor.fetchone()
-        if row is None:
+        rows = cursor.fetchall()
+        if len(rows) > 1:
+            raise WriteError("Multiple orders share one client order ID")
+        if not rows:
             return None
-
-        return self._row_to_record(row)
+        record = self._row_to_record(rows[0])
+        if not record.checksum_is_valid():
+            raise WriteError("Existing order checksum mismatch")
+        return record
 
     def get_pending_orders(self, bot_id: str | None = None) -> list[OrderRecord]:
         """
@@ -575,35 +650,27 @@ class OrdersStore:
         self._ensure_initialized()
         try:
             connection = self._get_connection()
-            now = datetime.now(timezone.utc).isoformat()
-
-            if filled_quantity is not None and average_fill_price is not None:
-                connection.execute(
-                    """
-                    UPDATE orders
-                    SET status = ?, filled_quantity = ?, average_fill_price = ?, updated_at = ?
-                    WHERE order_id = ?
-                    """,
-                    (status.value, str(filled_quantity), str(average_fill_price), now, order_id),
+            connection.execute("BEGIN IMMEDIATE")
+            original = self.get_order(order_id)
+            if original is not None and not original.checksum_is_valid():
+                raise WriteError("Existing order checksum mismatch")
+            if original is not None:
+                updated = replace(
+                    original,
+                    status=status,
+                    updated_at=datetime.now(timezone.utc),
+                    filled_quantity=(
+                        filled_quantity if filled_quantity is not None else original.filled_quantity
+                    ),
+                    average_fill_price=(
+                        average_fill_price
+                        if average_fill_price is not None
+                        else original.average_fill_price
+                    ),
                 )
-            elif filled_quantity is not None:
-                connection.execute(
-                    """
-                    UPDATE orders
-                    SET status = ?, filled_quantity = ?, updated_at = ?
-                    WHERE order_id = ?
-                    """,
-                    (status.value, str(filled_quantity), now, order_id),
-                )
-            else:
-                connection.execute(
-                    """
-                    UPDATE orders
-                    SET status = ?, updated_at = ?
-                    WHERE order_id = ?
-                    """,
-                    (status.value, now, order_id),
-                )
+                updated = self._preserve_intent(original, updated)
+                self.save_order(updated, raise_on_error=True)
+            connection.commit()
 
             logger.debug(
                 "Order status updated",
@@ -614,10 +681,16 @@ class OrdersStore:
 
             return WriteResult.ok()
 
-        except sqlite3.Error as e:
+        except (sqlite3.Error, WriteError) as e:
+            if "connection" in locals():
+                connection.rollback()
             error_msg = f"Failed to update order {order_id}: {e}"
             logger.error(error_msg, operation="update_status", error=str(e))
             return WriteResult.fail(error_msg)
+        except BaseException:
+            if "connection" in locals():
+                connection.rollback()
+            raise
 
     def verify_integrity(self, chunk_size: int = 1000) -> tuple[int, list[str]]:
         """
@@ -643,16 +716,13 @@ class OrdersStore:
 
             for row in rows:
                 record = self._row_to_record(row)
-                expected_checksum = record.compute_checksum()
-
-                if row["checksum"] and row["checksum"] != expected_checksum:
+                if not record.checksum_is_valid():
                     invalid_orders.append(record.order_id)
                     logger.warning(
                         "Order checksum mismatch",
                         operation="verify_integrity",
                         order_id=record.order_id,
                         stored=row["checksum"][:16] if row["checksum"] else None,
-                        expected=expected_checksum[:16],
                     )
                 else:
                     valid_count += 1

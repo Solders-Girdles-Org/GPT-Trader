@@ -17,6 +17,7 @@ from typing import Any, cast
 
 from gpt_trader.app.protocols import EventStoreProtocol
 from gpt_trader.core import OrderSide, OrderType
+from gpt_trader.core.order_intent import OrderIntent
 from gpt_trader.core.protocols import BrokerProtocol
 from gpt_trader.features.live_trade.execution.broker_executor import BrokerExecutor, RetryPolicy
 from gpt_trader.features.live_trade.execution.decision_trace import OrderDecisionTrace
@@ -179,6 +180,14 @@ def _record_order_submission_latency(
         pass
 
 
+class OrderPersistenceError(RuntimeError):
+    """Order identity cannot be read or committed; submission is uncertain."""
+
+
+class OrderReceiptConflictError(RuntimeError):
+    """Observed broker acknowledgment conflicts with the admitted request."""
+
+
 class OrderSubmitter:
     """Handles order submission and event recording."""
 
@@ -224,10 +233,12 @@ class OrderSubmitter:
             retry_policy=SUBMISSION_RETRY_POLICY,
             sleep_fn=sleep_fn,
         )
+        self._store_initialization_error: Exception | None = None
         if self.orders_store is not None:
             try:
                 self.orders_store.initialize()
             except Exception as exc:
+                self._store_initialization_error = exc
                 logger.warning(
                     "Failed to initialize orders store",
                     error_type=type(exc).__name__,
@@ -283,34 +294,79 @@ class OrderSubmitter:
         return Decimal(str(value))
 
     def _get_existing_record(self, client_order_id: str) -> OrderRecord | None:
+        if self._store_initialization_error is not None:
+            raise OrderPersistenceError(
+                "Orders store initialization failed"
+            ) from self._store_initialization_error
         if self.orders_store is None:
             return None
         try:
-            return self.orders_store.get_order_by_client_order_id(client_order_id)
+            record = self.orders_store.get_order_by_client_order_id(client_order_id)
+            if record is not None and "intent" in (record.metadata or {}):
+                self._validate_receipt(
+                    record, OrderIntent.from_dict((record.metadata or {})["intent"])
+                )
+            return record
         except Exception as exc:
-            logger.warning(
-                "Failed to fetch order record",
-                error_type=type(exc).__name__,
-                error_message=str(exc),
-                operation="orders_store_lookup",
-                client_order_id=client_order_id,
-            )
-            return None
+            raise OrderPersistenceError("Orders store lookup unavailable; never resend") from exc
 
     def _persist_order(self, record: OrderRecord) -> None:
         if self.orders_store is None:
             return
         try:
-            self.orders_store.upsert_by_client_id(record)
+            result = self.orders_store.upsert_by_client_id(record, raise_on_error=True)
+            if not result.success:
+                raise OrderPersistenceError(result.error or "Orders store write failed")
         except Exception as exc:
-            logger.warning(
-                "Failed to persist order record",
-                error_type=type(exc).__name__,
-                error_message=str(exc),
-                operation="orders_store_persist",
-                order_id=record.order_id,
-                client_order_id=record.client_order_id,
-            )
+            raise OrderPersistenceError(
+                "Orders store write unavailable; outcome uncertain"
+            ) from exc
+
+    @staticmethod
+    def _intent_matches(record: OrderRecord, intent: OrderIntent) -> bool:
+        metadata = record.metadata or {}
+        if "intent" in metadata:
+            try:
+                stored = OrderIntent.from_dict(metadata["intent"])
+                return (
+                    stored == intent
+                    and record.client_order_id == stored.client_order_id
+                    and record.symbol == stored.symbol
+                    and record.side.lower() == stored.side.value.lower()
+                    and record.order_type.lower() == stored.order_type.value.lower()
+                    and record.quantity == stored.quantity
+                )
+            except (KeyError, TypeError, ValueError, ArithmeticError):
+                return False
+        # Legacy records carry fewer request fields. Do not infer a stop price.
+        return (
+            record.client_order_id == intent.client_order_id
+            and record.symbol == intent.symbol
+            and record.side.lower() == intent.side.value.lower()
+            and record.order_type.lower() == intent.order_type.value.lower()
+            and record.quantity == intent.quantity
+            and record.price == intent.price
+            and record.time_in_force == (intent.tif or "GTC")
+            and metadata.get("reduce_only", False) == intent.reduce_only
+            and metadata.get("leverage") == intent.leverage
+            and intent.stop_price is None
+        )
+
+    @staticmethod
+    def _validate_receipt(order: Any, intent: OrderIntent) -> None:
+        try:
+            intent.validate_receipt(order)
+        except (TypeError, ValueError, ArithmeticError) as error:
+            raise OrderReceiptConflictError(str(error)) from error
+
+    @staticmethod
+    def _uncertain_outcome(error: str) -> OrderSubmissionOutcome:
+        return OrderSubmissionOutcome(
+            status=OrderSubmissionOutcomeStatus.FAILED,
+            reason="submission_uncertain",
+            reason_detail=error,
+            error=error,
+        )
 
     def _build_submission_record(
         self,
@@ -361,8 +417,25 @@ class OrderSubmitter:
         tif: Any | None,
         reduce_only: bool,
         leverage: int | None,
-    ) -> None:
-        metadata: dict[str, Any] = {"reduce_only": reduce_only}
+        stop_price: Decimal | None = None,
+    ) -> OrderRecord | None:
+        intent = OrderIntent(
+            submit_id,
+            symbol,
+            side,
+            order_type,
+            order_quantity,
+            price,
+            stop_price,
+            tif,
+            reduce_only,
+            leverage,
+        )
+        metadata: dict[str, Any] = {
+            "reduce_only": reduce_only,
+            "intent": intent.to_dict(),
+            "record_checksum_version": 2,
+        }
         if leverage is not None:
             metadata["leverage"] = leverage
         record = self._build_submission_record(
@@ -377,7 +450,14 @@ class OrderSubmitter:
             tif=tif,
             metadata=metadata,
         )
-        self._persist_order(record)
+        if self.orders_store is None:
+            return None
+        try:
+            return self.orders_store.reserve_submission(record)
+        except Exception as exc:
+            raise OrderPersistenceError(
+                "Cannot reserve durable order identity; no submission"
+            ) from exc
 
     def _record_final_submission(
         self,
@@ -393,7 +473,9 @@ class OrderSubmitter:
         reduce_only: bool,
         leverage: int | None,
     ) -> None:
-        metadata: dict[str, Any] = {"reduce_only": reduce_only}
+        previous = self._get_existing_record(submit_id)
+        metadata: dict[str, Any] = dict(previous.metadata or {}) if previous else {}
+        metadata["reduce_only"] = reduce_only
         if leverage is not None:
             metadata["leverage"] = leverage
         record = self._build_submission_record(
@@ -427,7 +509,9 @@ class OrderSubmitter:
         leverage: int | None,
         status: StoreOrderStatus = StoreOrderStatus.FAILED,
     ) -> None:
-        metadata: dict[str, Any] = {"reduce_only": reduce_only}
+        previous = self._get_existing_record(submit_id)
+        metadata: dict[str, Any] = dict(previous.metadata or {}) if previous else {}
+        metadata["reduce_only"] = reduce_only
         if leverage is not None:
             metadata["leverage"] = leverage
         record = self._build_submission_record(
@@ -458,6 +542,10 @@ class OrderSubmitter:
     ) -> OrderSubmissionOutcome:
         order_id = record.order_id or submit_id
         status = record.status
+        if status is StoreOrderStatus.PENDING:
+            return self._uncertain_outcome(
+                "pending intent has no broker acknowledgment; never resend"
+            )
         if status in {
             StoreOrderStatus.PENDING,
             StoreOrderStatus.OPEN,
@@ -795,51 +883,53 @@ class OrderSubmitter:
         leverage: int | None,
     ) -> OrderSubmissionOutcome:
         """Inner order submission logic wrapped in correlation context."""
-        existing_record = self._get_existing_record(submit_id)
-        if existing_record is not None:
-            known_statuses = {
-                StoreOrderStatus.PENDING,
-                StoreOrderStatus.OPEN,
-                StoreOrderStatus.PARTIALLY_FILLED,
-                StoreOrderStatus.FILLED,
-                StoreOrderStatus.CANCELLED,
-                StoreOrderStatus.REJECTED,
-                StoreOrderStatus.EXPIRED,
-                StoreOrderStatus.FAILED,
-            }
-            if existing_record.status in known_statuses:
-                return self._handle_existing_submission_outcome(
-                    existing_record,
-                    submit_id=submit_id,
-                    symbol=symbol,
-                    side=side,
-                    order_type=order_type,
-                    order_quantity=order_quantity,
-                    price=price,
-                    effective_price=effective_price,
-                )
-            logger.warning(
-                "Order record has unexpected status",
-                client_order_id=submit_id,
-                order_id=existing_record.order_id,
-                status=getattr(existing_record.status, "value", str(existing_record.status)),
-                symbol=symbol,
-                side=side.value,
-                operation="order_submit",
-                stage="idempotent_unknown",
-            )
-        self._log_submission_attempt(submit_id, symbol, side, order_type, order_quantity, price)
-        self._record_pending_submission(
+        intent = OrderIntent(
             submit_id,
             symbol,
             side,
             order_type,
             order_quantity,
             price,
+            stop_price,
             tif,
             reduce_only,
             leverage,
         )
+        try:
+            existing_record = self._get_existing_record(submit_id)
+            if existing_record is None:
+                existing_record = self._record_pending_submission(
+                    submit_id,
+                    symbol,
+                    side,
+                    order_type,
+                    order_quantity,
+                    price,
+                    tif,
+                    reduce_only,
+                    leverage,
+                    stop_price,
+                )
+        except OrderPersistenceError as error:
+            return self._uncertain_outcome(str(error))
+        if existing_record is not None:
+            if not self._intent_matches(existing_record, intent):
+                return OrderSubmissionOutcome(
+                    status=OrderSubmissionOutcomeStatus.REJECTED,
+                    reason="validation",
+                    reason_detail="client_order_id payload conflict",
+                )
+            return self._handle_existing_submission_outcome(
+                existing_record,
+                submit_id=submit_id,
+                symbol=symbol,
+                side=side,
+                order_type=order_type,
+                order_quantity=order_quantity,
+                price=price,
+                effective_price=effective_price,
+            )
+        self._log_submission_attempt(submit_id, symbol, side, order_type, order_quantity, price)
 
         start_time = self._time_provider.monotonic()
         max_attempts = SUBMISSION_RETRY_POLICY.max_attempts if self._enable_retries else 1
@@ -861,6 +951,7 @@ class OrderSubmitter:
                 )
                 latency_ms = (self._time_provider.monotonic() - start_time) * 1000
 
+                self._validate_receipt(order, intent)
                 result = self._handle_order_result(
                     order,
                     symbol,
@@ -961,6 +1052,8 @@ class OrderSubmitter:
                     reason="broker_rejected",
                 )
 
+            except (OrderPersistenceError, OrderReceiptConflictError) as exc:
+                return self._uncertain_outcome(str(exc))
             except Exception as exc:
                 error_str = str(exc)
                 reason, reason_detail = normalize_rejection_reason(error_str)
@@ -1023,17 +1116,20 @@ class OrderSubmitter:
                     result=metric_result,
                     side=side_str,
                 )
-                self._record_failed_submission(
-                    submit_id,
-                    symbol,
-                    side,
-                    order_type,
-                    order_quantity,
-                    price,
-                    tif,
-                    reduce_only,
-                    leverage,
-                )
+                try:
+                    self._record_failed_submission(
+                        submit_id,
+                        symbol,
+                        side,
+                        order_type,
+                        order_quantity,
+                        price,
+                        tif,
+                        reduce_only,
+                        leverage,
+                    )
+                except OrderPersistenceError as storage_error:
+                    return self._uncertain_outcome(str(storage_error))
                 self._handle_order_failure(exc, symbol, side, order_quantity)
                 return OrderSubmissionOutcome(
                     status=(
