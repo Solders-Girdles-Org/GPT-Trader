@@ -21,6 +21,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+from io import StringIO
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,7 @@ from gpt_trader.core.risk_units import trading_day
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.trade_ideas.audit import ActorType
 from gpt_trader.features.trade_ideas.models import AutonomyMode
+from gpt_trader.features.trade_ideas.persistence import StateRepository
 
 DEFAULT_AUTONOMY_MODE = AutonomyMode.HUMAN_APPROVED_EXECUTION
 FAIL_CLOSED_AUTONOMY_MODE = AutonomyMode.RESEARCH_ONLY
@@ -123,8 +125,9 @@ class AutonomyStateLog:
 
     _LOCK_TIMEOUT_SECONDS = 10.0
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, repository: StateRepository | None = None) -> None:
         self._path = path
+        self._repository = repository or StateRepository(path.parent)
         self._lock = FileLock(str(path) + ".lock")
 
     @property
@@ -132,6 +135,19 @@ class AutonomyStateLog:
         return self._path
 
     def append(self, entry: AutonomyStateEntry) -> None:
+        if self._repository.active:
+            with self._repository.transaction(write=True):
+                current = self.current()
+                expected_version = 1 if current is None else current.version + 1
+                if entry.version != expected_version:
+                    raise AutonomyIntegrityError(
+                        f"Expected version {expected_version}", field="version", value=entry.version
+                    )
+                self._repository.append(
+                    self._path.name,
+                    json.dumps(entry.to_dict(), sort_keys=True, separators=(",", ":")),
+                )
+            return
         self._path.parent.mkdir(parents=True, exist_ok=True)
         try:
             self._lock.acquire(timeout=self._LOCK_TIMEOUT_SECONDS)
@@ -163,11 +179,15 @@ class AutonomyStateLog:
             self._lock.release()
 
     def history(self) -> list[AutonomyStateEntry]:
-        if not self._path.exists():
+        if not self._repository.active and not self._path.exists():
             return []
         entries: list[AutonomyStateEntry] = []
         try:
-            with self._path.open("r", encoding="utf-8") as handle:
+            with (
+                StringIO("\n".join(self._repository.lines(self._path.name)))
+                if self._repository.active
+                else self._path.open("r", encoding="utf-8")
+            ) as handle:
                 for line_number, raw_line in enumerate(handle, start=1):
                     line = raw_line.strip()
                     if not line:

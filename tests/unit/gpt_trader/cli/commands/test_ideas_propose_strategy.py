@@ -24,6 +24,7 @@ from gpt_trader.features.trade_ideas import (
     RiskBudget,
     TradeIdeaService,
 )
+from tests.support.trade_state_files import read_state_file, state_file_exists
 
 AS_OF = datetime(2035, 6, 12, 0, 0, tzinfo=UTC)
 # Flat closes then a two-bar rise: the 5-bar MA crosses above the 20-bar MA
@@ -117,9 +118,7 @@ def test_propose_strategy_persists_executable_proposal(
     proposal = response["data"]["proposed"][0]
     assert proposal["decision_id"].startswith("trade-20350612-baseline-spot-btc-usd-")
     assert proposal["state"] == "proposed"
-    latest = json.loads(
-        (root / "records" / proposal["decision_id"] / "latest.json").read_text(encoding="utf-8")
-    )
+    latest = json.loads(read_state_file(root / "records" / proposal["decision_id"] / "latest.json"))
     # Executor admission requires real sizing, not the advisory default.
     assert latest["product_type"] == "spot"
     assert latest["direction"] == "long"
@@ -131,7 +130,7 @@ def test_propose_strategy_persists_executable_proposal(
     assert proposal["approval_preview"]["violations"] == [
         "account_equity_snapshot is required to verify max_open_notional_pct budget exposure"
     ]
-    event = json.loads((root / "audit.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    event = json.loads(read_state_file(root / "audit.jsonl").splitlines()[0])
     assert event["actor_type"] == "ai"
     assert event["actor_id"] == "snapshot-strategy-baseline-spot"
     assert "proposer_id=snapshot-strategy-baseline-spot" in event["evidence"]
@@ -149,9 +148,7 @@ def test_propose_strategy_baseline_perps_choice_emits_spot_ideas(
     assert response["data"]["proposer_id"] == "snapshot-strategy-baseline-perps"
     assert response["data"]["proposal_count"] == 1
     proposal = response["data"]["proposed"][0]
-    latest = json.loads(
-        (root / "records" / proposal["decision_id"] / "latest.json").read_text(encoding="utf-8")
-    )
+    latest = json.loads(read_state_file(root / "records" / proposal["decision_id"] / "latest.json"))
     assert latest["product_type"] == "spot"
 
 
@@ -168,9 +165,7 @@ def test_propose_strategy_mean_reversion_choice_buys_the_dip(
     assert response["data"]["proposal_count"] == 1
     proposal = response["data"]["proposed"][0]
     assert proposal["decision_id"].startswith("trade-20350612-mean-reversion-btc-usd-")
-    latest = json.loads(
-        (root / "records" / proposal["decision_id"] / "latest.json").read_text(encoding="utf-8")
-    )
+    latest = json.loads(read_state_file(root / "records" / proposal["decision_id"] / "latest.json"))
     assert latest["product_type"] == "spot"
     assert latest["direction"] == "long"
     assert latest["sizing_recommendation"]["quantity"] is not None
@@ -191,9 +186,7 @@ def test_propose_strategy_regime_switcher_choice_buys_the_sideways_dip(
     assert response["data"]["proposer_id"] == "snapshot-strategy-regime-switcher"
     assert response["data"]["proposal_count"] == 1
     proposal = response["data"]["proposed"][0]
-    latest = json.loads(
-        (root / "records" / proposal["decision_id"] / "latest.json").read_text(encoding="utf-8")
-    )
+    latest = json.loads(read_state_file(root / "records" / proposal["decision_id"] / "latest.json"))
     assert latest["product_type"] == "spot"
     assert latest["direction"] == "long"
     assert latest["sizing_recommendation"]["quantity"] is not None
@@ -238,9 +231,7 @@ def test_propose_strategy_sizes_with_attested_account_equity(
 
     assert exit_code == 0
     proposal = response["data"]["proposed"][0]
-    latest = json.loads(
-        (root / "records" / proposal["decision_id"] / "latest.json").read_text(encoding="utf-8")
-    )
+    latest = json.loads(read_state_file(root / "records" / proposal["decision_id"] / "latest.json"))
     # The composition root must inject the budget-backed bridge: sizing is
     # denominated by the attested equity the approval gate uses, not the
     # bridge's offline default.
@@ -261,9 +252,9 @@ def test_propose_strategy_no_signal_is_noop_and_reads_no_budget(
     assert response["data"]["proposal_count"] == 0
     assert response["metadata"]["was_noop"] is True
     assert not (root / "records").exists()
-    assert not (root / "audit.jsonl").exists()
+    assert not state_file_exists(root / "audit.jsonl")
     # The budget must not be read or seeded when nothing needed sizing.
-    assert not (root / "risk_budget.jsonl").exists()
+    assert not state_file_exists(root / "risk_budget.jsonl")
 
 
 def test_propose_strategy_duplicate_rerun_fails_without_extra_audit(
@@ -273,14 +264,14 @@ def test_propose_strategy_duplicate_rerun_fails_without_extra_audit(
     snapshot_path = _write_snapshot(tmp_path / "snapshot.json", _snapshot_payload())
     first_exit_code, _ = _propose_strategy(capsys, root, snapshot_path)
     assert first_exit_code == 0
-    original_audit = (root / "audit.jsonl").read_text(encoding="utf-8")
+    original_audit = read_state_file(root / "audit.jsonl")
 
     exit_code, response = _propose_strategy(capsys, root, snapshot_path)
 
     assert exit_code == 1
     assert response["errors"][0]["code"] == CliErrorCode.VALIDATION_ERROR.value
     assert response["errors"][0]["details"]["field"] == "decision_id"
-    assert (root / "audit.jsonl").read_text(encoding="utf-8") == original_audit
+    assert read_state_file(root / "audit.jsonl") == original_audit
 
 
 def test_propose_strategy_sub_cent_mark_fails_closed_at_default_precision(
@@ -317,8 +308,6 @@ def test_propose_strategy_finer_price_precision_unlocks_sub_cent_symbols(
     assert exit_code == 0
     assert response["data"]["proposal_count"] == 1
     proposal = response["data"]["proposed"][0]
-    latest = json.loads(
-        (root / "records" / proposal["decision_id"] / "latest.json").read_text(encoding="utf-8")
-    )
+    latest = json.loads(read_state_file(root / "records" / proposal["decision_id"] / "latest.json"))
     assert latest["entry_zone"]["lower"] != "0.00"
     assert latest["sizing_recommendation"]["quantity"] is not None

@@ -10,6 +10,7 @@ import pytest
 from gpt_trader import cli
 from gpt_trader.cli.response import CliErrorCode
 from gpt_trader.features.trade_ideas import TimeHorizon
+from tests.support.trade_state_files import corrupt_state_file, read_state_file
 from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
 
 
@@ -66,11 +67,11 @@ def _propose(
 
 def _backdate_proposed_event(root: Path, *, hours: int) -> None:
     audit_path = root / "audit.jsonl"
-    lines = audit_path.read_text(encoding="utf-8").splitlines()
+    lines = read_state_file(audit_path).splitlines()
     assert len(lines) == 1
     event = json.loads(lines[0])
     event["timestamp"] = (datetime.now(UTC) - timedelta(hours=hours)).isoformat()
-    audit_path.write_text(json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n")
+    corrupt_state_file(audit_path, json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n")
 
 
 def test_review_latency_budget_blocks_approval_and_sweep_for_far_future_idea(

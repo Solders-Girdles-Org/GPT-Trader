@@ -10,6 +10,7 @@ import pytest
 from gpt_trader import cli
 from gpt_trader.cli.response import CliErrorCode
 from gpt_trader.features.trade_ideas import TimeHorizon
+from tests.support.trade_state_files import corrupt_state_file, read_state_file, state_file_exists
 from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
 
 
@@ -66,8 +67,8 @@ def test_propose_negative_max_loss_returns_invalid_argument_without_side_effects
     assert response["errors"][0]["code"] == CliErrorCode.INVALID_ARGUMENT.value
     assert f"max_loss.{field_name} must be non-negative" in response["errors"][0]["message"]
     assert not (root / "records").exists()
-    assert not (root / "audit.jsonl").exists()
-    assert not (root / "risk_budget.jsonl").exists()
+    assert not state_file_exists(root / "audit.jsonl")
+    assert not state_file_exists(root / "risk_budget.jsonl")
 
 
 @pytest.mark.parametrize("field_name", ["amount", "percent_of_account"])
@@ -80,8 +81,8 @@ def test_approve_negative_max_loss_record_returns_validation_error_without_side_
     record_dir = root / "records" / payload["decision_id"]
     record_dir.mkdir(parents=True)
     latest_path = record_dir / "latest.json"
-    latest_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
-    original_latest = latest_path.read_text(encoding="utf-8")
+    corrupt_state_file(latest_path, json.dumps(payload, sort_keys=True))
+    original_latest = read_state_file(latest_path)
 
     exit_code, response = _run_json(
         capsys,
@@ -99,7 +100,7 @@ def test_approve_negative_max_loss_record_returns_validation_error_without_side_
 
     assert exit_code == 1
     assert response["errors"][0]["code"] == CliErrorCode.VALIDATION_ERROR.value
-    assert f"max_loss.{field_name} must be non-negative" in response["errors"][0]["message"]
-    assert latest_path.read_text(encoding="utf-8") == original_latest
-    assert not (root / "audit.jsonl").exists()
-    assert not (root / "risk_budget.jsonl").exists()
+    assert "requires validated migration" in response["errors"][0]["message"]
+    assert read_state_file(latest_path) == original_latest
+    assert not state_file_exists(root / "audit.jsonl")
+    assert not state_file_exists(root / "risk_budget.jsonl")

@@ -28,8 +28,8 @@ def test_interrupted_resubmit_latest_hash_mismatch_is_integrity_error(
     idea = build_trade_idea(decision_id="trade-20260612-interrupted-resubmit")
     service.propose(idea, actor_id="idea-generator-v1")
     service.request_changes(idea.decision_id, actor_id="rj", reason="Tighten invalidation")
-    audit_path = root / "audit.jsonl"
-    original_audit = audit_path.read_text(encoding="utf-8")
+    root / "audit.jsonl"
+    original_audit = [event.to_dict() for event in service.audit_log.read_events()]
     unaudited_revision = build_trade_idea(
         decision_id=idea.decision_id,
         invalidation="Daily close below 59000",
@@ -43,7 +43,7 @@ def test_interrupted_resubmit_latest_hash_mismatch_is_integrity_error(
     with pytest.raises(AuditIntegrityError, match="does not match latest audit record_hash"):
         service.reject(idea.decision_id, actor_id="rj", reason="Reject unaudited revision")
 
-    assert audit_path.read_text(encoding="utf-8") == original_audit
+    assert [event.to_dict() for event in service.audit_log.read_events()] == original_audit
     assert service.audit_log.read_events(idea.decision_id)[-1].record_hash == idea.record_hash()
     stored = TradeIdeaStore(root / "records").load_latest(idea.decision_id)
     assert stored is not None

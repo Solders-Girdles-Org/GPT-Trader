@@ -232,7 +232,10 @@ def test_broken_autonomy_log_fails_the_sweep_closed(
     attest_account_equity(service)
     _enter_bounded_autonomy(service)
     log_path = tmp_path / "trade_ideas" / "autonomy_state.jsonl"
-    log_path.write_text("garbage\n", encoding="utf-8")
+    with service._repository.transaction(write=True):
+        service._repository.connection.execute(
+            "INSERT INTO events(stream,payload) VALUES(?,?)", (log_path.name, "garbage")
+        )
 
     with pytest.raises(PolicyViolationError) as exc_info:
         service.auto_approve_sweep()

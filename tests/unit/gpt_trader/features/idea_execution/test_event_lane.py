@@ -291,3 +291,24 @@ def test_outcome_to_dict_is_json_shaped(
     assert payload["stage"] == "executed"
     assert payload["decision_id"] == view.idea.decision_id
     assert payload["execution"]["fill_price"] == str(_MARK)
+
+
+def test_policy_change_after_preview_is_denied_without_execution(service, lane, monkeypatch):
+    _enter_bounded_autonomy(service)
+    _enable_stage2_gates(monkeypatch)
+    view = _proposed_view(service, "trade-policy-changed")
+    record = service.kernel.record_approval
+
+    def tighten_then_record(*args, **kwargs):
+        service.update_budget(
+            replace(service.current_budget(), version=3, max_loss_per_idea_pct=Decimal("0")),
+            ActorType.HUMAN,
+            "owner",
+        )
+        return record(*args, **kwargs)
+
+    monkeypatch.setattr(service.kernel, "record_approval", tighten_then_record)
+    result = lane.process(view, mark=_MARK)
+    assert result.stage is EventLaneStage.APPROVAL_DENIED
+    assert service.open_approved_count() == 0
+    assert service.get(view.idea.decision_id).state is TradeIdeaState.PROPOSED

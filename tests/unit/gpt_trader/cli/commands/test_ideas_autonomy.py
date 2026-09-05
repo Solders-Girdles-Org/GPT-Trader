@@ -8,6 +8,7 @@ import pytest
 
 from gpt_trader import cli
 from gpt_trader.cli.response import CliErrorCode
+from tests.support.trade_state_files import corrupt_state_file, state_file_exists
 
 
 def _run_json(capsys: pytest.CaptureFixture[str], argv: list[str]) -> tuple[int, dict[str, Any]]:
@@ -32,7 +33,7 @@ def test_autonomy_show_reports_seeded_default_without_writing(
     assert response["data"]["mode"] == "human_approved_execution"
     assert response["data"]["source"] == "seeded_default"
     assert response["data"]["version"] is None
-    assert not (root / "autonomy_state.jsonl").exists()
+    assert not state_file_exists(root / "autonomy_state.jsonl")
 
 
 def test_autonomy_set_raises_level_and_show_reflects_it(
@@ -124,7 +125,7 @@ def test_autonomy_show_surfaces_fail_closed_resolution(
 ) -> None:
     root = tmp_path / "ideas"
     root.mkdir(parents=True)
-    (root / "autonomy_state.jsonl").write_text("garbage\n", encoding="utf-8")
+    corrupt_state_file(root / "autonomy_state.jsonl", "garbage\n")
 
     exit_code, response = _run_json(capsys, ["ideas", "autonomy", "show", *_root_args(root)])
 
@@ -139,7 +140,7 @@ def test_autonomy_history_fails_on_broken_log(
 ) -> None:
     root = tmp_path / "ideas"
     root.mkdir(parents=True)
-    (root / "autonomy_state.jsonl").write_text("garbage\n", encoding="utf-8")
+    corrupt_state_file(root / "autonomy_state.jsonl", "garbage\n")
 
     exit_code, response = _run_json(capsys, ["ideas", "autonomy", "history", *_root_args(root)])
 
@@ -152,7 +153,7 @@ def test_autonomy_set_refused_on_broken_log(
 ) -> None:
     root = tmp_path / "ideas"
     root.mkdir(parents=True)
-    (root / "autonomy_state.jsonl").write_text("garbage\n", encoding="utf-8")
+    corrupt_state_file(root / "autonomy_state.jsonl", "garbage\n")
 
     exit_code, response = _run_json(
         capsys,
@@ -169,4 +170,4 @@ def test_autonomy_set_refused_on_broken_log(
     )
 
     assert exit_code != 0
-    assert response["errors"][0]["code"] == CliErrorCode.OPERATION_FAILED.value
+    assert response["errors"][0]["code"] == CliErrorCode.VALIDATION_ERROR.value

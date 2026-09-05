@@ -1,86 +1,68 @@
 from __future__ import annotations
 
-import json
-from datetime import UTC, datetime
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Event
 
 import pytest
-from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
+from tests.unit.gpt_trader.features.trade_ideas.conftest import (
+    build_trade_idea,
+    reconciliation_service,
+)
 
-import gpt_trader.features.trade_ideas.service as trade_idea_service_module
-from gpt_trader.features.trade_ideas import TradeIdea, TradeIdeaService
+from gpt_trader.features.trade_ideas import TradeIdea
 
 
-def test_propose_batch_rolls_back_partial_record_when_save_fails(
+def test_failed_batch_rollback_preserves_other_writer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = tmp_path / "trade_ideas"
-    service = TradeIdeaService(
-        root,
-        now_factory=lambda: datetime(2026, 6, 12, 10, 0, tzinfo=UTC),
+    service = reconciliation_service(tmp_path)
+    service.current_budget()
+    other = reconciliation_service(tmp_path)
+    first, second, foreign = (
+        build_trade_idea(decision_id=f"trade-20260612-{name}")
+        for name in ("first", "second", "foreign")
     )
-    first = build_trade_idea(decision_id="trade-20260612-batch-001")
-    second = build_trade_idea(decision_id="trade-20260612-batch-002")
-    original_save = service._store.save
+    paused, release, started = Event(), Event(), Event()
+    save = service._store.save
 
-    def save_with_partial_failure(idea: TradeIdea) -> str:
-        if idea.decision_id == second.decision_id:
-            decision_dir = root / "records" / idea.decision_id
-            decision_dir.mkdir(parents=True)
-            (decision_dir / "latest.json").write_text(
-                json.dumps({"decision_id": idea.decision_id}),
-                encoding="utf-8",
-            )
-            raise RuntimeError("forced partial save failure")
-        return original_save(idea)
+    def fail_second(idea: TradeIdea) -> str:
+        result = save(idea)
+        if idea == second:
+            paused.set()
+            assert release.wait(10)
+            raise RuntimeError("failed after durable-row insertion")
+        return result
 
-    monkeypatch.setattr(service._store, "save", save_with_partial_failure)
+    def foreign_writer() -> None:
+        started.set()
+        other.propose(foreign, actor_id="other")
 
-    with pytest.raises(RuntimeError, match="forced partial save failure"):
-        service.propose_batch(
-            (first, second),
-            actor_id="idea-generator-v1",
-        )
+    monkeypatch.setattr(service._store, "save", fail_second)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        failed = pool.submit(service.propose_batch, (first, second), actor_id="batch")
+        assert paused.wait(10)
+        committed = pool.submit(foreign_writer)
+        assert started.wait(10)
+        assert not committed.done()
+        release.set()
+        with pytest.raises(RuntimeError, match="durable-row"):
+            failed.result(timeout=10)
+        committed.result(timeout=10)
+    assert [view.idea.decision_id for view in service.list_views()] == [foreign.decision_id]
+    assert [event.decision_id for event in service.audit_log.verify()] == [foreign.decision_id]
 
-    assert not (root / "records" / first.decision_id).exists()
-    assert not (root / "records" / second.decision_id).exists()
-    assert not (root / "audit.jsonl").exists()
 
-
-def test_propose_batch_surfaces_rollback_delete_failure(
+def test_single_proposal_failure_has_no_orphan(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = tmp_path / "trade_ideas"
-    service = TradeIdeaService(
-        root,
-        now_factory=lambda: datetime(2026, 6, 12, 10, 0, tzinfo=UTC),
-    )
-    first = build_trade_idea(decision_id="trade-20260612-batch-001")
-    second = build_trade_idea(decision_id="trade-20260612-batch-002")
-    original_append = trade_idea_service_module.TradeIdeaAuditLog.append
-    original_rmtree = trade_idea_service_module.shutil.rmtree
-    append_calls = 0
+    service = reconciliation_service(tmp_path)
 
-    def fail_second_append(*args: object, **kwargs: object) -> None:
-        nonlocal append_calls
-        append_calls += 1
-        if append_calls == 2:
-            raise RuntimeError("forced second audit failure")
-        original_append(*args, **kwargs)
+    def fail(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("audit write failed")
 
-    def fail_first_delete(path: Path) -> None:
-        if path.name == first.decision_id:
-            raise PermissionError("forced delete failure")
-        original_rmtree(path)
-
-    monkeypatch.setattr(trade_idea_service_module.TradeIdeaAuditLog, "append", fail_second_append)
-    monkeypatch.setattr(trade_idea_service_module.shutil, "rmtree", fail_first_delete)
-
-    with pytest.raises(PermissionError, match="forced delete failure"):
-        service.propose_batch(
-            (first, second),
-            actor_id="idea-generator-v1",
-        )
-
-    assert append_calls == 2
-    assert (root / "records" / first.decision_id).exists()
+    monkeypatch.setattr(service, "append_audit", fail)
+    with pytest.raises(RuntimeError, match="audit write failed"):
+        service.propose(build_trade_idea(), actor_id="test")
+    assert service._store.list_decision_ids() == []
+    assert service.audit_log.read_events() == []

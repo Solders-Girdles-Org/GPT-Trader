@@ -19,6 +19,7 @@ from gpt_trader.features.trade_ideas import (
     TradeIdeaAuditLog,
     TradeIdeaService,
 )
+from tests.support.trade_state_files import read_state_file, state_file_exists
 
 AS_OF = datetime(2035, 6, 12, 0, 0, tzinfo=UTC)
 GOLDEN_CROSS = ["100"] * 50 + ["102", "104", "106"]
@@ -121,8 +122,8 @@ def test_propose_baseline_persists_generated_proposal(
         "max_open_notional_pct budget exposure"
     ]
     assert response["warnings"] == proposal["approval_preview"]["warnings"]
-    assert (root / "records" / proposal["decision_id"] / "latest.json").exists()
-    event = json.loads((root / "audit.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    assert state_file_exists(root / "records" / proposal["decision_id"] / "latest.json")
+    event = json.loads(read_state_file(root / "audit.jsonl").splitlines()[0])
     assert event["actor_type"] == "ai"
     assert event["actor_id"] == "baseline-ma-10-50"
     assert "proposer_id=baseline-ma-10-50" in event["evidence"]
@@ -150,9 +151,7 @@ def test_propose_baseline_sizes_against_current_budget(
 
     assert exit_code == 0
     proposal = response["data"]["proposed"][0]
-    latest = json.loads(
-        (root / "records" / proposal["decision_id"] / "latest.json").read_text(encoding="utf-8")
-    )
+    latest = json.loads(read_state_file(root / "records" / proposal["decision_id"] / "latest.json"))
     assert latest["sizing_recommendation"]["notional"] == "25.00"
     assert "budget_cap=applied" in latest["sizing_recommendation"]["rationale"]
     sizing_inputs = next(item for item in latest["data_used"] if item.startswith("sizing:"))
@@ -183,9 +182,7 @@ def test_propose_baseline_sizes_with_attested_account_equity(
 
     assert exit_code == 0
     proposal = response["data"]["proposed"][0]
-    latest = json.loads(
-        (root / "records" / proposal["decision_id"] / "latest.json").read_text(encoding="utf-8")
-    )
+    latest = json.loads(read_state_file(root / "records" / proposal["decision_id"] / "latest.json"))
     # Sizing must be denominated by the attested equity the approval gate
     # uses, not the bridge's default $10,000.
     sizing_inputs = next(item for item in latest["data_used"] if item.startswith("sizing:"))
@@ -206,9 +203,9 @@ def test_propose_baseline_no_signal_is_noop(
     assert response["data"]["proposed"] == []
     assert response["metadata"]["was_noop"] is True
     assert not (root / "records").exists()
-    assert not (root / "audit.jsonl").exists()
+    assert not state_file_exists(root / "audit.jsonl")
     # The budget must not be read or seeded when nothing needed sizing.
-    assert not (root / "risk_budget.jsonl").exists()
+    assert not state_file_exists(root / "risk_budget.jsonl")
 
 
 def test_propose_baseline_duplicate_decision_fails_without_extra_audit(
@@ -218,16 +215,16 @@ def test_propose_baseline_duplicate_decision_fails_without_extra_audit(
     snapshot_path = _write_snapshot(tmp_path / "snapshot.json", _snapshot_payload())
     first_exit_code, first_response = _propose_baseline(capsys, root, snapshot_path)
     assert first_exit_code == 0
-    original_audit = (root / "audit.jsonl").read_text(encoding="utf-8")
+    original_audit = read_state_file(root / "audit.jsonl")
 
     exit_code, response = _propose_baseline(capsys, root, snapshot_path)
 
     assert exit_code == 1
     assert response["errors"][0]["code"] == CliErrorCode.VALIDATION_ERROR.value
     assert response["errors"][0]["details"]["field"] == "decision_id"
-    assert (root / "audit.jsonl").read_text(encoding="utf-8") == original_audit
+    assert read_state_file(root / "audit.jsonl") == original_audit
     decision_id = first_response["data"]["proposed"][0]["decision_id"]
-    latest = json.loads((root / "records" / decision_id / "latest.json").read_text())
+    latest = json.loads(read_state_file(root / "records" / decision_id / "latest.json"))
     assert latest["decision_id"] == decision_id
 
 
@@ -254,7 +251,7 @@ def test_propose_baseline_rejects_duplicate_generated_decisions_before_writes(
     assert response["errors"][0]["details"]["field"] == "decision_id"
     assert "appears more than once" in response["errors"][0]["message"]
     assert not (root / "records").exists()
-    assert not (root / "audit.jsonl").exists()
+    assert not state_file_exists(root / "audit.jsonl")
 
 
 def test_propose_baseline_rolls_back_batch_when_later_write_fails(
@@ -285,7 +282,7 @@ def test_propose_baseline_rolls_back_batch_when_later_write_fails(
     assert response["errors"][0]["message"] == "forced second append failure"
     assert append_calls == 2
     assert not list((root / "records").glob("*/latest.json"))
-    assert not (root / "audit.jsonl").exists()
+    assert not state_file_exists(root / "audit.jsonl")
 
 
 def test_propose_baseline_malformed_snapshot_returns_invalid_argument(
@@ -303,7 +300,7 @@ def test_propose_baseline_malformed_snapshot_returns_invalid_argument(
     assert response["errors"][0]["code"] == CliErrorCode.INVALID_ARGUMENT.value
     assert response["errors"][0]["details"]["field"] == "series"
     assert not (root / "records").exists()
-    assert not (root / "audit.jsonl").exists()
+    assert not state_file_exists(root / "audit.jsonl")
 
 
 def test_propose_baseline_json_output_includes_approval_preview_warnings(

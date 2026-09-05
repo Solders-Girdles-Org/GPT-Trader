@@ -17,6 +17,7 @@ import pytest
 
 from gpt_trader import cli
 from gpt_trader.features.trade_ideas import CloseoutResolution, TradeIdeaService
+from tests.support.trade_state_files import state_file_exists
 from tests.unit.gpt_trader.features.trade_ideas.conftest import (
     attest_account_equity,
     build_trade_idea,
@@ -69,8 +70,8 @@ def test_monitors_on_fresh_root_reads_unknown_without_seeding(
     assert data["drawdown_breached"] is None
     assert data["daily_loss_breached"] is False
     # Render-only read: the budget and autonomy logs must not be seeded.
-    assert not (root / "risk_budget.jsonl").exists()
-    assert not (root / "autonomy_state.jsonl").exists()
+    assert not state_file_exists(root / "risk_budget.jsonl")
+    assert not state_file_exists(root / "autonomy_state.jsonl")
 
 
 def test_monitors_reports_drawdown_breach_from_the_trail(

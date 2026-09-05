@@ -9,6 +9,7 @@ import pytest
 
 from gpt_trader import cli
 from gpt_trader.cli.response import CliErrorCode
+from tests.support.trade_state_files import read_state_file
 
 AS_OF = datetime(2035, 6, 12, 0, 0, tzinfo=UTC)
 REPLAY_AS_OF = datetime(2026, 6, 12, 12, 0, tzinfo=UTC)
@@ -123,13 +124,11 @@ def test_propose_regime_aware_persists_generated_proposal(
     proposal = response["data"]["proposed"][0]
     assert proposal["decision_id"].startswith("trade-20350612-btcusd-")
     assert proposal["state"] == "proposed"
-    event = json.loads((root / "audit.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    event = json.loads(read_state_file(root / "audit.jsonl").splitlines()[0])
     assert event["actor_type"] == "ai"
     assert event["actor_id"] == "regime-aware-ma-10-50"
     assert "proposer_id=regime-aware-ma-10-50" in event["evidence"]
-    latest = json.loads(
-        (root / "records" / proposal["decision_id"] / "latest.json").read_text(encoding="utf-8")
-    )
+    latest = json.loads(read_state_file(root / "records" / proposal["decision_id"] / "latest.json"))
     assert any("detector=market-regime-detector-v1" in item for item in latest["data_used"])
     assert "Regime overlay" in latest["thesis"]
 

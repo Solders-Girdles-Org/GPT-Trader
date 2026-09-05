@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from collections import Counter
 from decimal import InvalidOperation
 from pathlib import Path
@@ -127,14 +128,37 @@ def _check_cli_surface(checker: PreflightCheck, details: dict[str, str]) -> bool
 
 def check_trade_ideas_readiness(checker: PreflightCheck) -> bool:
     """Validate read-only trade-idea readiness for approval-gated review sessions."""
-    checker.section_header("14. TRADE IDEAS READINESS")
+    service = TradeIdeaService(resolve_ideas_root().expanduser())
+    try:
+        with service._repository.transaction():
+            return _check_trade_ideas_state(checker, service)
+    except (sqlite3.DatabaseError, RuntimeError) as error:
+        checker.log_error(f"Trade ideas database unreadable: {error}")
+        return False
 
-    ideas_root = resolve_ideas_root().expanduser()
-    service = TradeIdeaService(ideas_root)
+
+def _check_trade_ideas_state(checker: PreflightCheck, service: TradeIdeaService) -> bool:
+    checker.section_header("14. TRADE IDEAS READINESS")
+    ideas_root = service.root
     audit_path = service.audit_log.path
     budget_path = ideas_root / "risk_budget.jsonl"
     details = _details(ideas_root, audit_path=audit_path, budget_path=budget_path)
     all_good = True
+    repository = service._repository
+    if repository.active:
+        details["database_path"] = str(repository.path)
+        database_error = _existing_log_append_error(repository.path, label="database")
+        if database_error:
+            checker.log_error(database_error, details=details)
+            all_good = False
+        if repository.connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+            checker.log_error("Trade ideas SQLite integrity check failed", details=details)
+            all_good = False
+    elif repository.legacy_present():
+        checker.log_error(
+            "Trade ideas legacy state requires migration before writes", details=details
+        )
+        all_good = False
 
     root_error = _root_access_error(ideas_root)
     if root_error is None:

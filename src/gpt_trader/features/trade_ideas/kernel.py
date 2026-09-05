@@ -12,9 +12,9 @@ lane is another. The kernel gates decisions, it never proposes
 
 Kernel checks are library calls with identity stamping: every check carries
 the actor type it was evaluated for, and every recorded outcome lands on the
-append-only audit log. Cross-process safety comes from the locked append
-primitives underneath (budget/autonomy logs); the kernel adds no locking of
-its own.
+append-only audit log. Checks are advisory previews. Recording approval rechecks
+current policy inside the service's SQLite write transaction; independent log
+locks alone cannot serialize read/check/commit.
 """
 
 from __future__ import annotations
@@ -58,6 +58,16 @@ class KernelRuntime(Protocol):
     a kernel admit/deny is always evaluated against — and recorded on — the
     single source of truth.
     """
+
+    def commit_approval(
+        self,
+        idea: TradeIdea,
+        check: KernelCheck,
+        *,
+        actor_id: str,
+        reason: str,
+        evidence: tuple[str, ...] = (),
+    ) -> None: ...
 
     def current_budget(self) -> RiskBudget: ...
 
@@ -301,14 +311,8 @@ class RiskKernel:
                 "denied it: " + "; ".join(check.violations),
                 list(check.violations),
             )
-        self._runtime.append_audit(
-            idea,
-            action=AuditAction.APPROVED,
-            after_state=TradeIdeaState.APPROVED,
-            actor_type=check.actor_type,
-            actor_id=actor_id,
-            reason=reason,
-            evidence=evidence,
+        self._runtime.commit_approval(
+            idea, check, actor_id=actor_id, reason=reason, evidence=evidence
         )
 
     def record_denied_approval(

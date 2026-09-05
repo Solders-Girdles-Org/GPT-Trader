@@ -18,6 +18,7 @@ from gpt_trader.features.trade_ideas import (
 )
 from gpt_trader.features.trade_ideas.report import build_trade_idea_track_record_report
 from gpt_trader.features.trade_ideas.service import TradeIdeaService
+from tests.support.trade_state_files import corrupt_state_file
 from tests.unit.gpt_trader.cli.commands.conftest import attest_account_equity
 from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
 
@@ -201,10 +202,7 @@ def test_windowed_report_rejects_tampered_historical_record_hash(
         max_loss=MaxLoss(amount=Decimal("300"), percent_of_account=Decimal("2.0")),
     )
     historical_path = root / "records" / original.decision_id / f"{proposed_hash}.json"
-    historical_path.write_text(
-        json.dumps(tampered.to_dict(), sort_keys=True, indent=2),
-        encoding="utf-8",
-    )
+    corrupt_state_file(historical_path, json.dumps(tampered.to_dict(), sort_keys=True, indent=2))
 
     with pytest.raises(AuditIntegrityError, match="hashes to"):
         build_trade_idea_track_record_report(
@@ -229,10 +227,7 @@ def test_windowed_report_rejects_historical_record_missing_required_field(
     historical_payload = original.to_dict()
     del historical_payload["instrument"]
     historical_path = root / "records" / original.decision_id / f"{proposed_hash}.json"
-    historical_path.write_text(
-        json.dumps(historical_payload, sort_keys=True, indent=2),
-        encoding="utf-8",
-    )
+    corrupt_state_file(historical_path, json.dumps(historical_payload, sort_keys=True, indent=2))
 
     with pytest.raises(
         AuditIntegrityError, match="missing required field 'instrument'"

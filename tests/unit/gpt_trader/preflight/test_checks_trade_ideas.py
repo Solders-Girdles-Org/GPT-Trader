@@ -44,12 +44,30 @@ def _seed_budget(ideas_root: Path) -> None:
     )
 
 
+def _propose_legacy(root: Path, idea) -> None:
+    record_hash = TradeIdeaStore(root / "records").save(idea)
+    TradeIdeaAuditLog(root / "audit.jsonl").append(
+        AuditEvent(
+            event_id=new_event_id(),
+            timestamp=datetime(2026, 6, 12, 10, 0, tzinfo=UTC),
+            decision_id=idea.decision_id,
+            actor_type=ActorType.AI,
+            actor_id="test",
+            action=AuditAction.PROPOSED,
+            before_state=None,
+            after_state=TradeIdeaState.PROPOSED,
+            reason="legacy fixture",
+            record_hash=record_hash,
+        )
+    )
+
+
 def _append_proposed_event(ideas_root: Path) -> None:
     idea = build_trade_idea()
-    TradeIdeaService(ideas_root).propose(idea, actor_id="idea-generator-v1")
+    _propose_legacy(ideas_root, idea)
 
 
-def test_trade_ideas_readiness_passes_with_seeded_budget_and_empty_audit(
+def test_trade_ideas_readiness_requires_migration_for_valid_legacy_state(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     ideas_root = tmp_path / "trade_ideas"
@@ -60,11 +78,11 @@ def test_trade_ideas_readiness_passes_with_seeded_budget_and_empty_audit(
 
     checker = PreflightCheck(profile="dev")
 
-    assert check_trade_ideas_readiness(checker) is True
+    assert check_trade_ideas_readiness(checker) is False
     assert any(str(ideas_root) in message for message in checker.successes)
     assert any("0 event(s)" in message for message in checker.successes)
     assert any("risk budget current" in message for message in checker.successes)
-    assert not checker.errors
+    assert any("requires migration" in message for message in checker.errors)
 
 
 def test_trade_ideas_readiness_fails_on_corrupted_audit_jsonl(
@@ -186,12 +204,12 @@ def test_trade_ideas_readiness_fails_when_latest_record_is_tampered(
 ) -> None:
     ideas_root = tmp_path / "trade_ideas"
     _seed_budget(ideas_root)
-    service = TradeIdeaService(
+    TradeIdeaService(
         ideas_root,
         now_factory=lambda: datetime(2026, 6, 12, 10, 0, tzinfo=UTC),
     )
     idea = build_trade_idea(decision_id="trade-20260612-tampered-latest")
-    service.propose(idea, actor_id="idea-generator-v1")
+    _propose_legacy(ideas_root, idea)
     # Replace latest.json with a different, unaudited (but valid) revision.
     tampered = build_trade_idea(
         decision_id=idea.decision_id,
@@ -212,12 +230,12 @@ def test_trade_ideas_readiness_fails_when_latest_record_is_deleted(
 ) -> None:
     ideas_root = tmp_path / "trade_ideas"
     _seed_budget(ideas_root)
-    service = TradeIdeaService(
+    TradeIdeaService(
         ideas_root,
         now_factory=lambda: datetime(2026, 6, 12, 10, 0, tzinfo=UTC),
     )
     idea = build_trade_idea(decision_id="trade-20260612-deleted-latest")
-    service.propose(idea, actor_id="idea-generator-v1")
+    _propose_legacy(ideas_root, idea)
     (ideas_root / "records" / idea.decision_id / "latest.json").unlink()
     monkeypatch.setenv("GPT_TRADER_IDEAS_ROOT", str(ideas_root))
 
@@ -233,14 +251,14 @@ def test_trade_ideas_readiness_fails_when_latest_record_id_mismatches(
 ) -> None:
     ideas_root = tmp_path / "trade_ideas"
     _seed_budget(ideas_root)
-    service = TradeIdeaService(
+    TradeIdeaService(
         ideas_root,
         now_factory=lambda: datetime(2026, 6, 12, 10, 0, tzinfo=UTC),
     )
     audited = build_trade_idea(decision_id="trade-20260612-audited-a")
     other = build_trade_idea(decision_id="trade-20260612-audited-b")
-    service.propose(audited, actor_id="idea-generator-v1")
-    service.propose(other, actor_id="idea-generator-v1")
+    _propose_legacy(ideas_root, audited)
+    _propose_legacy(ideas_root, other)
     # Replace A's latest with B's (valid, audited) record: a swapped file must
     # not report READY just because the payload's own id has an audit trail.
     records = ideas_root / "records"
@@ -319,5 +337,19 @@ def test_trade_ideas_readiness_reports_pending_proposed_ideas(
 
     checker = PreflightCheck(profile="dev")
 
+    assert check_trade_ideas_readiness(checker) is False
+    assert any("pending review: 1 proposed" in message for message in checker.warnings)
+
+
+def test_sqlite_readiness_is_read_only_and_uses_current_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service = TradeIdeaService(tmp_path / "ideas")
+    service.current_budget()
+    service.propose(build_trade_idea(), actor_id="test")
+    monkeypatch.setenv("GPT_TRADER_IDEAS_ROOT", str(service.root))
+    before = service._repository.path.read_bytes()
+    checker = PreflightCheck(profile="dev")
     assert check_trade_ideas_readiness(checker) is True
+    assert service._repository.path.read_bytes() == before
     assert any("pending review: 1 proposed" in message for message in checker.warnings)

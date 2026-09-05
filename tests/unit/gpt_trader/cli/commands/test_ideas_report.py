@@ -15,6 +15,7 @@ from gpt_trader.features.trade_ideas import (
     TimeHorizon,
     TradeIdeaService,
 )
+from tests.support.trade_state_files import state_file_exists
 from tests.unit.gpt_trader.cli.commands.conftest import attest_account_equity
 from tests.unit.gpt_trader.features.trade_ideas.conftest import build_trade_idea
 
@@ -63,7 +64,7 @@ def _snapshot_files(root: Path) -> dict[str, str]:
     if not root.exists():
         return {}
     return {
-        str(path.relative_to(root)): path.read_text(encoding="utf-8")
+        str(path.relative_to(root)): path.read_bytes()
         for path in sorted(root.rglob("*"))
         if path.is_file()
     }
@@ -330,7 +331,7 @@ def test_report_is_read_only_and_does_not_seed_budget(
     assert exit_code == 0
     assert response["success"] is True
     assert _snapshot_files(root) == before
-    assert not (root / "risk_budget.jsonl").exists()
+    assert not state_file_exists(root / "risk_budget.jsonl")
     assert response["data"]["proposal_volume"]["idea_count"] == 1
     assert response["data"]["workflow"]["current_state_counts"]["proposed"] == 1
 
