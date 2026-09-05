@@ -102,7 +102,14 @@ class OrderRecord:
 
     def compute_checksum(self) -> str:
         """Compute checksum for order integrity verification."""
-        # Include critical fields in checksum
+        version = (self.metadata or {}).get("record_checksum_version", 1)
+        if type(version) is not int or version not in {1, 2}:
+            raise ValueError("Unsupported order checksum version")
+        if version == 2:
+            # New admitted intents bind identity, lifecycle, fill facts, metadata
+            # and timestamps. Historical rows retain their original checksum.
+            return compute_checksum(self.to_dict())
+        # Legacy checksum compatibility.
         critical = {
             "order_id": self.order_id,
             "symbol": self.symbol,
@@ -111,6 +118,17 @@ class OrderRecord:
             "price": str(self.price) if self.price else None,
         }
         return compute_checksum(critical)
+
+    def checksum_is_valid(self) -> bool:
+        metadata = self.metadata or {}
+        version = metadata.get("record_checksum_version", 1)
+        if type(version) is not int or version not in {1, 2}:
+            return False
+        if "intent" in metadata and version != 2:
+            return False
+        if not self.checksum:
+            return version == 1
+        return self.checksum == self.compute_checksum()
 
     def is_terminal(self) -> bool:
         """Check if order is in a terminal state."""

@@ -34,6 +34,7 @@ def test_submit_order_retries_when_classified_transient_then_success(
         mock_order,
     ]
 
+    mock_order.client_id = "retry-123"
     outcome = submit_order_with_result_call(submitter, client_order_id="retry-123")
 
     assert outcome.success is True
@@ -133,6 +134,7 @@ def test_submit_order_latency_uses_time_provider(
         time_provider=clock,
     )
 
+    mock_order.client_id = "clock-123"
     outcome = submit_order_with_result_call(submitter, client_order_id="clock-123")
 
     assert outcome.success is True
@@ -179,6 +181,7 @@ def test_retry_delays_use_backoff_policy_with_fake_clock(
         time_provider=clock,
     )
 
+    mock_order.client_id = "timeout-retry"
     outcome = submit_order_with_result_call(submitter, client_order_id="timeout-retry")
 
     assert outcome.success is True

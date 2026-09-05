@@ -371,7 +371,8 @@ class TradingEngine(BaseEngine):
                     error_message=str(exc),
                     operation="orders_store_init",
                 )
-                orders_store = None
+                # Preserve the configured store: submission must refuse unavailable
+                # persistence instead of silently becoming an unpersisted caller.
         self._orders_store = orders_store
 
         # Broker and risk manager must exist

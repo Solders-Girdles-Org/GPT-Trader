@@ -6,6 +6,7 @@ Used when MOCK_BROKER=1 to bypass real credentials and API calls.
 
 from __future__ import annotations
 
+import hashlib
 from decimal import Decimal
 from typing import Any
 
@@ -138,7 +139,14 @@ class DeterministicBroker:
         - Dict payload: {"product_id": ..., "side": ..., "order_configuration": ...}
         """
         self._order_counter += 1
-        order_id = f"MOCK_{self._order_counter:06d}"
+        client_id = kwargs.get("client_id")
+        # A persisted client identity must survive mock-process restarts without
+        # reusing a broker ID already attributed to a different request.
+        order_id = (
+            "MOCK_" + hashlib.sha256(str(client_id).encode()).hexdigest()
+            if client_id
+            else f"MOCK_{self._order_counter:06d}"
+        )
 
         # Handle 'symbol' keyword arg (from BrokerExecutor)
         if symbol_or_payload is None:

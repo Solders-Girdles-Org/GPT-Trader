@@ -168,9 +168,73 @@ the audited autonomy log resolves to `bounded_autonomy`. None of these commands
 touch a live broker or account. Ideas that expire unreviewed are swept with
 `uv run gpt-trader ideas expire`.
 
+## Durable submission and restart recovery
+
+Paper execution commits an immutable `OrderIntent` and the `SUBMITTED` audit
+transition together before calling the paper broker. The observed response is
+then committed to the existing trade-state SQLite event stream
+(`paper_execution.jsonl` in exports). A terminal fill receipt and its lifecycle
+reconciliation are separate facts: recovery replays the recorded fill without
+re-authorizing or sending an order. The fill event and reconciliation marker
+commit together, so concurrent recovery and a crash during reconciliation cannot
+record the fill twice. Conflicting stored identities or fill facts stop the cycle.
+
+Every cycle recovers committed receipts before fetching market data or proposing
+new ideas. Its manifest includes recovered decision IDs and unresolved submissions.
+An interrupted submission with no durable receipt, including a broker fill whose
+response was lost before persistence, stays `SUBMITTED`. Recovery never resends
+it or infers a fill. Such submissions make the cycle `partial` until observed
+broker evidence is reconciled through the existing paper-fill/manual lifecycle
+workflow. A failed market-data fetch can still leave an already-recorded receipt
+successfully reconciled. Existing legacy `SUBMITTED` ideas without a receipt are
+also reported as unresolved; historical records are not fabricated.
+
+Current-state export/import includes pending intents and receipts. Selecting a
+migrated runtime root still requires quiescing its writers as described in
+[state persistence](decisions/transactional-trade-state.md); this source change
+does not migrate or activate any running root. Existing SQLite roots need no
+schema upgrade for the additional event stream. Deploy the source to every writer
+before relying on these guarantees. Older executors do not write receipts and
+older order-store readers do not understand the version 2 integrity contract;
+a code rollback must quiesce writers and restore a compatible preserved state
+copy, rather than continue trading against newly written state with older code.
+
+The direct strategy submitter uses the same admitted order payload for BUY, SELL,
+and reduce-only CLOSE. With its configured `OrdersStore`, it reserves the client
+ID atomically and preserves the original request in existing order metadata.
+Explicit client IDs also derive stable mock broker order IDs, so distinct requests
+after a mock restart do not reuse a prior broker ID. Restart retries require matching symbol, side, quantity, order type, prices,
+time-in-force, leverage, and reduce-only semantics; an ID collision is refused.
+New intent-bearing order records use version 2 checksums covering their complete
+serialized request, receipt, metadata, and timestamps; older records retain their
+original narrower checksum contract. Observed broker response fields must agree
+with the admitted request, and explicit terminal fill facts must be complete and
+finite before success is recorded. Conflicting responses stay uncertain.
+WebSocket, REST backfill and engine reconciliation updates retain the immutable
+intent and checksum version. Conflicting or decreasing fill observations are
+refused. Failed fill persistence stops PnL callbacks and success events, and
+releases the tentative dedupe entry so the same event can be retried after
+storage recovery. Order persistence and PnL callbacks remain separate;
+reconstructing PnL across a crash after the order commit belongs to the remaining
+accounting migration.
+Pending requests without broker acknowledgment and unavailable storage return
+`submission_uncertain`, without a new broker call. A post-submit persistence
+failure leaves the durable pending reservation available for reconciliation.
+The application container supplies this store to the trading engine; a configured
+store initialization failure cannot silently disable persistence. Explicit
+storeless custom/test submitters retain compatibility but provide **no durable
+or cross-process idempotency guarantee**.
+
+This common request contract does not make a new SHORT idea equivalent to closing
+a long position. Direct SELL/CLOSE routing remains in place. Full TradeIdea
+partial-reduction accounting still requires explicit remaining quantity,
+attributed realized PnL, and reserved exposure semantics before those paths can
+be removed. Existing risk, freshness, venue, and autonomy checks remain admission
+authority; a receipt is evidence of execution, never new permission to trade.
+
 ## Scheduled Stage 1 Turns (Unattended Operation)
 
-`ideas cycle` runs exactly one turn of the paper loop — lock, snapshot, expire
+`ideas cycle` runs exactly one turn of the paper loop — lock, receipt recovery, snapshot, expire
 sweep, proposers, paper-execute already-APPROVED ideas priced from the turn's
 own snapshot, report/queue artifacts, one manifest row. Recurrence comes from
 an external scheduler (launchd or cron); the command never decides a cadence,

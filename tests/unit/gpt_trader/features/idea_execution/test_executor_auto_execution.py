@@ -260,3 +260,30 @@ def test_execute_system_auto_approved_idea_when_gate_passes(
     assert any(AUTO_EXECUTION_ENV_VAR in item for item in submitted[0].evidence)
     assert any("mode=bounded_autonomy" in item for item in submitted[0].evidence)
     assert any("actor_id=auto-approval-sweep" in item for item in submitted[0].evidence)
+
+
+def test_executor_denial_commits_only_audited_safety_downratchet(service, monkeypatch):
+    from gpt_trader.features.trade_ideas import CloseoutResolution
+
+    monkeypatch.setenv(AUTO_APPROVAL_ENV_VAR, "1")
+    monkeypatch.setenv(AUTO_EXECUTION_ENV_VAR, "1")
+    decision_id = "trade-20260702-after-loss"
+    _system_auto_approved_idea(service, decision_id)
+    loss_id = "trade-20260702-realized-loss"
+    service.propose(_build_idea(loss_id), actor_id="test")
+    service.approve(loss_id, actor_id="rj", reason="fixture")
+    service.record_submission(loss_id, actor_id="rj", venue="paper")
+    service.record_fill(loss_id, actor_id="rj", venue="paper")
+    service.record_closeout_attribution(
+        loss_id,
+        actor_id="rj",
+        resolution=CloseoutResolution.INVALIDATION,
+        realized_profit_loss_percent=Decimal("-12"),
+    )
+    assert service.autonomy_history()[-1].mode is AutonomyMode.BOUNDED_AUTONOMY
+    with pytest.raises(IdeaNotExecutableError):
+        _executor(service).execute(decision_id)
+    assert service.autonomy_history()[-1].mode is AutonomyMode.HUMAN_APPROVED_EXECUTION
+    assert service.autonomy_history()[-1].actor_type is ActorType.SYSTEM
+    assert service.get(decision_id).state is TradeIdeaState.APPROVED
+    assert service.execution_journal.entries() == {}

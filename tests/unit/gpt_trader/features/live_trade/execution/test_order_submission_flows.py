@@ -44,7 +44,7 @@ def _status_value(name: str):
 
 
 def _rejected_order(status) -> MagicMock:
-    order = MagicMock()
+    order = MagicMock(spec=["id", "status", "quantity", "filled_quantity"])
     order.id = "rejected-order"
     order.status = status
     order.quantity = Decimal("1.0")
@@ -63,6 +63,7 @@ def test_submit_order_success_tracks_trade(
     mock_event_store: MagicMock,
     open_orders: list[str],
 ) -> None:
+    mock_order.client_id = "custom-id"
     mock_broker.place_order.return_value = mock_order
 
     result = submit_order_call(flow_submitter, client_order_id="custom-id")
@@ -78,6 +79,7 @@ def test_submit_order_with_result_success(
     mock_broker: MagicMock,
     mock_order: Order,
 ) -> None:
+    mock_order.client_id = "custom-id"
     mock_broker.place_order.return_value = mock_order
 
     outcome = submit_order_with_result_call(flow_submitter, client_order_id="custom-id")

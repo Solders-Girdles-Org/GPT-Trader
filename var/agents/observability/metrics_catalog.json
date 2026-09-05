@@ -69,7 +69,7 @@
       ],
       "locations": [
         {
-          "line": 95,
+          "line": 96,
           "path": "src/gpt_trader/features/live_trade/execution/broker_executor.py"
         }
       ],
@@ -249,7 +249,7 @@
       "label_keys": [],
       "locations": [
         {
-          "line": 630,
+          "line": 718,
           "path": "src/gpt_trader/features/live_trade/execution/order_submission.py"
         }
       ],
@@ -265,7 +265,7 @@
       ],
       "locations": [
         {
-          "line": 169,
+          "line": 170,
           "path": "src/gpt_trader/features/live_trade/execution/order_submission.py"
         }
       ],
@@ -282,7 +282,7 @@
       ],
       "locations": [
         {
-          "line": 143,
+          "line": 144,
           "path": "src/gpt_trader/features/live_trade/execution/order_submission.py"
         }
       ],
@@ -297,7 +297,7 @@
       ],
       "locations": [
         {
-          "line": 1176,
+          "line": 1177,
           "path": "src/gpt_trader/features/live_trade/engines/strategy.py"
         }
       ],

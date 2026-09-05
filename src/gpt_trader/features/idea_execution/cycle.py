@@ -227,6 +227,7 @@ class PaperCycleResult:
     resolved_decision_ids: tuple[str, ...]
     proposer_turns: tuple[ProposerTurn, ...]
     execution: ExecutionTurn
+    recovery: dict[str, Any] = field(default_factory=dict)
     queue: dict[str, Any] = field(default_factory=dict)
     report_summary: dict[str, Any] = field(default_factory=dict)
     session_gate: tuple[dict[str, Any], ...] = ()
@@ -237,7 +238,9 @@ class PaperCycleResult:
     def outcome(self) -> str:
         return (
             "partial"
-            if any(turn.error for turn in self.proposer_turns) or self.execution.failed
+            if any(turn.error for turn in self.proposer_turns)
+            or self.execution.failed
+            or self.recovery.get("unresolved")
             else "completed"
         )
 
@@ -257,6 +260,10 @@ class PaperCycleResult:
                     f"execution {failure['decision_id']}: {failure['error']}"
                     for failure in self.execution.failed
                 ]
+                + [
+                    f"recovery {item['decision_id']}: {item['reason']}"
+                    for item in self.recovery.get("unresolved", [])
+                ]
             )
             or None,
             "snapshot": self.snapshot,
@@ -270,6 +277,7 @@ class PaperCycleResult:
             "exit_monitor_unresolved": [dict(entry) for entry in self.exit_monitor_unresolved],
             "proposers": [turn.to_dict() for turn in self.proposer_turns],
             "execution": self.execution.to_dict(),
+            "recovery": self.recovery,
             "queue": self.queue,
             "report": self.report_summary,
         }
@@ -364,6 +372,9 @@ class PaperCycleRunner:
     ) -> PaperCycleResult:
         run_dir = self._cycle_root / "runs" / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
+
+        recovery = self._executor.recover_receipts(actor_id=self._actor_id)
+        row["recovery"] = recovery
 
         expired_views = self._service.expire_due_ideas(
             actor_id=self._actor_id,
@@ -470,6 +481,7 @@ class PaperCycleRunner:
             resolved_decision_ids=resolved_decision_ids,
             proposer_turns=tuple(proposer_turns),
             execution=execution,
+            recovery=recovery,
             queue=queue_summary,
             report_summary=report_summary,
             session_gate=session_gate,

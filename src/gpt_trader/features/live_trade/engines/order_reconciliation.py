@@ -19,6 +19,7 @@ from gpt_trader.features.live_trade.engines.order_record_mapping import (
 from gpt_trader.features.live_trade.execution.broker_executor import BrokerExecutor
 from gpt_trader.features.live_trade.execution.order_submission import OrderSubmitter
 from gpt_trader.monitoring.alert_types import AlertSeverity
+from gpt_trader.persistence.durability import WriteError
 from gpt_trader.persistence.orders_store import OrderRecord
 from gpt_trader.persistence.orders_store import OrderStatus as PersistedOrderStatus
 from gpt_trader.utilities.logging_patterns import get_logger
@@ -86,7 +87,11 @@ class OrderReconciliationService:
             metadata["note"] = "backfilled_from_broker"
             record = replace(record, metadata=metadata)
             try:
-                await self._broker_call(orders_store.upsert_by_client_id, record)
+                result = await self._broker_call(
+                    orders_store.upsert_by_client_id, record, raise_on_error=True
+                )
+                if not result.success:
+                    raise WriteError(result.error or "Order recovery could not be persisted")
             except Exception as exc:
                 logger.warning(
                     "Failed to persist recovered order",
@@ -187,7 +192,11 @@ class OrderReconciliationService:
                 time_in_force=update_record.time_in_force or record.time_in_force,
             )
             try:
-                await self._broker_call(orders_store.upsert_by_client_id, updated)
+                result = await self._broker_call(
+                    orders_store.upsert_by_client_id, updated, raise_on_error=True
+                )
+                if not result.success:
+                    raise WriteError(result.error or "Order refresh could not be persisted")
             except Exception as exc:
                 logger.warning(
                     "Failed to persist order refresh",
@@ -307,7 +316,13 @@ class OrderReconciliationService:
                             "note": "normalized_submit_id_to_order_id",
                         },
                     )
-                    await self._broker_call(orders_store.upsert_by_client_id, updated)
+                    result = await self._broker_call(
+                        orders_store.upsert_by_client_id, updated, raise_on_error=True
+                    )
+                    if not result.success:
+                        raise WriteError(
+                            result.error or "Order normalization could not be persisted"
+                        )
                 except Exception as exc:
                     logger.warning(
                         "Failed to persist order_id normalization",

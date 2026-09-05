@@ -14,6 +14,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from gpt_trader.core import NotFoundError, OrderSide, OrderType, RateLimitError
+from gpt_trader.core.order_intent import OrderIntent
 from gpt_trader.monitoring.metrics_collector import record_histogram
 from gpt_trader.utilities.backoff_policy import evaluate_backoff_delay
 from gpt_trader.utilities.logging_patterns import get_logger
@@ -359,18 +360,19 @@ class BrokerExecutor:
         """Execute the actual broker call (no retry)."""
         start_time = time.perf_counter()
         try:
-            result = self._broker.place_order(
+            intent = OrderIntent(
+                client_order_id=submit_id,
                 symbol=symbol,
                 side=side,
                 order_type=order_type,
                 quantity=quantity,
                 price=price,
                 stop_price=stop_price,
-                tif=tif if tif is not None else None,
+                tif=tif,
                 reduce_only=reduce_only,
                 leverage=leverage,
-                client_id=submit_id,
             )
+            result = self._broker.place_order(**intent.broker_kwargs())
             latency_seconds = time.perf_counter() - start_time
             _record_broker_call_latency(
                 latency_seconds=latency_seconds,
