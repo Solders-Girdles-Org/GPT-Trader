@@ -1,10 +1,15 @@
 """Proposer protocol: snapshot in, complete trade-idea records out.
 
-Every proposer — deterministic baseline or future LLM-backed — implements the
-same contract, so all of them can be replayed over historical snapshots and
-scored against each other on identical inputs. Proposers never see "the
-present", only a :class:`MarketSnapshot`, and they never submit anything; their
-output enters the workflow through ``TradeIdeaService.propose``.
+Deterministic baselines and model-backed implementations share this contract;
+they do not necessarily share determinism or a valid performance evaluation.
+Historical snapshots support mechanical and fixture checks. Performance claims
+for model-generated proposals require prospective evidence under
+``docs/decisions/adopt-agentic-alpha-direction.md``; replaying a historical
+window cannot establish uncontaminated trading skill.
+
+Implementations may receive additional context through injected dependencies.
+They never submit orders: their output enters the workflow through
+``TradeIdeaService.propose`` and remains subject to its admission controls.
 """
 
 from __future__ import annotations
