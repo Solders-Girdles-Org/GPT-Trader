@@ -14,7 +14,7 @@ dependencies = [
     "rich>=15.0.0,<16.0.0",
     "pyyaml>=6.0.1,<7.0.0",
     # Security (core for production trading)
-    "cryptography>=48.0.1,<49.0.0",
+    "cryptography>=50.0.1,<51.0.0",
     "pyjwt>=2.9.0,<3.0.0",
     "pandas>=2.3.3,<3.0.0",
     # Trading-session calendars (gpt_trader.core.trading_calendar, #1228)
@@ -26,7 +26,7 @@ dependencies = [
 [project.optional-dependencies]
 # Core trading functionality
 monitoring = ["psutil>=6.0.0,<7.0.0"]
-live-trade = ["websocket-client>=1.8.0,<2.0.0", "aiohttp>=3.12.15,<4.0.0"]
+live-trade = ["websocket-client>=1.8.0,<2.0.0", "aiohttp>=3.14.3,<4.0.0"]
 optimize = ["optuna>=4.0.0,<5.0.0"]
 # Official MCP client and response-schema validation for the isolated,
 # read/review-only Robinhood Agentic adapter.
@@ -100,6 +100,7 @@ dev = [
     "httpx>=0.27.0,<1.0.0",  # ASGI test client for the operator web console
     # Security scanning
     "pip-audit>=2.9.0,<3.0.0",
+    "pip>=26.2.1,<27.0.0", # Security floor for pip-api/pip-audit tooling only.
     "bandit>=1.7.9,<2.0.0",
     # Transitive security fix: only dev tooling pulls filelock (pre-commit,
     # pip-audit), so the CVE floor lives here instead of runtime deps.
