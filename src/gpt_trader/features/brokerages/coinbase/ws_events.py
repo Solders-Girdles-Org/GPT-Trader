@@ -181,8 +181,9 @@ class FillEvent:
     timestamp: datetime | None
 
     @classmethod
-    def from_message(cls, data: dict[str, Any]) -> FillEvent | None:
+    def from_messages(cls, data: dict[str, Any]) -> list[FillEvent]:
         """Parse from WebSocket user event message."""
+        fills = []
         events = data.get("events", [])
         for event in events:
             if event.get("type") == "snapshot" or event.get("type") == "update":
@@ -190,25 +191,33 @@ class FillEvent:
                 for order in orders:
                     # Check if this is a fill event
                     if order.get("status") == "FILLED" or order.get("avg_price"):
-                        return cls(
-                            order_id=order.get("order_id", ""),
-                            client_order_id=order.get("client_order_id", ""),
-                            product_id=order.get("product_id", ""),
-                            side=order.get("order_side", ""),
-                            fill_price=Decimal(str(order.get("avg_price", "0"))),
-                            fill_size=Decimal(str(order.get("filled_size", "0"))),
-                            fee=Decimal(str(order.get("fee", "0"))),
-                            commission=Decimal(str(order.get("total_fees", "0"))),
-                            sequence=data.get("sequence_num"),
-                            timestamp=(
-                                datetime.fromisoformat(
-                                    order["creation_time"].replace("Z", "+00:00")
-                                )
-                                if order.get("creation_time")
-                                else None
-                            ),
+                        fills.append(
+                            cls(
+                                order_id=order.get("order_id", ""),
+                                client_order_id=order.get("client_order_id", ""),
+                                product_id=order.get("product_id", ""),
+                                side=order.get("order_side", ""),
+                                fill_price=Decimal(str(order.get("avg_price", "0"))),
+                                fill_size=Decimal(str(order.get("filled_size", "0"))),
+                                fee=Decimal(str(order.get("fee", "0"))),
+                                commission=Decimal(str(order.get("total_fees", "0"))),
+                                sequence=data.get("sequence_num"),
+                                timestamp=(
+                                    datetime.fromisoformat(
+                                        order["creation_time"].replace("Z", "+00:00")
+                                    )
+                                    if order.get("creation_time")
+                                    else None
+                                ),
+                            )
                         )
-        return None
+        return fills
+
+    @classmethod
+    def from_message(cls, data: dict[str, Any]) -> FillEvent | None:
+        """Compatibility reader for callers explicitly asking for one observation."""
+        fills = cls.from_messages(data)
+        return fills[0] if fills else None
 
 
 @dataclass(frozen=True)

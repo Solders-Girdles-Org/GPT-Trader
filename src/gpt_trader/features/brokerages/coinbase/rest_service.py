@@ -41,6 +41,7 @@ from gpt_trader.features.brokerages.coinbase.rest.position_state_store import Po
 from gpt_trader.features.brokerages.coinbase.rest.product_service import ProductService
 from gpt_trader.features.brokerages.coinbase.utilities import PositionState, ProductCatalog
 from gpt_trader.persistence.event_store import EventStore
+from gpt_trader.persistence.orders_store import OrdersStore
 
 
 class CoinbaseRestService:
@@ -67,6 +68,7 @@ class CoinbaseRestService:
         market_data: MarketDataService,
         event_store: EventStore,
         bot_config: BotConfig | None = None,
+        orders_store: OrdersStore | None = None,
     ) -> None:
         # Create shared position state store
         self._position_store = PositionStateStore()
@@ -106,6 +108,7 @@ class CoinbaseRestService:
         self._pnl_service = PnLService(
             position_store=self._position_store,
             market_data=market_data,
+            orders_store=orders_store,
         )
 
         # Expose shared dependencies for legacy access patterns

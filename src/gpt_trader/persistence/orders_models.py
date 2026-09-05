@@ -31,6 +31,13 @@ class OrderStatus(str, Enum):
     FAILED = "failed"  # Internal failure
 
 
+# Definitive venue outcomes. FAILED is an internal uncertainty, not proof that
+# no execution occurred.
+VENUE_TERMINAL_ORDER_STATUSES = frozenset(
+    {OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.EXPIRED, OrderStatus.REJECTED}
+)
+
+
 @dataclass
 class OrderRecord:
     """

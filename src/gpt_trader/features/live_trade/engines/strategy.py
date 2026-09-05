@@ -518,6 +518,10 @@ class TradingEngine(BaseEngine):
             symbols=list(self.context.config.symbols),
             product_catalog=product_catalog,
         )
+        if self._orders_store is not None and self._guard_manager is not None:
+            self._guard_manager.set_pnl_projection_provider(
+                self._user_event_handler.get_accounting_pnl
+            )
 
     def _rehydrate_open_orders(self) -> None:
         """Restore open order IDs from the orders store after a restart."""

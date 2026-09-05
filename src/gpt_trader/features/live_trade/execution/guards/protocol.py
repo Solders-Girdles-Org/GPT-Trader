@@ -25,6 +25,7 @@ class RuntimeGuardState:
     positions_pnl: dict[str, dict[str, Decimal]]
     positions_dict: dict[str, dict[str, Decimal]]
     guard_events: list[dict[str, Any]] = field(default_factory=list)
+    pnl_availability: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 @runtime_checkable

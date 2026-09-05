@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Literal
 
+from gpt_trader.core.fill_accounting import AccountingIntegrityError, FillFact
 from gpt_trader.features.brokerages.coinbase.rest.pnl_service import PnLService
 from gpt_trader.features.brokerages.coinbase.rest.position_state_store import PositionStateStore
 from gpt_trader.features.brokerages.coinbase.ws_events import FillEvent, OrderUpdateEvent
@@ -53,10 +54,11 @@ class CoinbaseUserEventHandler:
         self._dedupe_limit = max(dedupe_limit, 1)
 
         self._pnl_service: PnLService | None = None
-        if market_data_service is not None:
+        if market_data_service is not None or orders_store is not None:
             self._pnl_service = PnLService(
                 position_store=PositionStateStore(),
                 market_data=market_data_service,
+                orders_store=orders_store,
             )
 
         self._recent_fill_keys: deque[str] = deque()
@@ -68,10 +70,15 @@ class CoinbaseUserEventHandler:
         self._fill_watermark: datetime | None = None
         self._load_backfill_watermark()
 
+    def get_accounting_pnl(self) -> dict[str, Any]:
+        """Read the local durable trade projection, including closed symbols."""
+        if self._pnl_service is None:
+            return {"positions": [], "accounting_status": "unavailable"}
+        return self._pnl_service.get_portfolio_pnl()
+
     def handle_user_message(self, message: dict[str, Any]) -> None:
         """Parse and handle a raw WebSocket user message."""
-        fill = FillEvent.from_message(message)
-        if fill is not None:
+        for fill in FillEvent.from_messages(message):
             self.handle_fill(fill)
 
         updates = OrderUpdateEvent.from_message(message)
@@ -103,16 +110,20 @@ class CoinbaseUserEventHandler:
             filled_quantity=event.filled_size,
             average_fill_price=event.avg_price,
             created_at=timestamp,
-            updated_at=timestamp,
+            updated_at=datetime.now(timezone.utc),
             bot_id=self._bot_id,
             time_in_force="GTC",
             metadata={"source": "ws_user_event", "event_type": "order_update"},
         )
 
         try:
-            result = self._orders_store.upsert_by_client_id(record, raise_on_error=True)
-            if not result.success:
-                raise WriteError(result.error or "Order update could not be persisted")
+            with self._orders_store.transaction():
+                result = self._orders_store.upsert_by_client_id(record, raise_on_error=True)
+                if not result.success:
+                    raise WriteError(result.error or "Order update could not be persisted")
+                self._orders_store.accounting.record_observation(
+                    record, source=str((record.metadata or {}).get("source", "order_update"))
+                )
         except Exception as exc:
             logger.warning(
                 "Failed to persist order update",
@@ -160,7 +171,8 @@ class CoinbaseUserEventHandler:
         pnl_payload = dict(fill_payload)
         pnl_payload["size"] = str(fill_delta)
 
-        self._process_fill_for_pnl(pnl_payload)
+        if self._orders_store is None:
+            self._process_fill_for_pnl(pnl_payload)
 
         self._emit_event(
             "user_fill",
@@ -203,6 +215,14 @@ class CoinbaseUserEventHandler:
     def _update_orders_for_fill(self, event: FillEvent, *, cumulative: bool = True) -> Decimal:
         if self._orders_store is None:
             return event.fill_size
+        with self._orders_store.transaction():
+            return self._update_orders_for_fill_inner(event, cumulative=cumulative)
+
+    def _update_orders_for_fill_inner(
+        self, event: FillEvent, *, cumulative: bool = True
+    ) -> Decimal:
+        if self._orders_store is None:
+            return event.fill_size
 
         order_id = event.order_id or event.client_order_id
         client_order_id = event.client_order_id or order_id
@@ -236,6 +256,15 @@ class CoinbaseUserEventHandler:
             if cumulative:
                 fill_delta = fill_size - previous_filled
                 if fill_delta <= 0:
+                    from dataclasses import replace
+
+                    observed = replace(
+                        existing,
+                        filled_quantity=fill_size,
+                        average_fill_price=fill_price,
+                        updated_at=datetime.now(timezone.utc),
+                    )
+                    self._orders_store.accounting.record_observation(observed, source="websocket")
                     return Decimal("0")
                 filled_quantity = fill_size
                 avg_price = (
@@ -274,16 +303,20 @@ class CoinbaseUserEventHandler:
             filled_quantity=filled_quantity,
             average_fill_price=avg_price,
             created_at=created_at,
-            updated_at=event.timestamp or datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
             bot_id=self._bot_id,
             time_in_force=time_in_force,
             metadata={"source": "ws_user_event", "event_type": "fill"},
         )
 
         try:
-            result = self._orders_store.upsert_by_client_id(record, raise_on_error=True)
-            if not result.success:
-                raise WriteError(result.error or "Order update could not be persisted")
+            with self._orders_store.transaction():
+                result = self._orders_store.upsert_by_client_id(record, raise_on_error=True)
+                if not result.success:
+                    raise WriteError(result.error or "Order update could not be persisted")
+                self._orders_store.accounting.record_observation(
+                    record, source=str((record.metadata or {}).get("source", "order_update"))
+                )
         except Exception as exc:
             logger.warning(
                 "Failed to persist fill update",
@@ -411,6 +444,32 @@ class CoinbaseUserEventHandler:
         )
 
     def _apply_rest_fill(self, fill: dict[str, Any]) -> tuple[bool, datetime | None]:
+        if self._orders_store is not None:
+            timestamp = self._parse_fill_timestamp(fill)
+            fill_id = str(fill.get("fill_id") or fill.get("trade_id") or "")
+            if timestamp is None or not fill_id:
+                raise AccountingIntegrityError(
+                    "Identified fill requires venue fill ID and execution timestamp"
+                )
+            fact = FillFact(
+                fill_id=fill_id,
+                order_id=str(fill.get("order_id") or ""),
+                client_order_id=str(fill.get("client_order_id") or ""),
+                symbol=str(fill.get("product_id") or ""),
+                side=str(fill.get("side") or "").lower(),
+                quantity=str(fill.get("size")),
+                price=str(fill.get("price")),
+                executed_at=timestamp.isoformat(),
+                fee=str(fill["fee"]) if fill.get("fee") is not None else None,
+                fee_currency=str(fill["fee_currency"]) if fill.get("fee_currency") else None,
+            )
+            applied = self._orders_store.accounting.record_fill(fact)
+            if applied:
+                self._emit_event(
+                    "user_fill_backfill",
+                    {**fact.to_dict(), "pnl_source": "durable_fill_projection"},
+                )
+            return applied, timestamp
         if not self._should_process_rest_fill(fill):
             return False, None
 
@@ -520,9 +579,13 @@ class CoinbaseUserEventHandler:
         )
 
         try:
-            result = self._orders_store.upsert_by_client_id(record, raise_on_error=True)
-            if not result.success:
-                raise WriteError(result.error or "Order update could not be persisted")
+            with self._orders_store.transaction():
+                result = self._orders_store.upsert_by_client_id(record, raise_on_error=True)
+                if not result.success:
+                    raise WriteError(result.error or "Order update could not be persisted")
+                self._orders_store.accounting.record_observation(
+                    record, source=str((record.metadata or {}).get("source", "order_update"))
+                )
         except Exception as exc:
             logger.warning(
                 "Failed to persist order backfill",
@@ -612,6 +675,7 @@ class CoinbaseUserEventHandler:
             market_data=market_data,
             event_store=event_store,
             bot_config=None,
+            orders_store=self._orders_store,
         )
         return self._rest_service
 

@@ -102,7 +102,7 @@ def test_failed_ws_fill_never_updates_pnl_and_identical_retry_can_persist(
     updated = store.get_order_by_client_order_id("stable-close")
     assert updated.filled_quantity == Decimal("0.05") and updated.checksum_is_valid()
     assert updated.metadata["intent"]["reduce_only"] is True
-    handler._process_fill_for_pnl.assert_called_once()
+    handler._process_fill_for_pnl.assert_not_called()
 
 
 def test_rest_order_refresh_preserves_intent_and_refuses_conflicting_observation(tmp_path):
@@ -147,4 +147,4 @@ def test_rest_fill_write_failure_does_not_consume_dedupe_or_advance_watermark(tm
     assert handler._apply_rest_fill(payload)[0]
     assert not handler._apply_rest_fill(payload)[0]
     assert store.get_order_by_client_order_id("stable-close").filled_quantity == Decimal("0.05")
-    handler._process_fill_for_pnl.assert_called_once()
+    handler._process_fill_for_pnl.assert_not_called()

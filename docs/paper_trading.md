@@ -588,3 +588,58 @@ Exit scoring reads those levels independently of presentation prose. Historical
 prose-only records remain readable through the explicit legacy scoring fallback;
 this change does not rewrite them or change the direct strategy engine's SELL or
 CLOSE route.
+
+### Durable direct fill accounting
+
+The configured Coinbase user-event handler now records identified REST fills in
+its existing `orders.db`. WebSocket `filled_size` and `avg_price` are cumulative
+order observations, not new executions; REST constituents enrich that history
+without adding the WebSocket total a second time. Fill IDs, execution timestamps,
+identity and full row checksums are validated. Identical retries are idempotent
+across restart; a conflicting ID or unavailable database cannot be treated as an
+unseen fill. Order updates and fill admission share one SQLite transaction.
+
+PnL is a replaceable projection of these facts. Configured handlers do not apply
+an additive PnL callback after a database commit. The REST PnL facade and runtime
+telemetry read the projection, including realized results for closed symbols.
+A missing opening inventory, unresolved submission, missing fill constituents,
+ambiguous execution ordering or unverified cumulative notional produces explicit
+unavailable values, not zero. Missing marks leave unrealized PnL unavailable while
+preserving known realized trade PnL. Runtime daily-loss protection still uses
+venue equity; local projections do not replace venue balances or positions.
+
+The projection describes **gross trade PnL in this local orders database**. It
+neither establishes complete venue/account history nor asserts fresh venue
+reconciliation. Fees retain their currency and separate coverage status; funding
+is not included. Existing storeless custom callers retain their incremental
+compatibility behavior, without durable replay guarantees. Existing funding
+calculation and venue-position paths remain separate.
+
+A populated historical database does not imply an initially flat account.
+`PositionBaseline` requires an explicit symbol, inclusive `effective_at`, signed
+opening quantity, entry basis, evidence and actor identity. Record it through
+`orders_store.accounting.record_baseline(baseline)`; duplicate identical evidence
+is idempotent and replacement is refused. Fills at or before its boundary are
+already represented and excluded from the new period's PnL. Optional
+`covered_order_ids` explicitly names complete historical receipts included by
+the baseline when individual old fills are unavailable. Order creation times
+never establish this coverage; an identified later execution for a covered order
+is a conflict. Covered receipt semantics are bound at baseline admission and
+rechecked, so a later changed receipt cannot silently retain a complete
+projection. Future baselines and execution timestamps are refused as current
+evidence. This API records operator-supplied evidence and does not infer or
+fetch inventory.
+
+OrdersStore initialization adds the accounting tables atomically and preserves
+existing order rows/checksums. Unsupported, missing or partially installed
+accounting schema markers are refused. `orders_store.backup_to(path)` creates a
+consistent SQLite copy including facts, observations and baselines, validates
+source evidence, and refuses to overwrite an existing destination. Before any
+runtime upgrade, quiesce all writers and preserve a compatible pre-upgrade copy.
+Old writers cannot maintain the new accounting records; rollback requires an
+offline compatible copy, not mixed writer versions. The modernization source PR
+does not run this upgrade, submit orders, or change runtime configuration.
+
+Position-targeted TradeIdea partial reductions and final-close accounting remain
+a separate migration. A new SHORT entry is not a reduction of an existing long;
+direct SELL/CLOSE paths remain until that target and accounting parity is proven.
