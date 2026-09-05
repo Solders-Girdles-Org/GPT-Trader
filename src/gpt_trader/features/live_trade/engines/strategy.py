@@ -309,20 +309,12 @@ class TradingEngine(BaseEngine):
         self._init_strategy_proposal_bridge()
 
     def _init_strategy_proposal_bridge(self) -> None:
-        """Wire the default-off strategy-signal-to-trade-idea proposal bridge.
+        """Wire strategy routing once during construction.
 
-        When ``strategy_signal_proposals_enabled`` is set, live decisions are
-        proposed for human review through ``TradeIdeaService.propose()`` and the
-        engine never submits orders (proposal-only mode).
-
-        When ``event_driven_paper_lane_enabled`` is set (#1191), proposal
-        routing is implied and each proposed idea continues in-process through
-        the risk kernel into paper execution: the adapter carries executable
-        sizing and ``EventDrivenIdeaLane`` runs per decision against a
-        lane-owned paper broker. Live order submission stays off either way.
-
-        When both gates are unset, all collaborators stay ``None`` and
-        execution behaves exactly as before.
+        Either flag builds the proposal adapter; the paper-lane flag also
+        enables gated paper continuation. See the decision routing contract
+        in docs/specs/TRADE_IDEA_INTERFACES_DESIGN_NOTES.md. This only selects
+        the strategy route; public submit_order still uses the guard stack.
         """
         lane_enabled = getattr(self.context.config, "event_driven_paper_lane_enabled", False)
         proposals_enabled = getattr(self.context.config, "strategy_signal_proposals_enabled", False)
@@ -1868,9 +1860,8 @@ class TradingEngine(BaseEngine):
     # =========================================================================
     # PUBLIC SUBMISSION ENTRYPOINT
     # =========================================================================
-    # This is the canonical order submission path. All order execution should
-    # route through this method to ensure the full guard stack is applied:
-    # degradation gate → sizing → security → risk → staleness → validator
+    # External callers share the direct strategy guard stack through this
+    # entrypoint. Proposal routing does not intercept this separate API.
     # =========================================================================
 
     async def submit_order(
@@ -1887,9 +1878,9 @@ class TradingEngine(BaseEngine):
     ) -> OrderSubmissionResult:
         """Public entrypoint for order submission through the canonical guard stack.
 
-        This method provides external callers access to the full pre-trade
-        validation pipeline. All orders should route through here to ensure
-        consistent guard enforcement.
+        External callers share the direct strategy validation pipeline.
+        Proposal-route flags do not intercept this API or authorize its use;
+        callers must satisfy the execution boundary in docs/DIRECTION.md.
 
         Args:
             symbol: Trading symbol (e.g., "BTC-USD").

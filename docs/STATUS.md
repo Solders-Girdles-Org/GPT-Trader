@@ -47,17 +47,10 @@ issue `#1031` closed 2026-06-28), paper-fill reconciliation onto the audit trail
 library adapter that maps supported strategy buy decisions into proposed trade
 ideas through `TradeIdeaService.propose()` only.
 
-**Runtime strategy-signal routing now exists behind a default-off gate**
-(`strategy_signal_proposals_enabled`, #1033). When the operator enables it, the
-live bot cycle (`features/live_trade/engines/strategy.py`) routes each strategy
-decision through the existing default-off adapter into
-`TradeIdeaService.propose()` instead of the broker: supported buy shapes become
-`proposed` trade ideas and the engine submits no orders while the gate is on. It
-ships off, so default behavior is unchanged. This deliberately reused the
-existing spine rather than a second proposer brain — see
-[stabilize-before-closing-the-loop](decisions/stabilize-before-closing-the-loop.md).
-Enabling and reviewing the path is documented in the
-[Trade-Idea Interface Design Notes](specs/TRADE_IDEA_INTERFACES_DESIGN_NOTES.md#live-strategy-signal-routing-default-off).
+**Runtime strategy-signal routing exists** (#1033), with optional in-process
+paper continuation (#1191). The
+[decision routing contract](specs/TRADE_IDEA_INTERFACES_DESIGN_NOTES.md#live-strategy-signal-routing-default-off)
+owns configuration precedence, submission boundaries and recovery behavior.
 Track precise per-ticket status in the issue queue, not here.
 
 ## Stage 2 — Bounded autonomy (mechanisms started, not operationally entered)
@@ -139,17 +132,6 @@ unchanged as the evidence harness
 This is not a promotion claim. Live order submission remains out of scope; the
 lane is paper-only and still bounded by the two env gates, the audited
 autonomy mode, and the budget envelope at event time.
-
-## The structural fact
-
-The live TA bot (`features/live_trade/`) and the trade-idea workflow
-(`features/trade_ideas/`) stay decoupled by default: strategy-to-idea mapping
-lives in `features/strategy_tools/trade_idea_adapter.py` as an explicit,
-default-off bridge. The live engine now *can* drive that bridge — routing
-decisions into the approval-gated rails through `TradeIdeaService.propose()` —
-but only when `strategy_signal_proposals_enabled` (or the lane gate
-`event_driven_paper_lane_enabled`, which implies it) is set; with both gates off
-(the default) the trading intelligence still flows straight to direct execution.
 
 ## How to keep this doc honest
 
