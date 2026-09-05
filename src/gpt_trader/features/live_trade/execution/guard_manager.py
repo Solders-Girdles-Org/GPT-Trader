@@ -71,6 +71,7 @@ class GuardManager:
         self._calculate_equity = equity_calculator
         self.open_orders = open_orders
         self._cancel_retries_enabled = cancel_retries_enabled
+        self._pnl_projection_provider: Callable[[], dict[str, Any]] | None = None
         self._broker_executor = BrokerExecutor(broker=broker)
         # Backward compat: store callback reference for tests
         self._invalidate_cache_callback = invalidate_cache_callback
@@ -95,6 +96,11 @@ class GuardManager:
             VolatilityGuard(broker=cast(BrokerProtocol, broker), risk_manager=risk_manager),
             ApiHealthGuard(broker=broker, risk_manager=risk_manager),
         ]
+
+    def set_pnl_projection_provider(self, provider: Callable[[], dict[str, Any]]) -> None:
+        """Inject local trade telemetry without replacing venue account state."""
+        self._pnl_projection_provider = provider
+        self._cache.invalidate()
 
     def _extract_order_ids(self, orders: Any) -> list[str]:
         """Normalize broker list_orders responses into order ID strings."""
@@ -224,46 +230,81 @@ class GuardManager:
         positions = self.broker.list_positions()
 
         positions_pnl: dict[str, dict[str, Decimal]] = {}
-        for pos in positions:
-            if hasattr(self.broker, "get_position_pnl"):
-                try:
-                    pnl_data = self.broker.get_position_pnl(pos.symbol)
-                    if isinstance(pnl_data, dict):
-                        positions_pnl[pos.symbol] = {
-                            "realized_pnl": Decimal(str(pnl_data.get("realized_pnl", "0"))),
-                            "unrealized_pnl": Decimal(str(pnl_data.get("unrealized_pnl", "0"))),
+        pnl_availability: dict[str, dict[str, Any]] = {}
+        if self._pnl_projection_provider is not None:
+            try:
+                snapshot = self._pnl_projection_provider()
+                for item in snapshot.get("positions", []):
+                    symbol = item["symbol"]
+                    pnl_availability[symbol] = {
+                        "status": item.get("accounting_status", "unavailable"),
+                        "reasons": item.get("accounting_reasons", []),
+                        "scope": "local_orders_database",
+                        "basis": "gross_trade_pnl",
+                        "funding_status": "not_in_trade_projection",
+                        "unrealized_status": item.get("unrealized_status", "unavailable"),
+                    }
+                    if item.get("accounting_status") == "complete":
+                        positions_pnl[symbol] = {
+                            "realized_pnl": Decimal(str(item["realized_pnl"])),
                         }
-                        continue
+                        if item["unrealized_pnl"] is not None:
+                            positions_pnl[symbol]["unrealized_pnl"] = Decimal(
+                                str(item["unrealized_pnl"])
+                            )
+                for pos in positions:
+                    pnl_availability.setdefault(
+                        pos.symbol,
+                        {"status": "unavailable", "reasons": ["opening_inventory_unknown"]},
+                    )
+            except Exception as error:
+                # Venue equity still drives the loss guard. Unavailable local
+                # trade accounting must not become a zero-valued fallback.
+                pnl_availability["*"] = {"status": "unavailable", "reasons": [str(error)]}
+                positions_pnl.clear()
+        else:
+            for pos in positions:
+                if hasattr(self.broker, "get_position_pnl"):
+                    try:
+                        pnl_data = self.broker.get_position_pnl(pos.symbol)
+                        if isinstance(pnl_data, dict):
+                            if pnl_data.get("accounting_status") in {"incomplete", "unavailable"}:
+                                pnl_availability[pos.symbol] = pnl_data
+                                continue
+                            positions_pnl[pos.symbol] = {
+                                "realized_pnl": Decimal(str(pnl_data.get("realized_pnl", "0"))),
+                                "unrealized_pnl": Decimal(str(pnl_data.get("unrealized_pnl", "0"))),
+                            }
+                            continue
+                    except Exception as exc:
+                        logger.error(
+                            "Failed to get position PnL from broker",
+                            error_type=type(exc).__name__,
+                            error_message=str(exc),
+                            operation="collect_runtime_guard_state",
+                            symbol=pos.symbol,
+                        )
+
+                try:
+                    entry_price = Decimal(str(getattr(pos, "entry_price", "0")))
+                    mark_price = Decimal(str(getattr(pos, "mark_price", "0")))
+                    position_quantity = quantity_from(pos) or Decimal("0")
+                    side = getattr(pos, "side", "").lower()
+                    side_multiplier = Decimal("1") if side == "long" else Decimal("-1")
+                    unrealized = (mark_price - entry_price) * position_quantity * side_multiplier
                 except Exception as exc:
                     logger.error(
-                        "Failed to get position PnL from broker",
+                        "Failed to calculate unrealized PnL for position",
                         error_type=type(exc).__name__,
                         error_message=str(exc),
                         operation="collect_runtime_guard_state",
                         symbol=pos.symbol,
                     )
-
-            try:
-                entry_price = Decimal(str(getattr(pos, "entry_price", "0")))
-                mark_price = Decimal(str(getattr(pos, "mark_price", "0")))
-                position_quantity = quantity_from(pos) or Decimal("0")
-                side = getattr(pos, "side", "").lower()
-                side_multiplier = Decimal("1") if side == "long" else Decimal("-1")
-                unrealized = (mark_price - entry_price) * position_quantity * side_multiplier
-            except Exception as exc:
-                logger.error(
-                    "Failed to calculate unrealized PnL for position",
-                    error_type=type(exc).__name__,
-                    error_message=str(exc),
-                    operation="collect_runtime_guard_state",
-                    symbol=pos.symbol,
-                )
-                unrealized = Decimal("0")
-            positions_pnl[pos.symbol] = {
-                "realized_pnl": Decimal("0"),
-                "unrealized_pnl": unrealized,
-            }
-
+                    unrealized = Decimal("0")
+                positions_pnl[pos.symbol] = {
+                    "realized_pnl": Decimal("0"),
+                    "unrealized_pnl": unrealized,
+                }
         positions_dict: dict[str, dict[str, Decimal]] = {}
         for pos in positions:
             try:
@@ -290,6 +331,7 @@ class GuardManager:
             positions_pnl=positions_pnl,
             positions_dict=positions_dict,
             guard_events=[],
+            pnl_availability=pnl_availability,
         )
 
     def run_guard_step(self, guard_name: str, func: Callable[[], None]) -> None:

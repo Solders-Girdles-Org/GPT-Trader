@@ -11,10 +11,13 @@ Provides crash-safe order state persistence with:
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
+import tempfile
 import threading
 import weakref
-from contextlib import suppress
+from collections.abc import Iterator
+from contextlib import contextmanager, suppress
 from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -27,7 +30,12 @@ from gpt_trader.persistence.durability import (
     WriteResult,
     check_sqlite_integrity,
 )
-from gpt_trader.persistence.orders_models import OrderRecord, OrderStatus
+from gpt_trader.persistence.orders_accounting import OrdersAccounting
+from gpt_trader.persistence.orders_models import (
+    VENUE_TERMINAL_ORDER_STATUSES,
+    OrderRecord,
+    OrderStatus,
+)
 from gpt_trader.utilities.logging_patterns import get_logger
 
 logger = get_logger(__name__, component="orders_store")
@@ -124,6 +132,7 @@ class OrdersStore:
         self._connection_generation = 0
         self._initialized = False
         self._local = threading.local()
+        self.accounting = OrdersAccounting(self)
 
     def _get_connection(self) -> sqlite3.Connection:
         """Get thread-local database connection."""
@@ -222,6 +231,7 @@ class OrdersStore:
 
             connection = self._get_connection()
             connection.executescript(_ORDERS_SCHEMA)
+            self.accounting.initialize()
             self._initialized = True
 
             logger.info(
@@ -233,6 +243,68 @@ class OrdersStore:
     def _ensure_initialized(self) -> None:
         if not self._initialized:
             self.initialize()
+
+    @contextmanager
+    def transaction(self, *, write: bool = True) -> Iterator[None]:
+        """Read one snapshot or atomically admit facts with their order update."""
+        self._ensure_initialized()
+        depth = getattr(self._local, "accounting_transaction_depth", 0)
+        if depth:
+            if write and not self._local.accounting_transaction_write:
+                raise WriteError("Cannot promote accounting read transaction")
+            yield
+            return
+        connection = self._get_connection()
+        try:
+            connection.execute("BEGIN IMMEDIATE" if write else "BEGIN")
+        except sqlite3.Error as error:
+            raise WriteError(f"Accounting transaction could not begin: {error}") from error
+        self._local.accounting_transaction_depth = 1
+        self._local.accounting_transaction_write = write
+        try:
+            versions = [
+                row[0] for row in connection.execute("SELECT version FROM accounting_schema")
+            ]
+            if versions != [1]:
+                raise WriteError("Unsupported accounting schema")
+            yield
+            connection.commit()
+        except sqlite3.Error as error:
+            connection.rollback()
+            raise WriteError(f"Accounting transaction failed: {error}") from error
+        except BaseException:
+            connection.rollback()
+            raise
+        finally:
+            self._local.accounting_transaction_depth = 0
+
+    def backup_to(self, destination: str | Path) -> Path:
+        """Publish a consistent SQLite backup without overwriting another writer.
+
+        This includes accounting facts and baselines. Restoring a backup is an
+        explicit offline operation; this method never changes the source.
+        """
+        self._ensure_initialized()
+        target = Path(destination)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            raise WriteError("Backup destination already exists")
+        descriptor, temporary = tempfile.mkstemp(prefix=".orders-backup-", dir=target.parent)
+        os.close(descriptor)
+        try:
+            with self.transaction(write=False):
+                self.accounting.projections()  # Refuse corrupted accounting evidence.
+                backup = sqlite3.connect(temporary)
+                try:
+                    self._get_connection().backup(backup)
+                finally:
+                    backup.close()
+            with open(temporary, "rb") as handle:
+                os.fsync(handle.fileno())
+            os.link(temporary, target)  # Exclusive publication, including concurrent creators.
+            return target
+        finally:
+            Path(temporary).unlink(missing_ok=True)
 
     def save_order(self, order: OrderRecord, *, raise_on_error: bool = False) -> WriteResult:
         """
@@ -342,15 +414,28 @@ class OrdersStore:
             )
             intent = OrderIntent.from_dict(original_metadata["intent"])
             intent.validate_receipt(order)
-            if order.filled_quantity < existing.filled_quantity:
-                raise WriteError("Order update decreases observed fill quantity")
-            if existing.status is OrderStatus.FILLED and (
-                order.status is not OrderStatus.FILLED
-                or order.average_fill_price != existing.average_fill_price
-            ):
-                raise WriteError("Order update conflicts with terminal fill receipt")
         elif (order.metadata or {}).get("record_checksum_version") == 2:
             order = replace(order, created_at=existing.created_at)
+        if not order.filled_quantity.is_finite() or order.filled_quantity < 0:
+            raise WriteError("Order update has invalid fill quantity")
+        if order.filled_quantity < existing.filled_quantity:
+            raise WriteError("Order update decreases observed fill quantity")
+        if existing.status in VENUE_TERMINAL_ORDER_STATUSES:
+            same_receipt = (
+                order.status is existing.status
+                and order.order_id == existing.order_id
+                and order.client_order_id == existing.client_order_id
+                and order.symbol == existing.symbol
+                and order.side.lower() == existing.side.lower()
+                and order.quantity == existing.quantity
+                and order.filled_quantity == existing.filled_quantity
+                and (
+                    existing.average_fill_price is None
+                    or order.average_fill_price == existing.average_fill_price
+                )
+            )
+            if not same_receipt:
+                raise WriteError("Order update conflicts with terminal fill receipt")
         return order
 
     def upsert_by_client_id(
@@ -365,7 +450,11 @@ class OrdersStore:
         self._ensure_initialized()
         try:
             connection = self._get_connection()
-            connection.execute("BEGIN IMMEDIATE")
+            owns_transaction = not getattr(self._local, "accounting_transaction_depth", 0)
+            if owns_transaction:
+                connection.execute("BEGIN IMMEDIATE")
+            elif not self._local.accounting_transaction_write:
+                raise WriteError("Cannot write order in accounting read transaction")
             existing = self.get_order_by_client_order_id(order.client_order_id)
             if existing is not None:
                 order = self._preserve_intent(existing, order)
@@ -429,7 +518,8 @@ class OrdersStore:
                     ),
                 )
 
-            connection.commit()
+            if owns_transaction:
+                connection.commit()
 
             logger.debug(
                 "Order upserted",

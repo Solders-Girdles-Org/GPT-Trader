@@ -103,9 +103,8 @@ def test_fill_event_idempotent(tmp_path) -> None:
     assert record is not None
     assert record.filled_quantity == Decimal("1")
     assert record.status == OrderStatus.PARTIALLY_FILLED
-    handler._process_fill_for_pnl.assert_called_once()
-    args, _ = handler._process_fill_for_pnl.call_args
-    assert args[0]["size"] == "1"
+    handler._process_fill_for_pnl.assert_not_called()
+    assert "identified_fills_missing:order-456" in store.accounting.projections()["BTC-USD"].reasons
 
 
 def test_backfill_deduplicates_rest_fills(tmp_path) -> None:
@@ -114,6 +113,7 @@ def test_backfill_deduplicates_rest_fills(tmp_path) -> None:
     rest_service.list_fills.return_value = [
         {
             "fill_id": "fill-789",
+            "trade_time": "2026-09-01T12:00:00+00:00",
             "order_id": "order-789",
             "client_order_id": "client-789",
             "product_id": "BTC-USD",
@@ -123,6 +123,7 @@ def test_backfill_deduplicates_rest_fills(tmp_path) -> None:
         },
         {
             "fill_id": "fill-789",
+            "trade_time": "2026-09-01T12:00:00+00:00",
             "order_id": "order-789",
             "client_order_id": "client-789",
             "product_id": "BTC-USD",
@@ -137,10 +138,12 @@ def test_backfill_deduplicates_rest_fills(tmp_path) -> None:
 
     handler.request_backfill(reason="sequence_gap")
 
-    record = store.get_order("order-789")
-    assert record is not None
-    assert record.filled_quantity == Decimal("1")
-    handler._process_fill_for_pnl.assert_called_once()
+    # No order receipt was supplied: retain the identified fact without inventing an order size/status.
+    assert store.get_order("order-789") is None
+    projection = store.accounting.projections()["BTC-USD"]
+    assert projection.fill_count == 1
+    assert projection.realized_pnl is None
+    handler._process_fill_for_pnl.assert_not_called()
 
 
 def test_dedupe_limit_evicts_oldest_key(tmp_path) -> None:
