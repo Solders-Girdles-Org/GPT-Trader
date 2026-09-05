@@ -12,6 +12,11 @@ timestamp convention.
 
 from __future__ import annotations
 
+import asyncio
+from dataclasses import replace
+from datetime import UTC, datetime
+from decimal import Decimal
+
 from gpt_trader.features.recorder.equities_candles import (
     DEFAULT_ALPACA_DATA_BASE_URL,
     DEFAULT_STOOQ_BASE_URL,
@@ -54,7 +59,26 @@ async def build_coinbase_market_snapshot(
             CoinbaseHistoricalFetcher(client=client),
             source_label=source_label,
         )
-        return await builder.build(request)
+        snapshot = await builder.build(request)
+        series = []
+        for item in snapshot.series:
+            # Public market metadata only. An unavailable product must block new
+            # proposals, while valid candles remain usable for existing exits.
+            source = f"coinbase:market/products/{item.symbol}:observed_at={datetime.now(UTC).isoformat()}"
+            try:
+                product = await asyncio.to_thread(client.get_market_product, item.symbol)
+                if product.get("product_id") != item.symbol:
+                    raise ValueError("product identity does not match requested symbol")
+                increment = Decimal(str(product["price_increment"]))
+                updated = replace(item, price_increment=increment, price_increment_source=source)
+            except Exception as error:
+                updated = replace(
+                    item,
+                    price_increment_source=source,
+                    price_increment_error=f"{type(error).__name__}: {error}",
+                )
+            series.append(updated)
+        return replace(snapshot, series=tuple(series))
     finally:
         try:
             client.close()

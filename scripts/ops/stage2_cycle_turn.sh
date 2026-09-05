@@ -23,15 +23,10 @@ cd "${REPO_ROOT}"
 # installed by the Astral installer (~/.local/bin) or Homebrew.
 export PATH="${HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin:${PATH}"
 
-# Liquid Coinbase USD spot pairs whose quotes are all >= $1, so the default
-# --price-precision of 0.01 stays meaningful. Adding a sub-cent symbol requires
-# a finer CYCLE_PRICE_PRECISION too (issue #1215: two symbols starved
-# track-record depth; the busy-instrument skip means a wider set is what keeps
-# proposals flowing every open-market turn).
+# Price increments are captured per product from Coinbase public metadata.
 : "${CYCLE_SYMBOLS:=BTC-USD,ETH-USD,SOL-USD,XRP-USD,LTC-USD,LINK-USD,AVAX-USD,DOT-USD}"
 : "${CYCLE_GRANULARITY:=ONE_HOUR}"
 : "${CYCLE_LOOKBACK:=200}"
-: "${CYCLE_PRICE_PRECISION:=0.01}"
 # The accepted Stage-2 benchmark set. Operators can replace the full set with
 # a space-separated CYCLE_PROPOSERS value to roll back or run a narrower turn.
 : "${CYCLE_PROPOSERS:=baseline regime-aware strategy-mean-reversion}"
@@ -63,6 +58,5 @@ exec uv run gpt-trader ideas cycle --from-coinbase \
   --symbols "${CYCLE_SYMBOLS}" \
   --granularity "${CYCLE_GRANULARITY}" \
   --lookback "${CYCLE_LOOKBACK}" \
-  --price-precision "${CYCLE_PRICE_PRECISION}" \
   ${PROPOSER_FLAGS[@]+"${PROPOSER_FLAGS[@]}"} \
   --format json

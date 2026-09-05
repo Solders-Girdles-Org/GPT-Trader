@@ -297,3 +297,39 @@ def test_cycle_mixed_source_routes_busy_top_ups_by_asset_class(
         (("MSFT",), "ONE_DAY", 60),
         (("AAPL",), "ONE_DAY", 60),
     ]
+
+
+def test_cycle_partial_failure_returns_nonzero_with_completed_work(tmp_path, capsys, monkeypatch):
+    class BrokenProposer:
+        proposer_id = "broken"
+
+        def propose(self, snapshot):
+            raise ValueError("proposal failed")
+
+    monkeypatch.setattr(
+        "gpt_trader.cli.commands.ideas._cycle_proposer", lambda *args: BrokenProposer()
+    )
+    _install_fake_builder(monkeypatch, provider="coinbase")
+    root = tmp_path / "ideas"
+    attest_ideas_root(root)
+    code, response = _run_json(
+        capsys,
+        [
+            "ideas",
+            "cycle",
+            "--from-coinbase",
+            "--symbols",
+            "BTC-USD",
+            "--granularity",
+            "ONE_HOUR",
+            "--lookback",
+            "60",
+            *_root_args(root),
+        ],
+    )
+    assert code == 1
+    assert response["success"] is False
+    assert response["data"] is not None, response["errors"]
+    assert response["data"]["outcome"] == "partial"
+    assert "proposal failed" in response["data"]["proposers"][0]["error"]
+    assert response["data"]["report"] is not None

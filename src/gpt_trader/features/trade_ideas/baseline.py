@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+from gpt_trader.core.math.quantization import quantize_price_nearest
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.trade_ideas.eligibility import evaluate_eligibility
 from gpt_trader.features.trade_ideas.models import (
@@ -154,7 +155,8 @@ class BaselineProposer:
             return None
 
         close = closes[-1]
-        long_level = long_now.quantize(config.price_precision)
+        increment = series.proposal_increment(config.price_precision)
+        long_level = quantize_price_nearest(long_now, increment)
         levels = ExitLevels(
             stop_level=long_level,
             reward_multiple=config.reward_multiple,
@@ -162,14 +164,14 @@ class BaselineProposer:
         )
         if exit_overlay is not None:
             levels = exit_overlay(series.symbol, close, levels)
-        stop_level = levels.stop_level.quantize(config.price_precision)
+        stop_level = quantize_price_nearest(levels.stop_level, increment)
         if stop_level <= 0 or close <= stop_level:
             return None
 
-        entry_lower = (close * (1 - config.entry_band_pct / 100)).quantize(config.price_precision)
-        entry_upper = (close * (1 + config.entry_band_pct / 100)).quantize(config.price_precision)
-        target = (close + levels.reward_multiple * (close - stop_level)).quantize(
-            config.price_precision
+        entry_lower = quantize_price_nearest(close * (1 - config.entry_band_pct / 100), increment)
+        entry_upper = quantize_price_nearest(close * (1 + config.entry_band_pct / 100), increment)
+        target = quantize_price_nearest(
+            close + levels.reward_multiple * (close - stop_level), increment
         )
         # On low-priced symbols the price precision can round the stop, entry
         # midpoint, and target into a set with no defined risk per unit (e.g.

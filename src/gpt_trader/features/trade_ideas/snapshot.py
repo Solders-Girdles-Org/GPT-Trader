@@ -1,16 +1,17 @@
 """Point-in-time market snapshots: the only input a proposer may see.
 
-A snapshot is frozen "as of" a moment. Construction rejects any candle that
-starts at or after ``as_of``, which makes look-ahead bias structurally
-impossible rather than a discipline: a proposer fed snapshots from last year
-cannot peek at what happened next, so the same proposer is replayable over
-history for calibration scoring.
+A snapshot freezes the supplied observations. Construction rejects candle starts
+at or after ``as_of``; the recorder additionally selects completed bars. This
+bounds supplied market data, not a model's learned knowledge. Venue increments
+carry their acquisition time in provenance and must not be represented as
+historical rules known at an earlier replay cutoff.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 from gpt_trader.core import Candle
@@ -28,8 +29,26 @@ class SymbolSeries:
     symbol: str
     granularity: str
     candles: tuple[Candle, ...]
+    price_increment: Decimal | None = None
+    price_increment_source: str | None = None
+    price_increment_error: str | None = None
+
+    def proposal_increment(self, offline_fallback: Decimal) -> Decimal:
+        """Use captured venue rules; legacy offline fixtures retain their precision."""
+        if self.price_increment_error:
+            raise SnapshotIntegrityError(
+                f"Price increment unavailable for {self.symbol}: {self.price_increment_error}",
+                field="price_increment",
+            )
+        return self.price_increment if self.price_increment is not None else offline_fallback
 
     def __post_init__(self) -> None:
+        if self.price_increment is not None and (
+            not self.price_increment.is_finite() or self.price_increment <= 0
+        ):
+            raise SnapshotIntegrityError(
+                "Price increment must be finite and positive", field="price_increment"
+            )
         for earlier, later in zip(self.candles, self.candles[1:], strict=False):
             if later.ts <= earlier.ts:
                 raise SnapshotIntegrityError(
@@ -94,6 +113,21 @@ def market_snapshot_to_payload(snapshot: MarketSnapshot) -> dict[str, Any]:
             {
                 "symbol": symbol_series.symbol,
                 "granularity": symbol_series.granularity,
+                **(
+                    {"price_increment": str(symbol_series.price_increment)}
+                    if symbol_series.price_increment is not None
+                    else {}
+                ),
+                **(
+                    {"price_increment_source": symbol_series.price_increment_source}
+                    if symbol_series.price_increment_source
+                    else {}
+                ),
+                **(
+                    {"price_increment_error": symbol_series.price_increment_error}
+                    if symbol_series.price_increment_error
+                    else {}
+                ),
                 "candles": [
                     {
                         "ts": candle.ts.isoformat(),

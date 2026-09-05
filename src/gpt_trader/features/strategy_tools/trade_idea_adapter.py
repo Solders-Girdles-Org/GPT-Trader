@@ -22,6 +22,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Protocol, runtime_checkable
 
+from gpt_trader.core.math.quantization import quantize_price_nearest
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.trade_ideas import (
     ActorType,
@@ -29,6 +30,7 @@ from gpt_trader.features.trade_ideas import (
     Confidence,
     ConfidenceLabel,
     EntryZone,
+    ExitPlan,
     MaxLoss,
     ProductType,
     SizingRecommendation,
@@ -77,6 +79,7 @@ class StrategySignalContext:
     strategy_name: str
     data_source: str = "strategy:decision"
     product_type: ProductType = ProductType.SPOT
+    price_increment: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,6 +108,10 @@ class StrategySignalToTradeIdeaAdapter:
     ) -> None:
         self._config = config or StrategySignalToTradeIdeaAdapterConfig()
         self._sizing_bridge = sizing_bridge
+
+    @property
+    def price_precision(self) -> Decimal:
+        return self._config.price_precision
 
     @property
     def enabled(self) -> bool:
@@ -174,17 +181,23 @@ class StrategySignalToTradeIdeaAdapter:
         config = self._config
         as_of = _utc_aware(context.as_of)
         mark = context.current_mark
-        stop_level = (mark * (1 - config.stop_loss_pct / 100)).quantize(config.price_precision)
-        entry_lower = (mark * (1 - config.entry_band_pct / 100)).quantize(config.price_precision)
-        entry_upper = (mark * (1 + config.entry_band_pct / 100)).quantize(config.price_precision)
-        target = (mark + config.reward_multiple * (mark - stop_level)).quantize(
-            config.price_precision
+        increment = (
+            context.price_increment
+            if context.price_increment is not None
+            else config.price_precision
+        )
+        stop_level = quantize_price_nearest(mark * (1 - config.stop_loss_pct / 100), increment)
+        entry_lower = quantize_price_nearest(mark * (1 - config.entry_band_pct / 100), increment)
+        entry_upper = quantize_price_nearest(mark * (1 + config.entry_band_pct / 100), increment)
+        target = quantize_price_nearest(
+            mark + config.reward_multiple * (mark - stop_level), increment
         )
         self._validate_price_levels(
             stop_level=stop_level,
             entry_lower=entry_lower,
             entry_upper=entry_upper,
             target=target,
+            increment=increment,
         )
         reason = _idea_reason(decision, context)
         confidence = _confidence(confidence_value)
@@ -248,6 +261,7 @@ class StrategySignalToTradeIdeaAdapter:
             entry_zone=EntryZone(lower=entry_lower, upper=entry_upper),
             invalidation=f"Close below the strategy stop level {stop_level}",
             target_exit=f"Take profit near {target} or exit at expiry",
+            exit_plan=ExitPlan(stop=stop_level, target=target),
             max_loss=max_loss,
             sizing_recommendation=sizing_recommendation,
             time_horizon=TimeHorizon(
@@ -316,6 +330,7 @@ class StrategySignalToTradeIdeaAdapter:
         entry_lower: Decimal,
         entry_upper: Decimal,
         target: Decimal,
+        increment: Decimal,
     ) -> None:
         """Reject ideas where ``price_precision`` is too coarse for the mark.
 
@@ -330,13 +345,13 @@ class StrategySignalToTradeIdeaAdapter:
                 "price_precision is too coarse for current_mark; "
                 "quantization erased a price level",
                 field="price_precision",
-                value=str(self._config.price_precision),
+                value=str(increment),
             )
         if not stop_level < entry_lower < entry_upper < target:
             raise ValidationError(
                 "price_precision is too coarse to keep stop/entry/target levels distinct",
                 field="price_precision",
-                value=str(self._config.price_precision),
+                value=str(increment),
             )
 
     def _validate_context(self, context: StrategySignalContext) -> None:

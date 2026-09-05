@@ -101,6 +101,7 @@ def build_cycle_idea(decision_id: str, *, instrument: str = "BTC-USD") -> TradeI
         entry_zone=EntryZone(lower=Decimal("60000"), upper=Decimal("61500")),
         invalidation="Daily close below 58000",
         target_exit="Take profit at 67000",
+        exit_plan=ExitPlan(stop=Decimal("58000"), target=Decimal("67000")),
         max_loss=MaxLoss(
             amount=Decimal("250"),
             percent_of_account=Decimal("1.5"),

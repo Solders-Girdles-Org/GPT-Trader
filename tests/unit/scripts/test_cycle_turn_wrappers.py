@@ -92,6 +92,7 @@ def test_stage2_wrapper_uses_accepted_benchmark_set_and_paper_gates(tmp_path: Pa
     assert "--proposer regime-aware" in calls[1]
     assert "--proposer strategy-mean-reversion" in calls[1]
     assert "gpt-trader run" not in calls[1]
+    assert "--price-precision" not in calls[1]
 
 
 def test_stage2_wrapper_operator_override_replaces_benchmark_set(tmp_path: Path) -> None:
@@ -110,6 +111,7 @@ def test_stage1_wrapper_keeps_cli_defaults_and_does_not_enable_stage2_gates(
 
     assert call.startswith("||run gpt-trader ideas cycle --from-coinbase ")
     assert "--proposer" not in call
+    assert "--price-precision" not in call
 
 
 @pytest.mark.parametrize("script_name", ["stage1_cycle_turn.sh", "stage2_cycle_turn.sh"])

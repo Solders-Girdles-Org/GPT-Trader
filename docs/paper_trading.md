@@ -191,14 +191,14 @@ attests equity.
 
 The default conservative configuration lives in
 `scripts/ops/stage1_cycle_turn.sh`: eight liquid Coinbase USD spot pairs
-(BTC, ETH, SOL, XRP, LTC, LINK, AVAX, DOT — all quoted above $1 so the default
-price precision of 0.01 stays meaningful), ONE_HOUR candles, lookback 200,
+(BTC, ETH, SOL, XRP, LTC, LINK, AVAX, DOT), with price increments captured
+from public product metadata, ONE_HOUR candles, lookback 200,
 default proposers `baseline` and `regime-aware`. A universe of just two symbols
 starves track-record depth: the busy-instrument skip admits at most one open
 idea per instrument, so per-turn proposal flow scales with the instrument set
-(issue #1215). Symbols, granularity, lookback, price precision, and the
+(issue #1215). Symbols, granularity, lookback, and the
 proposer set are env-overridable there (`CYCLE_SYMBOLS`, `CYCLE_GRANULARITY`,
-`CYCLE_LOOKBACK`, `CYCLE_PRICE_PRECISION`, and space-separated
+`CYCLE_LOOKBACK`, and space-separated
 `CYCLE_PROPOSERS`, for example `CYCLE_PROPOSERS=baseline`); cadence belongs
 only in the scheduler entry.
 
@@ -488,3 +488,39 @@ Track these metrics during paper trading:
 3. **Stress Testing**: Simulate extreme market conditions
 4. **Logging**: Keep detailed logs for analysis
 5. **Gradual Scaling**: Start with tiny positions when going live
+
+### Product increments and partial cycle results
+
+Coinbase candle acquisition also captures the matching public product's
+`price_increment`. The snapshot preserves that value and its acquisition time;
+proposal levels round to actual tick multiples, including increments such as
+`0.05`. This uses the [public product API contract](https://docs.cdp.coinbase.com/api-reference/advanced-trade-api/rest-api/public/get-public-product),
+whose price increment is distinct from the quote-size increment. Missing,
+mismatched, nonfinite, or nonpositive metadata refuses new proposals and retains
+valid candles for already approved executions and existing-position exits.
+The paper lane's existing admission, session, expiry and risk checks still apply.
+
+The Stage 1 and Stage 2 wrappers no longer set a global price precision.
+`ideas cycle --price-precision` remains an offline-fixture fallback only;
+metadata captured from Coinbase takes precedence. Old snapshots with no metadata
+still load and retain their original payload shape. Current product metadata is
+an observation made at acquisition time, not evidence of an earlier historical
+venue rule. Snapshot isolation also cannot prevent a model from using knowledge
+learned outside the supplied history.
+
+A proposer-generation failure is recorded on its proposer result, and other
+proposers, approved executions, fill reconciliation and exits continue. A paper
+order or reconciliation failure is recorded under `execution.failed`; a durable
+`submitted` idea is never automatically resent. Expected admission refusals stay
+under `execution.skipped`. Such turns report `outcome: partial`, preserve their
+completed work in the manifest and CLI JSON, and return a nonzero CLI exit code.
+Snapshot-acquisition and storage/policy-integrity failures remain fatal. Existing
+session/freshness and missing-candle exit refusals are preserved.
+
+Strategy adapters now write the same structured `ExitPlan` as baseline proposals.
+The cycle rejects newly generated executable ideas without structured exits
+before writing any of their proposer batch.
+Exit scoring reads those levels independently of presentation prose. Historical
+prose-only records remain readable through the explicit legacy scoring fallback;
+this change does not rewrite them or change the direct strategy engine's SELL or
+CLOSE route.
