@@ -1,139 +1,80 @@
-# AGENTS.md — Start Here for AI Agents
+# AGENTS.md — Start here
 
-This is the **first stop** for any AI coding agent (and a fine one for humans).
-It routes; it does not restate policy. Each row below points at the one doc that
-owns that fact — read that doc for detail, and change facts there, not here.
+Entry point for every agent, and a fine one for humans. It routes and states
+the gates; each fact lives in one owning document, linked below. State each
+fact once; link, don't copy.
 
-Two rules keep this repo from sprawling:
+## Read first
 
-1. **State each fact once; link, don't copy.** The authority on where every kind
-   of fact lives is [docs/INFORMATION_ARCHITECTURE.md](docs/INFORMATION_ARCHITECTURE.md).
-2. **Opening a PR is not merging.** Merge is a separate readiness-gated step
-   covered by the standing approval in [Merge discipline](#merge-discipline);
-   do not request another sign-off when that gate passes.
+| Need | Owner |
+| --- | --- |
+| Destination, autonomy ladder, execution gates | [docs/DIRECTION.md](docs/DIRECTION.md) |
+| Durable decisions, made and open | [docs/decisions/](docs/decisions/README.md) |
+| Deprecations and compatibility commitments | [docs/DEPRECATIONS.md](docs/DEPRECATIONS.md) |
+| How the system is built, where evidence lives | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Shipped state, as source pointers | [docs/STATUS.md](docs/STATUS.md) |
+| Setup, local CI, PR flow, where to change things | [docs/DEVELOPMENT_GUIDELINES.md](docs/DEVELOPMENT_GUIDELINES.md) |
+| Where a fact or doc belongs | [docs/INFORMATION_ARCHITECTURE.md](docs/INFORMATION_ARCHITECTURE.md) |
+| Naming standard | [docs/naming.md](docs/naming.md) |
+| Full doc index | [docs/README.md](docs/README.md) |
 
-## Where do I go?
-
-| I need to… | Canonical home |
-|------------|----------------|
-| Decide **where a fact/doc should live** | [docs/INFORMATION_ARCHITECTURE.md](docs/INFORMATION_ARCHITECTURE.md) |
-| Find **where code lives / where to change something** | [docs/agents/CODEBASE_MAP.md](docs/agents/CODEBASE_MAP.md) |
-| Understand the **system design** (slices, order pipeline) | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| Browse the **full doc index** | [docs/README.md](docs/README.md) |
-| Know the **project direction, autonomy boundary, execution gates** | [docs/DIRECTION.md](docs/DIRECTION.md) |
-| See **current shipped state** | [docs/STATUS.md](docs/STATUS.md) |
-| Follow the **contribution workflow** (setup, PR checklist, test quality) | [CONTRIBUTING.md](CONTRIBUTING.md) |
-| Understand **local CI, the verification bundle, and the CI-lane contract** | [docs/DEVELOPMENT_GUIDELINES.md](docs/DEVELOPMENT_GUIDELINES.md) |
-| Apply **naming standards + approved abbreviations** | [docs/naming.md](docs/naming.md), [docs/agents/glossary.md](docs/agents/glossary.md) |
-| Use **dependency injection** (`ApplicationContainer`) | [docs/DI_POLICY.md](docs/DI_POLICY.md) |
-| Write or run **tests** | [docs/testing.md](docs/testing.md) |
-| Run the **agent review/scout pipeline** or handle review artifacts | [docs/agents/project_review_pipeline.md](docs/agents/project_review_pipeline.md) |
-| Find **env vars, metrics, events, config schemas** | The code (`rg -n` under `src/gpt_trader/`); pointers in [docs/agents/README.md](docs/agents/README.md) |
-
-## Environment (one time)
-
-Python **3.12**, package manager **uv**. Full setup and troubleshooting live in
-[CONTRIBUTING.md](CONTRIBUTING.md); the short version:
-
-```bash
-uv sync --all-extras --dev
-cp config/environments/.env.template .env   # set MOCK_BROKER=1 to run without credentials
-```
+Inventories (env vars, metrics, events, schemas) are read from the code with
+`rg -n` under `src/gpt_trader/`. Tests mirror source paths under `tests/unit/`.
 
 ## Everyday commands
 
-The commands you reach for on almost every task (the verification command set
-and CI contract are owned by
-[docs/DEVELOPMENT_GUIDELINES.md](docs/DEVELOPMENT_GUIDELINES.md); the
-contribution workflow by [CONTRIBUTING.md](CONTRIBUTING.md)):
+Python 3.12 and `uv`. Setup: `uv sync --all-extras --dev`, then
+`cp config/environments/.env.template .env` (`MOCK_BROKER=1` runs without
+credentials).
 
 ```bash
-uv run pytest tests/unit -n auto -q     # fast unit tests
-uv run ruff check . --fix               # lint (auto-fix)
-uv run black .                          # format
-uv run mypy src/gpt_trader              # type check
-uv run agent-naming                     # naming conventions
-uv run local-ci                         # full local PR gate (make ci-required = alias)
-uv run local-ci --profile quick         # faster loop (skips readiness and optional suites)
+uv run pytest tests/unit -n auto -q      # unit tests
+uv run ruff check . --fix && uv run black .
+uv run mypy src/gpt_trader
+uv run agent-naming                      # naming standard (also a pre-commit hook)
+uv run local-ci                          # the PR gate; make ci-required is an alias
+uv run local-ci --profile quick          # skips readiness and the slower suites
+uv run agent-pr-ready                    # real mergeability vs green checks
 ```
 
-## Before you open a PR
+## Trading-safety boundary
 
-- Run `uv run local-ci` (lint/format, docs audits, type check, test
-  guardrails, unit/property/contract/integration tests). The blocking/advisory
-  contract is owned by
-  [docs/DEVELOPMENT_GUIDELINES.md](docs/DEVELOPMENT_GUIDELINES.md).
-- Fill out [.github/pull_request_template.md](.github/pull_request_template.md);
-  link the issue/finding with `Closes #<n>` when there is one.
+Live profiles and broker adapters are implementation assets, not approval.
+Live order submission requires recorded human approval plus any scoped
+decision packet; verify venue, API and account capability before adding or
+enabling an execution path. [docs/DIRECTION.md](docs/DIRECTION.md) is the
+authority. The standing merge approval below never covers live orders or
+execution enablement.
 
 ## Merge discipline
 
-`main` is protected. Merging carries standing operator approval (2026-07-02):
-no per-PR sign-off is needed once the readiness gate passes. Before merging:
-re-read current-head review/reaction signals and resolve every review thread.
-**Green CI is not sufficient** — run
-`uv run agent-pr-ready`, which reconciles real mergeability against green
-checks, and merge only when it reports ready.
+`main` is protected and merges go through the merge queue. Merging carries
+standing operator approval (2026-07-02): no per-PR sign-off is needed once the
+readiness gate passes, and opening a PR is not merging. Before merging,
+resolve every review thread, re-read current-head review and reaction
+signals, and run `uv run agent-pr-ready`. Green CI is not sufficient; merge
+only when it reports ready.
 
 ```bash
 git switch -c <branch>
 git push -u origin HEAD
-gh pr create --fill
-# Once agent-pr-ready reports ready and all threads are resolved, enqueue;
-# the merge queue validates against latest main and merges when green:
-gh pr merge --squash --auto
+gh pr create --fill            # fill .github/pull_request_template.md; Closes #<n>
+gh pr merge --squash --auto    # enqueues; the queue validates against latest main
 ```
 
-Standing approval covers PR merges only — live order submission and execution
-enablement still require recorded human approval (see the trading-safety
-boundary below and [docs/DIRECTION.md](docs/DIRECTION.md)).
-
-Merge mechanics that repeatedly bite agents (`agent-pr-ready` detects all three):
-
-- **Prefer independent PRs over stacks.** Branch auto-delete on merge can close
-  a child PR whose base branch just vanished. Recovery: restore the deleted
-  branch from the merge SHA, reopen the child, retarget it. If you must stack,
-  merge base-first.
-- **Merges go through the merge queue** (#1127, 2026-07-04). Strict up-to-date
-  is off: the queue re-validates each entry against the latest `main` via a
-  `merge_group` CI run, so green PRs no longer invalidate each other. GitHub
-  reports `mergeStateStatus: BLOCKED` for direct merges even on ready PRs;
-  `gh pr merge --squash --auto` enqueues instead of merging directly.
-- **The protection contract is machine-checked.** `scripts/ci/check_branch_protection.py`
-  owns the expected required checks/settings; drift between it and live GitHub
-  settings surfaces as an `agent-pr-ready` warning.
-
-## Trading-safety boundary
-
-Existing live profiles and broker adapters are implementation assets, **not**
-approval to automate. Live order submission requires recorded human approval plus
-any scoped decision packet; verify venue/API/account capability before adding or
-enabling an execution path. The authority is [docs/DIRECTION.md](docs/DIRECTION.md);
-findings route through [docs/agents/project_review_pipeline.md](docs/agents/project_review_pipeline.md).
-
-## Hosted-agent setup (Google Jules)
-
-Paste this into the Jules "Initial Setup" window. It configures `.env` with safe
-mock defaults, then runs the core unit suite:
-
-```bash
-set -euo pipefail
-
-curl -LsSf https://astral.sh/uv/install.sh | sh
-export PATH="$HOME/.local/bin:$PATH"
-
-uv python install 3.12
-uv sync --all-extras --dev
-
-test -f .env || cp config/environments/.env.template .env
-uv run python -c "import re; from pathlib import Path; p=Path('.env'); t=p.read_text(); t=re.sub(r'^MOCK_BROKER=.*$','MOCK_BROKER=1',t,flags=re.M); t=re.sub(r'^DRY_RUN=.*$','DRY_RUN=1',t,flags=re.M); p.write_text(t)"
-
-uv run pytest tests/unit -n auto -q
-```
-
-If you override env via Jules repo settings, use `MOCK_BROKER=1` and `DRY_RUN=1`
-(and set `PYTHONWARNINGS=default`, not `1`, if you set it at all).
+Prefer independent PRs over stacks; if you must stack, merge base-first
+(branch auto-delete can close a child whose base vanished; restore the branch
+from the merge SHA, reopen, retarget). `mergeStateStatus: BLOCKED` on a ready
+PR is the queue, not a failure. `scripts/ci/check_branch_protection.py` owns
+the expected protection contract; drift surfaces as an `agent-pr-ready`
+warning.
 
 ## Handoff between agents
 
 Codex and Claude exchange work through the shared [handoff contract](docs/HANDOFF-CONTRACT.md) (mirror of `Workspace Operations/HANDOFF-CONTRACT.md`): code handoffs are the pull request with a six-field packet, reviews are posted to GitHub, and this file's gates still govern. Manual paste between agents is not the handoff.
+
+## Hosted agents
+
+A hosted agent (Jules or similar) bootstraps with `uv sync --all-extras --dev`,
+a `.env` copied from the template with `MOCK_BROKER=1` and `DRY_RUN=1`, then
+`uv run pytest tests/unit -n auto -q`. Hosted agents run on mock defaults only.

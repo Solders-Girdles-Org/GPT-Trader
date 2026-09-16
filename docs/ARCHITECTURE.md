@@ -4,117 +4,111 @@
 status: current
 ---
 
-## Product boundary
+GPT-Trader is a Coinbase-oriented trading system with two lanes over one core.
+The **recorded experiment** is the owner-facing product
+([decision](decisions/recorded-experiment-product.md)): recorded bars in,
+explained decisions, bounded simulated fills and reconciled cash out, with no
+broker, scheduler or credentials. The **retained runtime** is the paper/live
+spine on the staged-autonomy ladder in [DIRECTION.md](DIRECTION.md): market
+data through proposers, an audited approval workflow, a risk kernel and guard
+stack, into a paper broker today and, only after the gates there, a live one.
+This document describes structure. [STATUS.md](STATUS.md) points at what is
+shipped; [decisions/](decisions/README.md) hold the rationale.
 
-The owner-facing product is a reproducible recorded-data trading experiment.
-[The design decision](decisions/recorded-experiment-product.md) owns the rationale,
-reuse/replacement comparison and component disposition. [Direction](DIRECTION.md)
-owns the autonomous destination and external authority. [Status](STATUS.md)
-points at shipped source and tests; this document defines structure, not deployment.
+## Packages
 
-The experiment has three responsibilities: validate evidence, decide and simulate
-one observation, and commit/reconcile its effects. They run in one process with
-explicit inputs. No broker, scheduler, model API or live account is involved.
+All code lives under `src/gpt_trader/`; tests mirror these paths under
+`tests/unit/`.
 
-```mermaid
-flowchart LR
-    A[Recorded hourly bars and settings] --> B[Validate and bind source]
-    B --> C[Closed history to benchmark proposal]
-    C --> D[Next bar admission and simulated fills]
-    D --> E[Atomic observation journal]
-    E --> F[Independent fill accounting and operator report]
-    E --> C
-```
+| Package | Role |
+| --- | --- |
+| `core/`, `errors/`, `validation/`, `config/`, `utilities/`, `logging/` | Domain types, order intents, fill accounting, error taxonomy; no upward imports |
+| `features/brokerages/` | Adapters: `coinbase/` (REST and WebSocket, CDP JWT auth, spot and CFM futures), `paper/`, `mock/`, `robinhood/` (authenticated reads and non-binding previews only), and the broker factory |
+| `features/recorder/` | Read-only observation: ticker polling into the price-tick store; candle history into point-in-time `MarketSnapshot` artifacts |
+| `features/trade_ideas/` | The spine: `TradeIdea` records, `TradeIdeaService` (the one identity-stamped, audited path for every actor), eligibility, versioned `RiskBudget`, audited autonomy state, `RiskKernel`, portfolio monitors, accounting, scorecard, transactional persistence. Imports only `core` and `errors` |
+| `features/idea_execution/` | Paper lane: `PaperIdeaExecutor` (live brokers structurally unreachable), the batch cycle turn, the in-process event lane, the exit monitor |
+| `features/live_trade/` | Retained bot: `TradingBot`, `TradingEngine`, strategies (`baseline`, `mean_reversion`, plus the TA families measured dead in [adopt-agentic-alpha-direction](decisions/adopt-agentic-alpha-direction.md)), `LiveRiskManager`, `GuardManager` and its guards, `DegradationState`, `OrderSubmitter`, `BrokerExecutor` |
+| `features/experiment/` | The recorded experiment: input binding, transition engine, atomic journal |
+| `features/strategy_tools/`, `features/intelligence/`, `features/data/`, `features/optimize/`, `features/strategy_dev/`, `backtesting/` | Strategy-to-idea adapter, regime features, data acquisition, parameter search, benchmark replay |
+| `app/` | `ApplicationContainer` composition root, `BotConfig` and `ProfileLoader`, runtime paths, risk-budget seeding |
+| `persistence/` | SQLite event and order stores with JSONL fallback |
+| `monitoring/`, `preflight/`, `security/` | Health checks, metrics, alerts, daily report; readiness preflight; secrets and input validation |
+| `cli/`, `web/` | The `gpt-trader` commands (`experiment`, `run`, `ideas`, `record`, `console`, `report`, `preflight` and others) and the FastAPI operator console; both are thin adapters over the services |
 
-An observation is the transaction boundary, not a multi-agent workflow stage.
-A signal uses only completed history; its earliest fill is the next bar's open.
-That bar may then close the position under the disclosed conservative OHLC model.
-The same committed entry contains observed data, decision, fills, cash/inventory,
-fees, controls and resume checkpoint. History is append-only. Duplicate resumes
-advance only missing observations. A changed source implementation, input or
-setting requires a separate experiment. Inspection opens the journal read-only.
+## Data flow
 
-Cash and net results are reconciled against identified fills using the shared
-core position projector. Replay additionally checks every stored transition,
-including pending plans and drawdown state. Reports are derived from a consistent
-snapshot; they are not another state owner. Simulation timestamps encode the
-assumed event ordering, not observed exchange fill times.
+**Recorded experiment.** `gpt-trader experiment run --input <json> --root <dir>`
+binds the input (recorded hourly bars and settings) into the journal, then per
+bar: a signal from closed history only, admission at the next bar's open with
+size recomputed from current cash and costs, conservative OHLC fills, and one
+atomic journal entry holding data, decision, fills, cash, fees, controls and
+the resume checkpoint. History is append-only; a resume advances only missing
+observations; a changed source or input is a new experiment. Cash and results
+are reconciled independently through `core/fill_accounting.py`; reports derive
+from a consistent snapshot and own no state.
 
-## Composition and configuration
+**Paper and live spine.**
 
-The CLI is a thin adapter over the experiment library. The input document owns
-its data and settings; the journal preserves their bound copy. There are no
-profile/environment overrides and no default path into an operational store.
-The library takes an explicit root and dependencies, so the offline loop does
-not need `ApplicationContainer`, global registration or service lifecycle.
-[DI policy](DI_POLICY.md) distinguishes this from the retained runtime.
+1. **Observe.** The recorder polls read-only tickers and candles; the snapshot
+   builder turns them into a `MarketSnapshot`.
+2. **Propose.** A `Proposer` (deterministic benchmark today; the reasoning
+   analyst is scoped in #1252) returns complete `TradeIdea` records with entry,
+   invalidation, exit, max loss and expiry. Live strategies reach the same
+   record through the default-off `features/strategy_tools/trade_idea_adapter.py`.
+3. **Admit.** `TradeIdeaService.propose` appends to the audit log. Every
+   approval and every execution consults `RiskKernel` once: eligibility
+   invariants, the current `RiskBudget` version, and the audited autonomy
+   level (`human_approved_execution` by default, ratcheting down on breach).
+   Humans decide through the `ideas` commands or the console; Stage 2
+   auto-approval applies only inside the budget envelope.
+4. **Execute on paper.** `PaperIdeaExecutor` places one simulated market order
+   per approved idea (`client_order_id` = decision id) and records
+   SUBMITTED and FILLED through the service. The cycle turn runs steps 1-4
+   once under an external scheduler and leaves a manifest; the event lane runs
+   them in-process per strategy event.
+5. **Execute live (gated).** In the retained bot,
+   `TradingEngine._validate_and_place_order` runs pre-trade validation,
+   `LiveRiskManager` limits, `GuardManager` (API health, daily loss,
+   liquidation buffer, mark staleness, PnL telemetry, risk metrics,
+   volatility) and `DegradationState` pauses (global or per symbol, optionally
+   reduce-only); then `OrderSubmitter` persists the intent and `BrokerExecutor`
+   talks to the broker under retry and timeout policy. A missing
+   acknowledgment stays uncertain until reconciled. No live order is submitted
+   without the recorded approval in [DIRECTION.md](DIRECTION.md); the `canary`
+   and `prod` profiles are assets, not approval.
+6. **Account and measure.** Monitors compute high-water mark, drawdown from
+   peak and open exposure from the same ledger; closeout attribution and the
+   scorecard grade the track record that promotion requires.
 
-The default benchmark is fixed indicator arithmetic. A proposal's historic
-sizing recommendation is advisory; simulation admission recomputes size from
-current cash and costs. Model generation is not implemented by naming an actor
-AI, and historical replay cannot validate a trained model's alpha. The
-[agentic-alpha decision](decisions/adopt-agentic-alpha-direction.md) owns those
-future evaluation constraints.
+`TradingBot.flatten_and_stop()` bypasses the guard stack on purpose so that
+emergency closure succeeds during a risk trip.
 
-## Retained runtime and broker boundary
+## Composition and boundaries
 
-The `run`, `ideas cycle`, recorder, web console and broker adapters remain
-compatibility surfaces with existing policy and storage contracts. They are not
-silently redirected to the experiment. The [paper guide](paper_trading.md)
-retains their operational procedures; the
-[cutover proposal](decisions/paper-runtime-cutover.md) controls their disposition.
+`ApplicationContainer` wires the retained runtime; the experiment library takes
+explicit dependencies and never touches the container
+([DI_POLICY.md](DI_POLICY.md)). Profiles (`config/profiles/*.yaml` through
+`ProfileLoader` into `BotConfig`) fail closed when invalid and do not
+configure experiments. `scripts/ci/check_import_boundaries.py` enforces the
+edges: no slice imports the CLI, preflight or the container; `monitoring` does
+not import `features` at runtime; `trade_ideas` imports only `core` and
+`errors`; cross-slice edges are an allowlist that only shrinks; the web
+console reaches only its trade-idea adapter contract. Layer detail:
+[BOUNDARIES](architecture/BOUNDARIES.md), [SEAMS](architecture/SEAMS.md),
+[ENTRYPOINTS](architecture/ENTRYPOINTS.md),
+[OWNERSHIP](architecture/OWNERSHIP.md).
 
-`ApplicationContainer` remains the retained bot's composition root. It wires
-configuration, broker, persistence, risk and observability into `TradingBot`.
-The live engine's canonical submission path applies guards, persists admitted
-intent, then interacts with a broker. Durable receipt recovery and identified
-fills cannot make a remote broker call atomic: missing acknowledgments remain
-uncertain until reconciled. This is a useful boundary to preserve, even though
-an entirely local fill fits inside one transaction.
+## Where evidence and results live
 
-Trade-idea persistence uses the [transactional state contract](decisions/transactional-trade-state.md).
-It does not establish that any deployed JSON store was migrated. Position-targeted
-reductions retain original entry identity and reserve pending quantity. Unknown
-inventory, fees and fill evidence stay unknown. Do not infer a complete account
-from an empty local journal or substitute planned prices for missing execution.
+| Evidence | Location |
+| --- | --- |
+| Experiment journal and reports | The explicit experiment root, normally `runtime_data/experiments/<name>/` |
+| Trade-idea records and the append-only audit, risk-budget, autonomy, closeout and paper-execution streams | The ideas root (`var/data/trade_ideas` by default, `GPT_TRADER_IDEAS_ROOT` to override) under one SQLite transaction boundary ([contract](decisions/transactional-trade-state.md)); legacy JSONL files are import/export only |
+| Paper cycle turns | `manifest.jsonl` and `runs/<run_id>/` under the cycle root |
+| Runtime events, orders, readiness reports | `runtime_data/<profile>/` |
+| Readiness and live gates | [READINESS.md](READINESS.md), [production.md](production.md), `preflight/` |
+| Guard behaviour and degradation | [RELIABILITY.md](RELIABILITY.md) |
+| Operating procedures | [paper_trading.md](paper_trading.md) |
 
-## Import boundaries
-
-`scripts/ci/check_import_boundaries.py` enforces lower-layer/entrypoint separation,
-monitoring dependencies, the trade-idea dependency contract and cross-slice edges.
-The experiment may consume core accounting and the pure trade-idea benchmark and
-snapshot contracts. It may not import broker adapters, the live engine, CLI,
-preflight or the application container. The new experiment-to-trade-ideas edge
-exists for selective reuse, not access to the legacy service or approval queue.
-
-Existing allowed edges are debt/intent records, not blanket permission for new
-coupling. Add an edge only with an architecture rationale. Pure dependencies are
-passed explicitly; no service locator in decision/accounting code. The web
-console remains structurally restricted to its trade-idea adapter contract.
-
-## Runtime Profile Registry
-
-The retained runtime uses `ProfileLoader` in
-`src/gpt_trader/app/config/profile_loader.py`, tracked profile YAML and typed
-`BotConfig`. CLI configuration and overrides, profile and environment resolution belong to
-that code and its tests. Do not infer a running profile from a tracked YAML file.
-Invalid present profiles fail closed; missing-profile fallback and effective
-precedence must be verified at the selected entrypoint.
-
-This profile system does not configure recorded experiments. Operational readers
-such as readiness use profile-specific state; that evidence cannot be borrowed
-from an experiment or a different date to clear an operational gate.
-
-## State ownership and verification
-
-[Information Architecture](INFORMATION_ARCHITECTURE.md) owns artifact locations.
-New experiments use an explicit isolated root, normally
-`runtime_data/experiments/<name>/`. Existing operational stores, original datasets,
-control grants and worktrees remain intact. Development does not pull merged
-source into a checkout used by a scheduled runtime or select a new state root.
-
-Tests cover causal ordering, bounded sizing, monetary conservation, cost allocation,
-stale data, duplicate observations, changed inputs, interrupted transactions,
-concurrent resumption and inconsistent state. Existing broker-specific financial
-and recovery tests remain in force. Source verification and integration are
-separate from runtime acceptance and measured trading outcomes.
+Nothing under `runtime_data/` or `var/` is committed. Source integration never
+proves that a store was migrated, a lane was authorized or a gate was passed.

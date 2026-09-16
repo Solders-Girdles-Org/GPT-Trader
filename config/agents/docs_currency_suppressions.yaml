@@ -8,12 +8,6 @@
 # missing/stale finding, so suppressions cannot rot silently. Add an entry
 # ONLY for a genuine false positive, with a one-line reason.
 suppressions:
-  - doc: docs/DEVELOPMENT_GUIDELINES.md
-    item: "--branch"
-    reason: git branch flag quoted in prose
-  - doc: docs/INFORMATION_ARCHITECTURE.md
-    item: "--ignored"
-    reason: git flag example, not a gpt-trader flag
   - doc: docs/decisions/intx-default-derivatives-venue.md
     item: "--hidden"
     reason: example flag quoted in a decision record

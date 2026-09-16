@@ -33,8 +33,11 @@ credentials, private communications or unrelated personal material.
    read-only. No review worktree outlives the review.
 3. The implementer consumes the review from GitHub (Codex:
    `gh-address-comments`), replies on the thread, and re-requests review.
-4. Merge follows the owning project's rules. Standing merge approvals in
-   project files still apply.
+4. Merge follows the owning project's rules. When the project's checks and
+   an independent review pass, the agent merges; it does not wait for RJ.
+   RJ sees a PR only when it carries a decision he alone can make, and then
+   the summary says in plain words what the decision is and what is
+   recommended.
 
 ## Non-code handoffs
 

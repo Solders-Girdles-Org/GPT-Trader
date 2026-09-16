@@ -34,8 +34,8 @@ cannot provide. The metadata block and reachability are enforced by
 0. **[Information Architecture](INFORMATION_ARCHITECTURE.md)** - Where every fact lives; the rule that prevents doc bloat. Read before adding docs.
 1. **[Project Status](STATUS.md)** - Where we actually are: shipped reality, right now
 2. **[Direction](DIRECTION.md)** - Where we're going: the staged ladder and the gates to get there
-3. **[Architecture](ARCHITECTURE.md)** - Understand vertical slices before touching code
-4. **[Development Guidelines](DEVELOPMENT_GUIDELINES.md)** - Where to change things + guardrails
+3. **[Architecture](ARCHITECTURE.md)** - Packages, data flow through guards and risk budget, where evidence lives
+4. **[Development Guidelines](DEVELOPMENT_GUIDELINES.md)** - Setup, local CI, PR flow, where to change things
 5. **[Readiness Checklist](READINESS.md)** - Gates to move from paper to live trading
 
 ## Quick Links
@@ -48,7 +48,7 @@ cannot provide. The metadata block and reachability are enforced by
 | [Project Status](STATUS.md) | Living "you are here": shipped state per stage |
 | [Direction](DIRECTION.md) | Destination, staged ladder, and the gates before execution |
 | [Decisions](decisions/README.md) | Durable product/engineering decisions — made and open |
-| [Architecture](ARCHITECTURE.md) | System design and capabilities |
+| [Architecture](ARCHITECTURE.md) | Packages, data flow, boundaries, evidence locations |
 | [Architecture Boundaries](architecture/BOUNDARIES.md) | Layer ownership and dependency direction |
 | [Ownership Map](architecture/OWNERSHIP.md) | Module ownership map and boundaries |
 | [Entrypoints](architecture/ENTRYPOINTS.md) | CLI, preflight, and live bot wiring |
@@ -76,7 +76,7 @@ cannot provide. The metadata block and reachability are enforced by
 - [Project Status](STATUS.md) - Factual current state
 
 ### Architecture & Design
-- [System Architecture](ARCHITECTURE.md) - Component overview and vertical slices
+- [System Architecture](ARCHITECTURE.md) - Packages, data flow, boundaries, evidence locations
 - [Architecture Boundaries](architecture/BOUNDARIES.md) - Layer ownership and dependency direction
 - [DI Policy](DI_POLICY.md) - Dependency injection patterns and container usage
 - [Entrypoints](architecture/ENTRYPOINTS.md) - CLI, preflight, and live bot wiring
@@ -98,14 +98,12 @@ cannot provide. The metadata block and reachability are enforced by
 - [Robinhood Integration](ROBINHOOD.md) - Authenticated observation and non-binding preview/review boundaries
 
 ### Development
-- [Development Guidelines](DEVELOPMENT_GUIDELINES.md) - Standards for contributing, cleanup passes, and the verification bundle
-- [Feature Slice Scaffolding](DEVELOPMENT_GUIDELINES.md#slice-scaffolding) - Bootstrap new slices
+- [Development Guidelines](DEVELOPMENT_GUIDELINES.md) - Setup, local CI, CI contract, PR flow, conventions, where to change things
 - [Test Hygiene Policy](test_hygiene.md) - Line limits, allowlist policy, and splitting guidance
 - [Naming Standards](naming.md) - Terminology, casing, and banned abbreviations
 - [Naming Suppressions](naming_suppressions.md) - Strict mode behavior and how to suppress
 - [Security](SECURITY.md) - Security practices and considerations
 - [Deprecations](DEPRECATIONS.md) - Deprecated modules and shims (CI-checked)
-- Research backtests — adapter order-intent keys are documented in [Development Guidelines](DEVELOPMENT_GUIDELINES.md)
 
 ## Configuration
 
@@ -170,5 +168,5 @@ relevant adapter; live execution still requires the gates in
 
 ---
 
-*Prefer code + generated inventories over long-lived how-to docs. See
+*Prefer code over long-lived how-to docs. See
 [Information Architecture](INFORMATION_ARCHITECTURE.md) for what belongs where.*
