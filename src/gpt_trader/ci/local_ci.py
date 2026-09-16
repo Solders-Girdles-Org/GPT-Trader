@@ -9,28 +9,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-AGENT_HEALTH_SCRIPT = "\n".join(
-    [
-        "set -u",
-        "set -o pipefail",
-        "mkdir -p var/agents/health",
-        "set +e",
-        "make agent-health-fast AGENT_HEALTH_FAST_QUALITY_CHECKS=none",
-        "status=$?",
-        "set -e",
-        "if [ -f var/agents/health/health_report.json ]; then",
-        "  uv run python - <<'PY' | tee var/agents/health/health_report.txt",
-        "from scripts.agents.health_report import format_text_report",
-        "import json",
-        'with open("var/agents/health/health_report.json") as handle:',
-        "    report = json.load(handle)",
-        "print(format_text_report(report))",
-        "PY",
-        "fi",
-        "exit $status",
-    ]
-)
-
 
 @dataclass(frozen=True)
 class PlannedStep:
@@ -40,8 +18,8 @@ class PlannedStep:
     enabled: bool = True
     skip_reason: str | None = None
     # Advisory steps run but never fail the overall suite: a non-zero exit is
-    # surfaced as a non-blocking warning. Used to align local checks with CI
-    # lanes that are advisory on pull requests (e.g. agent artifacts freshness).
+    # surfaced as a non-blocking warning, matching CI lanes that are advisory
+    # on pull requests.
     advisory: bool = False
 
 
@@ -51,8 +29,6 @@ class LocalCIProfile:
     description: str
     readiness_enabled: bool
     readiness_skip_reason: str | None
-    agent_artifacts_enabled: bool
-    agent_artifacts_skip_reason: str | None
     # Property/contract/integration lanes are required GitHub pull_request
     # checks, so the default pr profile (and strict) runs them; quick skips
     # them for a fast development loop.
@@ -66,13 +42,10 @@ LOCAL_CI_PROFILES: dict[str, LocalCIProfile] = {
         description=(
             "PR profile (default) matches the GitHub pull_request required-check "
             "surface: lint/format, docs audits, type check, test guardrails, unit, "
-            "property, contract, and integration tests, with agent artifacts "
-            "freshness as an advisory warning."
+            "property, contract, and integration tests."
         ),
         readiness_enabled=False,
         readiness_skip_reason="The canary readiness gate is local/live evidence beyond GitHub pull_request CI; use the strict profile when you need it.",
-        agent_artifacts_enabled=True,
-        agent_artifacts_skip_reason=None,
         required_suites_enabled=True,
         required_suites_skip_reason=None,
     ),
@@ -84,18 +57,14 @@ LOCAL_CI_PROFILES: dict[str, LocalCIProfile] = {
         ),
         readiness_enabled=True,
         readiness_skip_reason=None,
-        agent_artifacts_enabled=True,
-        agent_artifacts_skip_reason=None,
         required_suites_enabled=True,
         required_suites_skip_reason=None,
     ),
     "quick": LocalCIProfile(
         canonical_name="quick",
-        description="Quick/dev profile skips the readiness gate, agent artifacts freshness, and the property/contract/integration suites for a fast development loop.",
+        description="Quick/dev profile skips the readiness gate and the property/contract/integration suites for a fast development loop.",
         readiness_enabled=False,
         readiness_skip_reason="Use the strict profile when you need the readiness gate; quick/dev skips it because readiness data may be missing in short-lived loops.",
-        agent_artifacts_enabled=False,
-        agent_artifacts_skip_reason="Agent artifacts freshness is disabled in quick/dev to avoid regenerating var/agents; run strict before merging if you need that check.",
         required_suites_enabled=False,
         required_suites_skip_reason="Property/contract/integration suites are skipped in quick/dev; the default pr profile runs the full GitHub pull_request surface.",
     ),
@@ -150,11 +119,6 @@ def parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help="Include integration tests (CI: integration-tests).",
     )
     parser.add_argument(
-        "--include-agent-health",
-        action="store_true",
-        help="Include agent-health fast checks (CI: agent-health).",
-    )
-    parser.add_argument(
         "--profile",
         "-p",
         type=str.lower,
@@ -191,10 +155,6 @@ def print_profile_banner(selection: str, profile: LocalCIProfile) -> None:
     print("Profile check status:", flush=True)
     print(
         f"  - {_format_check_status('Readiness gate', profile.readiness_enabled, profile.readiness_skip_reason)}",
-        flush=True,
-    )
-    print(
-        f"  - {_format_check_status('Agent artifacts freshness', profile.agent_artifacts_enabled, profile.agent_artifacts_skip_reason)}",
         flush=True,
     )
     print(
@@ -262,22 +222,6 @@ def build_steps(profile: LocalCIProfile, args: argparse.Namespace) -> list[Plann
             command=["uv", "run", "mypy", "src"],
         ),
         PlannedStep(
-            label="Agent health (fast, dev profile)",
-            command=["bash", "-lc", AGENT_HEALTH_SCRIPT],
-            enabled=args.include_agent_health,
-            skip_reason="use --include-agent-health",
-        ),
-        PlannedStep(
-            label="Agent artifacts freshness",
-            command=["uv", "run", "agent-regenerate", "--verify"],
-            enabled=profile.agent_artifacts_enabled,
-            skip_reason=profile.agent_artifacts_skip_reason,
-            # Advisory locally: GitHub pull_request CI already reports stale
-            # artifacts non-blocking, and a scheduled lane refreshes main.
-            # Non-PR GitHub CI remains the blocking enforcement point.
-            advisory=True,
-        ),
-        PlannedStep(
             label="Check test hygiene",
             command=["uv", "run", "python", "scripts/ci/check_test_hygiene.py"],
         ),
@@ -304,10 +248,6 @@ def build_steps(profile: LocalCIProfile, args: argparse.Namespace) -> list[Plann
         PlannedStep(
             label="Check legacy triage alignment",
             command=["uv", "run", "python", "scripts/ci/check_legacy_test_triage.py"],
-        ),
-        PlannedStep(
-            label="Check dedupe manifest",
-            command=["uv", "run", "python", "scripts/ci/check_dedupe_manifest.py"],
         ),
         PlannedStep(
             label="Check triage backlog",

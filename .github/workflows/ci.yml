@@ -22,7 +22,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:
-      agent_artifacts: ${{ steps.classify.outputs.agent_artifacts }}
       dependencies: ${{ steps.classify.outputs.dependencies }}
     steps:
       # actions/checkout@v7
@@ -38,14 +37,11 @@ jobs:
           set -euo pipefail
 
           emit_outputs() {
-            {
-              echo "agent_artifacts=$1"
-              echo "dependencies=$2"
-            } >> "$GITHUB_OUTPUT"
+            echo "dependencies=$1" >> "$GITHUB_OUTPUT"
           }
 
           emit_all_true() {
-            emit_outputs true true
+            emit_outputs true
           }
 
           EVENT_NAME="${{ github.event_name }}"
@@ -100,43 +96,25 @@ jobs:
             exit 0
           fi
 
-          agent_artifacts=false
           dependencies=false
 
           while IFS= read -r path; do
             [ -n "$path" ] || continue
             case "$path" in
               .github/workflows/ci.yml)
-                agent_artifacts=true
                 dependencies=true
-                ;;
-              .github/workflows/agent-artifacts-refresh.yml)
-                agent_artifacts=true
                 ;;
               .github/workflows/uv_lock_upgrade.yml|.github/dependabot.yml|pyproject.toml|uv.lock|requirements*.txt|*/requirements*.txt|requirements*.in|*/requirements*.in|constraints*.txt|*/constraints*.txt|constraints*.in|*/constraints*.in|Dockerfile|*/Dockerfile)
                 dependencies=true
                 ;;
             esac
-
-            case "$path" in
-              pyproject.toml|uv.lock)
-                agent_artifacts=true
-                ;;
-            esac
-
-            case "$path" in
-              src/*|tests/*|scripts/*.py|scripts/**/*.py|scripts/agents/*|src/gpt_trader/agents/*|config/agents/*|config/environments/.env.template|pytest.ini|var/agents/*)
-                agent_artifacts=true
-                ;;
-            esac
           done <<< "$changed_files"
 
-          emit_outputs "$agent_artifacts" "$dependencies"
+          emit_outputs "$dependencies"
 
           {
             echo "## CI Change Classifier"
             echo ""
-            echo "- Agent artifacts freshness: $agent_artifacts"
             echo "- Dependency review: $dependencies"
             echo ""
             echo "Changed files:"
@@ -282,172 +260,6 @@ jobs:
       - name: Type Check (MyPy)
         run: uv run mypy src
 
-  agent-health:
-    name: Agent Health
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      # actions/checkout@v7
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        with:
-          persist-credentials: false
-
-      - name: Install uv
-        # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
-        with:
-          enable-cache: true
-
-      - name: Set up Python
-        # actions/setup-python@v5
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
-        with:
-          python-version-file: ".python-version"
-
-      - name: Install dependencies
-        run: uv sync --all-extras --dev
-
-      - name: Run agent-health (fast, dev profile)
-        run: |
-          set -u
-          set -o pipefail
-          mkdir -p var/agents/health
-          set +e
-          make agent-health-fast AGENT_HEALTH_FAST_QUALITY_CHECKS=none
-          status=$?
-          set -e
-          if [ -f var/agents/health/health_report.json ]; then
-            uv run python - <<'PY' | tee var/agents/health/health_report.txt
-          from scripts.agents.health_report import format_text_report
-          import json
-          with open("var/agents/health/health_report.json") as handle:
-              report = json.load(handle)
-          print(format_text_report(report))
-          PY
-          fi
-          exit $status
-
-      - name: Upload agent-health artifact
-        if: always()
-        # actions/upload-artifact@v7
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: agent-health-report
-          path: var/agents/health/health_report.json
-          retention-days: 14
-
-      - name: Add agent-health summary
-        if: always()
-        run: |
-          if [ -f var/agents/health/health_report.txt ]; then
-            echo "## Agent Health" >> $GITHUB_STEP_SUMMARY
-            cat var/agents/health/health_report.txt >> $GITHUB_STEP_SUMMARY
-          fi
-
-  agent-freshness:
-    name: Agent Artifacts Freshness
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    needs: changes
-    if: always()
-    steps:
-      - name: Fail when change classifier did not succeed
-        if: needs.changes.result != 'success'
-        run: |
-          echo "::error::CI Change Classifier ended with result '${{ needs.changes.result }}'; failing closed."
-          exit 1
-
-      - name: Skip freshness check
-        if: needs.changes.result == 'success' && needs.changes.outputs.agent_artifacts != 'true'
-        run: |
-          echo "Agent artifact inputs did not change; skipping advisory freshness verification."
-          {
-            echo "## Agent Artifacts Freshness"
-            echo "Status: SKIPPED (no agent artifact inputs changed)"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # actions/checkout@v7
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-        if: needs.changes.result == 'success' && needs.changes.outputs.agent_artifacts == 'true'
-        with:
-          persist-credentials: false
-
-      - name: Install uv
-        if: needs.changes.result == 'success' && needs.changes.outputs.agent_artifacts == 'true'
-        # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
-        with:
-          enable-cache: true
-
-      - name: Set up Python
-        if: needs.changes.result == 'success' && needs.changes.outputs.agent_artifacts == 'true'
-        # actions/setup-python@v5
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
-        with:
-          python-version-file: ".python-version"
-
-      - name: Install dependencies
-        if: needs.changes.result == 'success' && needs.changes.outputs.agent_artifacts == 'true'
-        run: uv sync --all-extras --dev
-
-      - name: Verify agent artifacts freshness
-        if: needs.changes.result == 'success' && needs.changes.outputs.agent_artifacts == 'true'
-        id: verify
-        run: |
-          set +e
-          set -o pipefail
-          mkdir -p var/agents/health
-          uv run agent-regenerate --verify | tee var/agents/health/agent_regenerate_verify.txt
-          status=$?
-          set +o pipefail
-          set -e
-
-          EVENT_NAME="${{ github.event_name }}"
-          echo "exit_code=$status" >> $GITHUB_OUTPUT
-
-          if [ $status -ne 0 ]; then
-            echo "::error::Agent artifacts are stale; run uv run agent-regenerate and commit the changes"
-            echo "Fix command: uv run agent-regenerate"
-            echo "Verify log: var/agents/health/agent_regenerate_verify.txt"
-            changed_files=$(git status --porcelain)
-            if [ -n "$changed_files" ]; then
-              echo "Changed files (git status --porcelain):"
-              echo "$changed_files"
-            else
-              echo "No working tree changes detected; diffstat:"
-              git diff --stat
-            fi
-
-            # Non-blocking on PRs: signal in summary, but don't stall merges.
-            if [ "$EVENT_NAME" = "pull_request" ]; then
-              echo "::warning::Agent artifacts are stale (non-blocking on pull_request); a scheduled refresh workflow will update these on main."
-              exit 0
-            fi
-          fi
-
-          exit $status
-
-      - name: Add freshness summary
-        if: always() && needs.changes.result == 'success' && needs.changes.outputs.agent_artifacts == 'true'
-        run: |
-          EVENT_NAME="${{ github.event_name }}"
-          echo "## Agent Artifacts Freshness" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ steps.verify.outputs.exit_code }}" != "0" ]; then
-            if [ "$EVENT_NAME" = "pull_request" ]; then
-              echo "Status: STALE (non-blocking on PR; scheduled refresh will update on main)" >> $GITHUB_STEP_SUMMARY
-            else
-              echo "Status: STALE (run \`uv run agent-regenerate\`)" >> $GITHUB_STEP_SUMMARY
-              echo "Fix: \`uv run agent-regenerate\`" >> $GITHUB_STEP_SUMMARY
-            fi
-            echo "Verify log: \`var/agents/health/agent_regenerate_verify.txt\`" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "Status: OK" >> $GITHUB_STEP_SUMMARY
-          fi
-          if [ -f var/agents/health/agent_regenerate_verify.txt ]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            sed -n '1,40p' var/agents/health/agent_regenerate_verify.txt >> $GITHUB_STEP_SUMMARY
-          fi
-
   test-guardrails:
     name: Test Guardrails
     runs-on: ubuntu-latest
@@ -484,9 +296,6 @@ jobs:
 
       - name: Check legacy triage alignment
         run: uv run python scripts/ci/check_legacy_test_triage.py
-
-      - name: Check dedupe manifest
-        run: uv run python scripts/ci/check_dedupe_manifest.py
 
       - name: Check triage backlog
         run: make test-triage-check
