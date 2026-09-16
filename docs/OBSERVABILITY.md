@@ -4,14 +4,12 @@
 status: current
 ---
 
-This page is intentionally thin. Metric names/labels and event schemas are generated from code to minimize drift.
+This page is intentionally thin. Metric names/labels and event schemas live in the code; read them there rather than from a copied table.
 
-## Generated Catalogs
+## Where the catalogs live
 
-- Metrics: [var/agents/observability/metrics_catalog.md](../var/agents/observability/metrics_catalog.md) ([.json](../var/agents/observability/metrics_catalog.json))
-- Structured logging:
-  - Event catalog: [var/agents/logging/event_catalog.json](../var/agents/logging/event_catalog.json)
-  - Log schema: [var/agents/logging/log_schema.json](../var/agents/logging/log_schema.json)
+- Metrics: `src/gpt_trader/monitoring/metrics_collector.py` (`rg -n "metric" src/gpt_trader/monitoring`)
+- Structured logging events and JSON schema: `src/gpt_trader/logging/` (`json_formatter.py`, `runtime_helpers.py`)
 
 ## Key Entrypoints
 
@@ -63,12 +61,6 @@ with the runner instantiated in
 - Return `(healthy, details)` with `details["severity"]` when failing.
 - Register in `HealthCheckRunner._health_check_registry` with the correct `mode`.
 - Confirm the `/health` payload renders as expected (see [Monitoring Playbook](MONITORING_PLAYBOOK.md)).
-
-## Regeneration
-
-```bash
-uv run agent-regenerate --only observability,logging
-```
 
 ## Dashboards & Runbooks
 

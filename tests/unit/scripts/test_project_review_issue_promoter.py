@@ -28,7 +28,7 @@ def test_dry_run_renders_issue_body(tmp_path: Path, capsys) -> None:
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert "gpt-trader-agent-finding-id: agent-artifacts-stale-example" in captured.out
+    assert "gpt-trader-agent-finding-id: docs-link-audit-example" in captured.out
     assert "## Acceptance Criteria" in captured.out
     assert "agent-ready" in captured.out
 

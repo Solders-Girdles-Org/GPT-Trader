@@ -64,7 +64,6 @@ before relying on memory or prior runs:
 git status --short --branch
 gh issue list --state open --limit 50
 gh pr list --state open --limit 30
-uv run agent-regenerate --verify
 uv run local-ci --profile quick
 ```
 
@@ -80,16 +79,15 @@ run. Rotate lanes across runs instead of scanning everything every hour.
 
 | Lane | Cheap evidence | Promote only when |
 | --- | --- | --- |
-| Agent artifacts | `uv run agent-regenerate --verify`; inspect changed generator inputs when stale | A generated artifact or generator input has a bounded refresh/fix path |
 | Local CI | `uv run local-ci --profile quick`; failing command output | A repeated failure points to repo code, tests, or docs rather than transient environment drift |
 | Open queue | `gh issue list --state open --limit 50`; `gh pr list --state open --limit 30`; check whether the active branch has a PR | An issue or PR is stale, blocked, duplicated, or missing an agent-ready contract, or a repeated local review branch has no PR/issue/explicit parked blocker |
-| Test hygiene | `uv run agent-dedupe --stats`; `uv run python scripts/ci/check_dedupe_manifest.py --strict` | The stats expose an actionable pending cluster, stale triage, or manifest drift |
+| Test hygiene | `uv run python scripts/ci/check_test_hygiene.py`; `make test-triage-check` | A hygiene or triage failure points to a bounded test fix |
 | Architecture contracts | Read one named contract doc such as `docs/DI_POLICY.md`, `docs/ARCHITECTURE.md`, or `docs/DIRECTION.md`; compare with a narrow code path | A concrete docs/code mismatch or boundary violation has a safe verification command |
-| Agent ergonomics | Inspect one agent-facing doc, generated map, workflow script, or recent scout memory | A missing or stale instruction causes repeat agent confusion, repeated no-promotion churn, or an ambiguous finish/park decision that can be fixed in one PR |
+| Agent ergonomics | Inspect one agent-facing doc, workflow script, or recent scout memory | A missing or stale instruction causes repeat agent confusion, repeated no-promotion churn, or an ambiguous finish/park decision that can be fixed in one PR |
 
-Good scout signals include stale generated artifacts, a repeated quick local-CI
-failure, a stale or blocked open PR, a duplicated test cluster with a clear next
-packet, a drift between docs and code, a narrow architectural boundary issue, or
+Good scout signals include a repeated quick local-CI failure, a stale or
+blocked open PR, a test hygiene or triage failure with a clear fix, a drift
+between docs and code, a narrow architectural boundary issue, or
 an agent-facing workflow gap that has already caused a low-value run.
 
 Poor scout signals include speculative refactor ideas, transient network
@@ -130,29 +128,29 @@ Required fields:
   "evidence": [
     {
       "kind": "command",
-      "command": "uv run agent-regenerate --verify",
-      "detail": "Command failed because generated files are stale."
+      "command": "uv run python scripts/maintenance/docs_link_audit.py",
+      "detail": "Command failed because a doc links to a removed path."
     },
     {
       "kind": "file",
-      "path": "scripts/agents/regenerate_all.py",
-      "detail": "The generator input controls the stale artifact."
+      "path": "docs/README.md",
+      "detail": "The doc index carries the dangling link."
     }
   ],
   "scope": {
-    "paths": ["var/agents/index.json"],
+    "paths": ["docs/README.md"],
     "out_of_scope": ["live trading changes"],
     "touches_trading_execution": false
   },
   "dedupe": {
-    "search_terms": ["agent-regenerate", "stale var/agents"],
+    "search_terms": ["docs link audit", "dangling link"],
     "related_issues": []
   },
   "acceptance_criteria": [
-    "Generated agent artifacts verify cleanly."
+    "The docs link audit passes."
   ],
   "suggested_verification": [
-    "uv run agent-regenerate --verify"
+    "uv run python scripts/maintenance/docs_link_audit.py"
   ],
   "routing": {
     "candidate_for": ["implementation"],

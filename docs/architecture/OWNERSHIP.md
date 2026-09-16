@@ -71,9 +71,8 @@ It exists to make changes safer and to help agents route work to the right place
   - `src/gpt_trader/monitoring/` (metrics, health, alerts, tracing)
   - `src/gpt_trader/logging/`
 - **What lives here:** metrics, traces, logging, health
-- **When you touch this:** run unit tests + ensure generated catalogs are current
+- **When you touch this:** run unit tests
   - `uv run pytest tests/unit -q`
-  - `uv run agent-regenerate --verify`
 
 ### Security
 - **Dirs:** `src/gpt_trader/security/`
@@ -92,6 +91,6 @@ It exists to make changes safer and to help agents route work to the right place
 | Change type | Minimum checks |
 |------------|-----------------|
 | docs-only | `uv run python scripts/maintenance/docs_link_audit.py` |
-| config schema / env var docs | `uv run agent-regenerate --verify` |
+| config schema / env var docs | `uv run pytest tests/unit/gpt_trader/app -q`; `uv run python scripts/maintenance/docs_currency_scan.py --fail-on missing,stale` |
 | execution / order placement | `uv run pytest tests/unit/gpt_trader/features/live_trade/execution -q` |
 | broker adapters | `uv run pytest tests/unit/gpt_trader/features/brokerages -q` |

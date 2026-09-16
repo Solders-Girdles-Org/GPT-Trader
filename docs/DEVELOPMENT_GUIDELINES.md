@@ -120,18 +120,15 @@ contract this table describes.
 | Check / workflow job | Tier | Trigger | Blocking status | Why it exists |
 | --- | --- | --- | --- | --- |
 | `CI` / `Lint & Format`, `Docs Link Audit`, `Type Check`, `Test Guardrails`, `Unit Tests (Core)`, `Property Tests`, `Contract Tests`, `Integration Tests` | Required merge safety | `pull_request`, `merge_group`, push to `main`/`develop`, manual | Required by `main` branch protection | Fast repo integrity, docs reachability, type checks, and core/integration test coverage |
-| `CI` / `Agent Health` | Advisory PR health | Same as `CI` | Not branch-protection required | Publishes an agent-health report without defining merge eligibility |
-| `CI` / `Agent Artifacts Freshness` | Generated artifact advisory on PR; blocking outside PR | Same as `CI` | Not branch-protection required; exits successfully with a warning on `pull_request`, fails on non-PR events when stale | Shows when `var/agents/**` needs regeneration without stalling ordinary PRs |
 | `CI` / `Windows Unit Tests (Portability)` and `Dependency Review` | Event/compatibility advisory | Windows follows `CI`; dependency review is `pull_request` only | Not branch-protection required | Covers Windows-sensitive units and high-severity dependency changes |
 | `CodeQL` / `Analyze Python` | Scheduled/security advisory | Push/PR to `main`/`develop`; weekly Monday 06:00 UTC | Not branch-protection required | GitHub code scanning |
-| `Agent Artifacts Refresh` / `Refresh, validate, and publish package`, `Verify uploaded package`; `UV Lock Upgrade` / `Upgrade uv.lock` | Scheduled/advisory maintenance | Scheduled and manual | Not branch-protection required; may publish a branch or PR | Keeps generated agent artifacts and dependency lock maintenance visible |
+| `UV Lock Upgrade` / `Upgrade uv.lock` | Scheduled/advisory maintenance | Scheduled and manual | Not branch-protection required; may publish a branch or PR | Keeps dependency lock maintenance visible |
 | `Release Image` / `Build, Publish, and Scan Docker Image` | Release image publication/readiness | Version-tag push (`v*`) or manual run with a `release_note` reference | Outside the PR merge gate; publishes and scans images only | Builds, publishes, and scans Docker images; does not deploy staging/production, rollback, run canary/prod preflight, call broker/API commands, move money, or submit orders |
 | `Integration Tests (Manual)` / `Integration Suite (Mock Broker)` | Manual readiness | Manual | Outside the PR merge gate | Full mock-broker integration suite including `slow` tests; needs no secrets or live-broker access and does not grant live trading, canary, or order authority |
 
 The default PR workflow keeps required merge-safety check names stable for branch
-protection, but several context-specific lanes now self-skip when their inputs
-do not change. `Agent Artifacts Freshness` runs for agent artifact source or
-output inputs, and `Dependency Review` runs for dependency manifest changes.
+protection, but context-specific lanes self-skip when their inputs do not
+change: `Dependency Review` runs only for dependency manifest changes.
 
 ### Local CI Command
 
@@ -144,17 +141,14 @@ uv run local-ci
 The default `pr` profile matches the GitHub `pull_request` required-check
 surface: lint/format, docs audits, type check, test guardrails, core unit
 tests plus the Stage 1 rails smoke, and the property/contract/integration
-suites. Agent artifacts freshness runs as an advisory warning (stale artifacts
-warn without failing, matching the non-blocking PR lane). Two other profiles
-exist: `strict` (alias `full`) adds the canary readiness gate
-(`scripts/ci/check_readiness_gate.py --profile canary --strict`) as local/live
-evidence beyond the PR surface, and `quick` (alias `dev`) skips the readiness
-gate, artifacts freshness, and the property/contract/integration suites for a
-fast development loop (re-enable a single suite with
-`--include-property-tests`, `--include-contract-tests`, or
-`--include-integration-tests`; `--include-agent-health` adds the agent-health
-fast checks to any profile). The CLI banner prints the active profile and the
-status of each toggled check before executing.
+suites. Two other profiles exist: `strict` (alias `full`) adds the canary
+readiness gate (`scripts/ci/check_readiness_gate.py --profile canary --strict`)
+as local/live evidence beyond the PR surface, and `quick` (alias `dev`) skips
+the readiness gate and the property/contract/integration suites for a fast
+development loop (re-enable a single suite with `--include-property-tests`,
+`--include-contract-tests`, or `--include-integration-tests`). The CLI banner
+prints the active profile and the status of each toggled check before
+executing.
 
 `make ci-required` survives as a thin alias that runs `uv run local-ci`
 verbatim.
@@ -164,21 +158,12 @@ Need help diagnosing `uv run local-ci` failures? See the [Local CI troubleshooti
 ### Local CI troubleshooting
 
 Local CI (`uv run local-ci`) can report issues before the unit tests run.
-Stale agent artifacts are advisory in local runs and should be regenerated
-before merge; readiness gate inputs can still fail the strict/full profile.
-The readiness gate applies only to the strict/full profile and direct
-readiness checks, not to the default `pr` profile or GitHub pull_request CI.
-When you hit one of these findings, follow the sequence below before re-running
-the command.
+Readiness gate inputs can fail the strict/full profile; the gate applies only
+to the strict/full profile and direct readiness checks, not to the default
+`pr` profile or GitHub pull_request CI. When you hit one of these findings,
+follow the sequence below before re-running the command.
 
-#### 1. Agent artifacts freshness
-
-1. Run `uv run agent-regenerate` from the repo root to redraw `var/agents/**` from their sources.
-2. Stage the updated artifacts and rerun `uv run agent-regenerate --verify`.
-3. If the warning persists, compare `git status var/agents` and resolve any upstream conflicts in the source inputs under `scripts/agents/**` or
-   `config/environments/.env.template` before regenerating again.
-
-#### 2. Readiness gate staleness
+#### 1. Readiness gate staleness
 
 1. Local CI runs the readiness gate with `PREFLIGHT_PROFILE=canary` and `READINESS_REPORT_DIR=runtime_data/canary/reports`. Check the `scripts/ci/check_readiness_gate.py` or `uv run local-ci` output for `Readiness gate degraded …` (missing report) or `Readiness gate degraded: latest report … is X days old` errors.
 2. Generate fresh inputs for your profile (`canary` by default) by running `make canary-daily`, which creates a fresh daily report, `preflight_report_*.json`, and readiness window state. For other profiles, use `uv run gpt-trader report daily --profile <profile> --report-format both` plus `READINESS_REPORT_DIR=runtime_data/<profile>/reports PREFLIGHT_PROFILE=<profile> make preflight-readiness` and `make readiness-window PREFLIGHT_PROFILE=<profile>`.
@@ -187,7 +172,7 @@ the command.
 5. The gate also reads `runtime_data/<profile>/events.db` for liveness and `var/data/status.json` (or your configured status file), so ensure those files exist alongside the report directory before rerunning local CI.
 6. For more background on the required files, freshness windows, and how stale data is interpreted, see [Readiness gate inputs & stale-data interpretation](READINESS.md#readiness-gate-inputs--stale-data-interpretation).
 
-#### 3. Common CI failures and fixes
+#### 2. Common CI failures and fixes
 
 | Failure | Cause | Fix |
 |---------|-------|-----|
@@ -197,49 +182,12 @@ the command.
 | Import error | Wrong module path | Use canonical paths (see [DEPRECATIONS.md](DEPRECATIONS.md)) |
 | Test using deprecated path | Patch targets shim | Update to patch canonical module directly |
 
-### Agent Artifacts Freshness
-
-The **Agent Artifacts Freshness** check verifies generated inventories under
-`var/agents/**` are up to date with their sources. It is blocking for non-PR
-GitHub CI events. Locally (`make ci-required` and strict/full `uv run local-ci`)
-and on GitHub pull requests it reports stale artifacts as a non-blocking advisory
-warning, so ordinary loops and PRs are not stalled by the scheduled refresh lane.
-When you see the advisory warning, regenerate the artifacts and commit the results
-before merge (non-PR CI enforces it).
-
-```bash
-uv run agent-regenerate
-uv run agent-regenerate --verify
-```
-
-Regeneration should update files in `var/agents/**`; stage and commit those
-changes in your PR.
-
-### Resolving Generated Artifact Conflicts
-
-If merge conflicts appear in `var/agents/**`, avoid hand-editing the generated
-files. Resolve conflicts in the source inputs first (for example, under
-`scripts/agents/**`, `config/environments/.env.template`, or related code), then
-regenerate the artifacts.
-
-Recommended flow:
-
-```bash
-# 1) Resolve conflicts in the source inputs.
-# 2) Clear conflict markers from generated files (choose a side or delete them).
-uv run agent-regenerate
-uv run agent-regenerate --verify # optional verification
-```
-
-Stage the regenerated `var/agents/**` outputs and include them in the same PR
-as the source changes.
-
 ## Documentation
 
 - Update `docs/ARCHITECTURE.md`, `docs/RISK_INTEGRATION_GUIDE.md`, or other
   relevant guides whenever behaviour changes.
 - Note CFM/`us_futures` gating whenever derivatives-resident code paths are touched (INTX perpetuals were removed; see [decision record](decisions/intx-default-derivatives-venue.md)).
-- Keep agent-facing references (`AGENTS.md`, `docs/agents/CODEBASE_MAP.md`, and generated `var/agents/**`) aligned with new workflows.
+- Keep agent-facing references (`AGENTS.md`, `docs/agents/CODEBASE_MAP.md`) aligned with new workflows.
 
 ## Operational Hygiene
 
@@ -267,13 +215,11 @@ backlog — track cleanup candidates as GitHub issues, not in a doc.
 - Do not preserve compatibility shims only because they exist: keep them
   intentionally, deprecate them with a target in [DEPRECATIONS.md](DEPRECATIONS.md),
   or remove them with tests.
-- Keep generated inventories current with `uv run agent-regenerate --verify` when
-  a pass moves, removes, or changes generated-artifact inputs.
 - A pass that uncovers an unsettled behavior question records it as a `proposed`
   decision in [decisions/](decisions/README.md), not as a drive-by change.
 
-Prefer this verification bundle after passes that touch docs, scripts, config, or
-generated-artifact inputs:
+Prefer this verification bundle after passes that touch docs, scripts, or
+config:
 
 ```bash
 git status --short --branch
@@ -283,7 +229,6 @@ uv run python scripts/ci/check_deprecation_registry.py
 uv run python scripts/maintenance/docs_link_audit.py
 uv run python scripts/maintenance/docs_reachability_check.py
 uv run python scripts/maintenance/generate_decision_index.py --check
-uv run agent-regenerate --verify
 git diff --check
 ```
 

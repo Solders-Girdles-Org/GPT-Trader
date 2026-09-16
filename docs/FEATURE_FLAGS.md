@@ -9,8 +9,8 @@ This page is intentionally thin. Feature flags and configuration drift quickly, 
 ## Canonical References
 
 - Operator defaults (minimal): [Environment template](../config/environments/.env.template)
-- Generated env var inventory (code + template): [var/agents/configuration/environment_variables.md](../var/agents/configuration/environment_variables.md) ([.json](../var/agents/configuration/environment_variables.json))
-- Generated config schemas: [`var/agents/schemas/bot_config_schema.json`](../var/agents/schemas/bot_config_schema.json), [`var/agents/schemas/risk_config_schema.json`](../var/agents/schemas/risk_config_schema.json)
+- Every env var the code reads: `rg -n "getenv|environ" src/gpt_trader`
+- Config and risk schemas: `src/gpt_trader/app/config/bot_config.py`, `src/gpt_trader/features/live_trade/risk/config.py`
 
 ## Precedence
 
@@ -25,9 +25,3 @@ Implementation entrypoints:
 
 - `src/gpt_trader/app/config/bot_config.py`
 - `src/gpt_trader/features/live_trade/risk/config.py`
-
-## Regeneration
-
-```bash
-uv run agent-regenerate --only configuration,schemas
-```

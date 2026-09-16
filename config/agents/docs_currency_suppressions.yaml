@@ -62,3 +62,15 @@ suppressions:
   - doc: docs/decisions/stop-committing-high-churn-agent-inventories.md
     item: var/agents/testing/markers.json
     reason: decommitted generated inventory cited as the subject of the decision record
+  - doc: docs/decisions/stop-committing-high-churn-agent-inventories.md
+    item: var/agents
+    reason: retired generated-context tree cited as the subject of the decision record
+  - doc: docs/decisions/stop-committing-high-churn-agent-inventories.md
+    item: var/agents/index.json
+    reason: retired generated-context manifest cited as the subject of the decision record
+  - doc: docs/decisions/stop-committing-high-churn-agent-inventories.md
+    item: scripts/agents/agent_artifacts.py
+    reason: retired validator cited as the subject of the decision record
+  - doc: docs/DEPRECATIONS.md
+    item: "--only"
+    reason: flag of the retired agent-regenerate CLI quoted in a Recently Removed migration path

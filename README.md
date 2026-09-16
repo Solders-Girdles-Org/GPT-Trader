@@ -43,8 +43,8 @@ new experiment. See [the input and fill contract](docs/paper_trading.md#recorded
 Retained runtime profiles and credential configuration serve separately
 selected, authorized operations. Their source is
 [profile configuration](config/profiles/) and the
-[environment template](config/environments/.env.template), with the
-[generated inventory](var/agents/configuration/environment_variables.md).
+[environment template](config/environments/.env.template); the code under
+`src/gpt_trader/app/config/` is the reference for every variable it reads.
 Do not set up credentials or start a runtime to try the local product.
 
 ## Project Structure
@@ -119,13 +119,11 @@ The canonical local validation command is `uv run local-ci`. Its default `pr`
 profile matches the GitHub `pull_request` required-check surface — run it
 before opening a PR (`make ci-required` is a thin alias). Use
 `uv run local-ci --profile quick` for fast development feedback (skips
-readiness inputs, agent-artifact freshness, and the
-property/contract/integration suites, with explicit banners), and
-`--profile strict` when you also need local-live readiness evidence.
+readiness inputs and the property/contract/integration suites, with explicit
+banners), and `--profile strict` when you also need local-live readiness
+evidence.
 
-When strict/full fails on stale generated artifacts, run
-`uv run agent-regenerate` and then `uv run agent-regenerate --verify`. When it
-fails on readiness inputs, refresh the canary inputs with `make canary-daily`
+When strict/full fails on readiness inputs, refresh the canary inputs with `make canary-daily`
 or follow the profile-specific commands in
 [`docs/DEVELOPMENT_GUIDELINES.md`](docs/DEVELOPMENT_GUIDELINES.md#local-ci-troubleshooting).
 
@@ -138,22 +136,12 @@ or follow the profile-specific commands in
 - Avoid `time.sleep` in tests; use the `fake_clock` fixture for deterministic time.
 - Marker conventions are enforced by folder (unit/integration/contract/real_api).
 
-When you rename or move tests, regenerate the testing inventory:
-
-```bash
-uv run agent-regenerate --only testing
-```
-
 ### Agent Tools
 
-Commands for AI-assisted development. The canonical local quality gate is
-`uv run local-ci` (`make ci-required` is a thin alias); these helpers are
-optional conveniences on top of it:
+The canonical local quality gate is `uv run local-ci` (`make ci-required` is a
+thin alias). Two agent commands answer questions the gate does not:
 
 ```bash
-uv run agent-check      # Optional JSON summary of lint/format/types/tests
-uv run agent-impact     # Analyze change impact
-uv run agent-map        # Generate dependency graph
 uv run agent-naming     # Check naming conventions
 uv run agent-pr-ready   # Reconcile PR mergeability vs green CI
 ```

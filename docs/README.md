@@ -129,7 +129,7 @@ profile name itself is never execution approval.
 
 ### Environment Setup
 - [Environment Template](../config/environments/.env.template) - Minimal operator config (safe defaults)
-- [Environment Variable Inventory](../var/agents/configuration/environment_variables.md) - Full, code-derived reference
+- Every env var the code reads: `rg -n "getenv|environ" src/gpt_trader` (typed config in `src/gpt_trader/app/config/`)
 - Default: Spot trading with JWT authentication
 - CFM futures (US) require `TRADING_MODES=cfm` + `CFM_ENABLED=1`
 - INTX perps were removed ([decision record](decisions/intx-default-derivatives-venue.md)); `COINBASE_ENABLE_INTX_PERPS` survives only as a deprecated alias — semantics in [Deprecations](DEPRECATIONS.md)

@@ -30,8 +30,7 @@ Related issue / finding / routed package:
 - [ ] Structured JSON logs for new/changed paths
 - [ ] Errors include diagnostic context (symbol, order_id, correlation_id)
 
-## Agent Artifacts & Config (if touched)
-- [ ] If your change can affect generated `var/agents/**` context: ran `uv run agent-regenerate` and committed the refreshed artifacts (`uv run agent-regenerate --verify` clean). The exact inputs and freshness/CI contract live in `docs/DEVELOPMENT_GUIDELINES.md` and the CI path classifier
+## Docs (if touched)
 - [ ] If docs changed: `make agent-docs-links` passes
 
 ## Breaking Changes
