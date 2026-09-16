@@ -68,6 +68,7 @@ markers. Regenerating cannot drift from the files.
 <!-- BEGIN GENERATED DECISION INDEX -->
 | Date | Decision | Status |
 |------|----------|--------|
+| 2026-09-16 | [Retire the optimizer and the dead TA strategies; settle venue scope until the reasoning proposer has evidence](retire-optimize-and-dead-ta-strategies.md) | proposed |
 | 2026-09-05 | [Paper runtime cutover](paper-runtime-cutover.md) | proposed |
 | 2026-09-05 | [Recorded experiment as the owner-facing product](recorded-experiment-product.md) | accepted |
 | 2026-09-04 | [Transactional trade state](transactional-trade-state.md) | accepted |
