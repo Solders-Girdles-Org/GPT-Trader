@@ -1,240 +1,148 @@
-# Development Guidelines (gpt_trader)
+# Development Guidelines
 
 ---
 status: current
 ---
 
-These guidelines cover contributions to the readiness-gated `gpt_trader` stack. Older
-guides from the pre-DI era were removed from the tree; use git history if you
-need to review historical practices.
+The one workflow document: setup, local verification, the CI contract, the PR
+flow, conventions and where to change things. Agent gates (merge discipline,
+trading-safety boundary) live in [AGENTS.md](../AGENTS.md); where facts live is
+in [Information Architecture](INFORMATION_ARCHITECTURE.md).
 
-## Architectural Principles
+## Setup
 
-- **Vertical slices**: Add features within `src/gpt_trader/features/<slice>/` and
-  keep cross-slice coupling minimal.
-- **Explicit wiring**: The recorded experiment uses explicit function/library dependencies. Register retained runtime services in `ApplicationContainer`
-  (`src/gpt_trader/app/container.py`) instead of hidden imports. See
-  `docs/DI_POLICY.md` for detailed guidance on when to use container vs
-  singletons.
-- **Public surfaces**: Prefer importing across slices/tests via surface modules
-  (e.g., `gpt_trader.security.validate`, `gpt_trader.features.intelligence.regime`)
-  instead of deep/internal modules. Add new exports to the surface when needed.
-- **Configuration-first**: Recorded experiments use a bound input document with no environment overrides. Extend `BotConfig` when retained runtime options are
-  required; expose overrides through the CLI when appropriate.
-- **Modular refactoring**: Extract large modules (>500 lines) into focused
-  subpackages or module-local collaborators with clear separation of concerns.
-  See `features/live_trade/execution/`,
-  `features/live_trade/risk/`, and the `features/live_trade/engines/`
-  collaborators (telemetry, equity, order-record mapping) as examples. Decompose
-  one reviewable seam at a time:
-  - When preserving an adopted runtime interface, keep the public class/import stable as a **facade**; move logic behind
-    private collaborators (free functions or classes) that it delegates to.
-  - For incremental changes, extract the **lowest-risk seam first** — pure, IO-free helpers before
-    stateful or async ones.
-  - The acceptance signal is **behavior tests for the moved responsibility**,
-    not line counts (line counts are supporting evidence only).
-
-The [recorded-product decision](decisions/recorded-experiment-product.md) authorizes
-replacement of obsolete local workflows and their dependent tests together; a
-facade or compatibility shim is not mandatory solely because an interface exists.
-
-## Slice Scaffolding
-
-- Use `scripts/maintenance/feature_slice_scaffold.py --name <slice>` to bootstrap new
-  vertical slices under `src/gpt_trader/features/<slice>/`.
-- Add `--with-readme` and `--with-tests` so documentation and unit tests live beside
-  the slice (`tests/unit/gpt_trader/features/<slice>/`).
-- Use `--dry-run` for previews; the scaffold tool refuses overwrites by design.
-- Keep slice names snake_case, prefer explicit imports, and avoid cross-slice
-  dependencies.
-- Use the [script taxonomy](../scripts/README.md) when adding or moving repo
-  tooling under `scripts/`.
-
-## Where to Change Things
-
-| Intent | Start Here |
-|--------|------------|
-| Add a new trading strategy | `src/gpt_trader/features/live_trade/strategies/` + register in `src/gpt_trader/features/live_trade/factory.py` |
-| Add a new runtime guard | `src/gpt_trader/features/live_trade/execution/guards/` + register in `src/gpt_trader/features/live_trade/execution/guard_manager.py` |
-| Add a new pre-trade validation | `src/gpt_trader/features/live_trade/execution/validation.py` + `src/gpt_trader/features/live_trade/engines/strategy.py` |
-| Change order submission behavior | `src/gpt_trader/features/live_trade/execution/order_submission.py` + `src/gpt_trader/features/live_trade/execution/broker_executor.py` |
-| Modify risk rules | `src/gpt_trader/features/live_trade/risk/manager/__init__.py` + `src/gpt_trader/features/live_trade/risk/config.py` |
-| Add a new env config field | `src/gpt_trader/app/config/bot_config.py` (bot-level) or `src/gpt_trader/features/live_trade/risk/config.py` (risk manager) + `config/environments/.env.template` |
-| Modify degradation behavior | `src/gpt_trader/features/live_trade/degradation.py` |
-| Add/modify a health check | `src/gpt_trader/monitoring/health_checks.py` |
-| Add a Coinbase REST/WS endpoint | `src/gpt_trader/features/brokerages/coinbase/client/` + `src/gpt_trader/features/brokerages/coinbase/endpoints.py` |
-
-## Intentional Guard-Stack Bypasses
-
-The canonical order path routes through `TradingEngine._validate_and_place_order()` (live loop),
-with `TradingEngine.submit_order()` as the external wrapper. The following locations intentionally
-bypass guards:
-
-| Location | Purpose |
-|----------|---------|
-| `src/gpt_trader/features/live_trade/bot.py` (`TradingBot.flatten_and_stop()`) | Emergency position closure (must succeed even during risk trips) |
-| `src/gpt_trader/features/optimize/` | Optimization/backtesting flows using simulated brokers |
-
-## Code Style
-
-- Python 3.12 with Ruff + Black defaults (line length 100).
-- Type annotations for public interfaces; prefer `typing.Protocol` for guard or
-  strategy contracts.
-- Prefer `pathlib.Path` for filesystem access.
-- Use structured logging via `gpt_trader/logging` helpers (call `configure_logging`)
-  whenever a new module emits logs.
-
-## Error Handling
-
-- Raise domain-specific exceptions from `src/gpt_trader/features/live_trade/guard_errors.py`
-  or define new ones in the relevant slice.
-- Avoid swallowing exceptions; propagate up to the trading engine/guard manager so guard rails
-  can respond.
-- Provide actionable log messages (symbol, profile, guard name, etc.).
-
-## Testing
-
-- Place unit tests under `tests/unit/gpt_trader/` mirroring the module path.
-- Use fixtures for Coinbase mocks (`tests/fixtures/brokerages/` when available).
-- Run `uv run pytest -q` locally before submitting a pull request.
-- Add regression coverage for new guard conditions, telemetry counters, or CLI
-  flags.
-- **Subpackage testing**: When refactoring into subpackages, ensure each
-  submodule has independent test coverage. Maintain backward compatibility by
-  keeping facade modules (e.g., `risk/__init__.py`) that re-export the public
-  API.
-
-## Continuous Integration
-
-This section is the compact contributor-facing CI contract. The executable
-source of truth remains `.github/workflows/*.yml` plus GitHub branch protection.
-Current `main` branch protection requires only the named `CI` contexts listed in
-the first row below, with conversation resolution enabled and a required merge
-queue (#1127; strict up-to-date is off — the queue validates entries against the
-latest `main` via `merge_group` runs). Selected context-specific lanes self-skip by changed path while keeping
-those check names stable. The expected protection settings are machine-checked:
-`uv run python scripts/ci/check_branch_protection.py` (also surfaced as an
-`agent-pr-ready` advisory) fails when live GitHub settings drift from the
-contract this table describes.
-
-| Check / workflow job | Tier | Trigger | Blocking status | Why it exists |
-| --- | --- | --- | --- | --- |
-| `CI` / `Lint & Format`, `Docs Link Audit`, `Type Check`, `Test Guardrails`, `Unit Tests (Core)`, `Property Tests`, `Contract Tests`, `Integration Tests` | Required merge safety | `pull_request`, `merge_group`, push to `main`/`develop`, manual | Required by `main` branch protection | Fast repo integrity, docs reachability, type checks, and core/integration test coverage |
-| `CI` / `Windows Unit Tests (Portability)` and `Dependency Review` | Event/compatibility advisory | Windows follows `CI`; dependency review is `pull_request` only | Not branch-protection required | Covers Windows-sensitive units and high-severity dependency changes |
-| `CodeQL` / `Analyze Python` | Scheduled/security advisory | Push/PR to `main`/`develop`; weekly Monday 06:00 UTC | Not branch-protection required | GitHub code scanning |
-| `UV Lock Upgrade` / `Upgrade uv.lock` | Scheduled/advisory maintenance | Scheduled and manual | Not branch-protection required; may publish a branch or PR | Keeps dependency lock maintenance visible |
-| `Release Image` / `Build, Publish, and Scan Docker Image` | Release image publication/readiness | Version-tag push (`v*`) or manual run with a `release_note` reference | Outside the PR merge gate; publishes and scans images only | Builds, publishes, and scans Docker images; does not deploy staging/production, rollback, run canary/prod preflight, call broker/API commands, move money, or submit orders |
-| `Integration Tests (Manual)` / `Integration Suite (Mock Broker)` | Manual readiness | Manual | Outside the PR merge gate | Full mock-broker integration suite including `slow` tests; needs no secrets or live-broker access and does not grant live trading, canary, or order authority |
-
-The default PR workflow keeps required merge-safety check names stable for branch
-protection, but context-specific lanes self-skip when their inputs do not
-change: `Dependency Review` runs only for dependency manifest changes.
-
-### Local CI Command
-
-There is one canonical local validation command:
+Python 3.12 and `uv`.
 
 ```bash
-uv run local-ci
+uv sync --all-extras --dev
+cp config/environments/.env.template .env   # MOCK_BROKER=1 runs without credentials
+pre-commit install                          # ruff, black, pyupgrade, naming, test hygiene
 ```
 
-The default `pr` profile matches the GitHub `pull_request` required-check
-surface: lint/format, docs audits, type check, test guardrails, core unit
-tests plus the Stage 1 rails smoke, and the property/contract/integration
-suites. Two other profiles exist: `strict` (alias `full`) adds the canary
-readiness gate (`scripts/ci/check_readiness_gate.py --profile canary --strict`)
-as local/live evidence beyond the PR surface, and `quick` (alias `dev`) skips
-the readiness gate and the property/contract/integration suites for a fast
-development loop (re-enable a single suite with `--include-property-tests`,
-`--include-contract-tests`, or `--include-integration-tests`). The CLI banner
-prints the active profile and the status of each toggled check before
-executing.
+## Verify before a PR
 
-`make ci-required` survives as a thin alias that runs `uv run local-ci`
-verbatim.
+`uv run local-ci` is the local gate (`make ci-required` is an alias). Its
+default `pr` profile matches the GitHub `pull_request` required checks:
+lint/format, docs audits, type check, test guardrails, core unit tests plus the
+Stage 1 rails smoke, and the property, contract and integration suites.
+`--profile quick` skips the readiness gate and the slower suites; `--profile
+strict` adds the canary readiness gate (`scripts/ci/check_readiness_gate.py`)
+as local/live evidence beyond the PR surface.
 
-Need help diagnosing `uv run local-ci` failures? See the [Local CI troubleshooting](#local-ci-troubleshooting) steps below.
+The individual commands:
+
+```bash
+uv run ruff check . --fix && uv run black .
+uv run mypy src/gpt_trader
+uv run pytest tests/unit -n auto -q
+uv run agent-naming
+uv run python scripts/ci/check_import_boundaries.py
+uv run python scripts/maintenance/docs_link_audit.py
+uv run python scripts/maintenance/docs_reachability_check.py
+uv run python scripts/maintenance/docs_currency_scan.py --fail-on missing,stale
+uv run python scripts/maintenance/generate_decision_index.py --check
+```
+
+Run the docs commands whenever you touch `docs/`, the decision index check
+when you touch `docs/decisions/`, and `scripts/ci/check_deprecation_registry.py`
+when you add a deprecation shim.
+
+### CI contract
+
+`.github/workflows/*.yml` and branch protection are the executable truth;
+`scripts/ci/check_branch_protection.py` fails when live settings drift.
+
+| Check | Status |
+| --- | --- |
+| `CI` / Lint & Format, Docs Link Audit, Type Check, Test Guardrails, Unit Tests (Core), Property Tests, Contract Tests, Integration Tests | Required by `main` protection; also run on `merge_group` |
+| `CI` / Windows Unit Tests, Dependency Review, `CodeQL`, `UV Lock Upgrade` | Advisory |
+| `Release Image` (version-tag push) and `Integration Tests (Manual)` | Outside the merge gate; neither deploys, moves money or submits orders |
+
+Merges go through the merge queue, which re-validates each entry against the
+latest `main`, so strict up-to-date is off. Conversation resolution is
+required.
 
 ### Local CI troubleshooting
 
-Local CI (`uv run local-ci`) can report issues before the unit tests run.
-Readiness gate inputs can fail the strict/full profile; the gate applies only
-to the strict/full profile and direct readiness checks, not to the default
-`pr` profile or GitHub pull_request CI. When you hit one of these findings,
-follow the sequence below before re-running the command.
+The readiness gate applies only to the `strict` profile and direct readiness
+checks. When it reports a missing or stale report, refresh the inputs with
+`make canary-daily` (for another profile: `uv run gpt-trader report daily
+--profile <profile> --report-format both`, then `make preflight-readiness` and
+`make readiness-window` with `PREFLIGHT_PROFILE=<profile>` and
+`READINESS_REPORT_DIR=runtime_data/<profile>/reports`), then rerun
+`uv run python scripts/ci/check_readiness_gate.py --profile <profile>`. Raise
+`GPT_TRADER_READINESS_MAX_REPORT_AGE_DAYS` when your cadence exceeds seven
+days; `GPT_TRADER_READINESS_STRICT=1` turns degraded into failed. The gate
+also reads `runtime_data/<profile>/events.db` and the status file. Inputs and
+freshness windows: [READINESS.md](READINESS.md#readiness-gate-inputs--stale-data-interpretation).
 
-#### 1. Readiness gate staleness
+Formatting and lint failures are fixed by the commands above. An import error
+on a removed path means use the canonical path in
+[DEPRECATIONS.md](DEPRECATIONS.md).
 
-1. Local CI runs the readiness gate with `PREFLIGHT_PROFILE=canary` and `READINESS_REPORT_DIR=runtime_data/canary/reports`. Check the `scripts/ci/check_readiness_gate.py` or `uv run local-ci` output for `Readiness gate degraded …` (missing report) or `Readiness gate degraded: latest report … is X days old` errors.
-2. Generate fresh inputs for your profile (`canary` by default) by running `make canary-daily`, which creates a fresh daily report, `preflight_report_*.json`, and readiness window state. For other profiles, use `uv run gpt-trader report daily --profile <profile> --report-format both` plus `READINESS_REPORT_DIR=runtime_data/<profile>/reports PREFLIGHT_PROFILE=<profile> make preflight-readiness` and `make readiness-window PREFLIGHT_PROFILE=<profile>`.
-3. If the gate complains about report age, regenerate the report and optionally raise `GPT_TRADER_READINESS_MAX_REPORT_AGE_DAYS` (or pass `--max-report-age-days`) when your cadence is longer than the default 7 days; add `--strict` or set `GPT_TRADER_READINESS_STRICT=1` if you want the gate to fail instead of degrade.
-4. Rerun `uv run python scripts/ci/check_readiness_gate.py --profile <profile>` or `uv run local-ci` to confirm the gate now sees the refreshed data.
-5. The gate also reads `runtime_data/<profile>/events.db` for liveness and `var/data/status.json` (or your configured status file), so ensure those files exist alongside the report directory before rerunning local CI.
-6. For more background on the required files, freshness windows, and how stale data is interpreted, see [Readiness gate inputs & stale-data interpretation](READINESS.md#readiness-gate-inputs--stale-data-interpretation).
+## PR flow
 
-#### 2. Common CI failures and fixes
+1. Branch from current `main`; `uv sync` to pick up dependency changes.
+2. Write tests with the change. Unit tests mirror `src/` paths under
+   `tests/unit/`; property, contract and integration suites have their own
+   folders and markers. Use `monkeypatch`, never patch-style helpers; use the
+   `fake_clock` fixture instead of `time.sleep`; keep test modules under the
+   line limit in [test_hygiene.md](test_hygiene.md). Detail:
+   [testing.md](testing.md).
+3. Run `uv run local-ci`.
+4. Open the PR with `.github/pull_request_template.md` filled in; link the
+   issue with `Closes #<n>`; state risk impact and behaviour changes.
+5. Merge per [AGENTS.md](../AGENTS.md#merge-discipline).
 
-| Failure | Cause | Fix |
-|---------|-------|-----|
-| `black --check` | Formatting | Run `uv run black .` |
-| `ruff check` | Linting violations | Run `uv run ruff check --fix .` |
-| `mypy` errors | Type issues | Fix type annotations (pre-existing shim errors can be ignored) |
-| Import error | Wrong module path | Use canonical paths (see [DEPRECATIONS.md](DEPRECATIONS.md)) |
-| Test using deprecated path | Patch targets shim | Update to patch canonical module directly |
+Issue labels mark exceptions, not categories: `agent-ready`, `decision-needed`,
+`blocked` (name the dependency in the body), `trading-safety`, `agent-review`,
+plus the GitHub defaults. An unlabeled open issue is ordinary ready work;
+deferred work is closed with a comment. Do not add labels beyond this set.
+File new work with the Task issue form.
 
-## Documentation
+## Conventions
 
-- Update `docs/ARCHITECTURE.md`, `docs/RISK_INTEGRATION_GUIDE.md`, or other
-  relevant guides whenever behaviour changes.
-- Note CFM/`us_futures` gating whenever derivatives-resident code paths are touched (INTX perpetuals were removed; see [decision record](decisions/intx-default-derivatives-venue.md)).
-- Keep agent-facing references (`AGENTS.md`, `docs/agents/CODEBASE_MAP.md`) aligned with new workflows.
+- Ruff and Black defaults, line length 100; `pathlib.Path` for files;
+  structured logging through `gpt_trader/logging` (`configure_logging`).
+- Type annotations on public interfaces; `typing.Protocol` for guard and
+  strategy contracts. Names follow [naming.md](naming.md).
+- Raise domain exceptions (`src/gpt_trader/features/live_trade/guard_errors.py`
+  or the slice's own); never swallow them, so guards can respond. Log with
+  symbol, profile and guard name.
+- Wiring: `ApplicationContainer` for the retained runtime, explicit
+  dependencies for the recorded experiment ([DI_POLICY.md](DI_POLICY.md)).
+  Import across slices through surface modules;
+  `scripts/ci/check_import_boundaries.py` enforces the edges.
+- Refactor one seam at a time behind a stable facade; the acceptance signal is
+  behaviour tests for the moved responsibility, not line counts. The
+  [recorded-product decision](decisions/recorded-experiment-product.md) allows
+  replacing an obsolete local workflow and its tests together.
+- Note CFM/`us_futures` gating when you touch derivatives-resident paths
+  ([decision](decisions/intx-default-derivatives-venue.md)). Coordinate with
+  the operator before changing risk guard thresholds or order routing.
 
-## Operational Hygiene
+## Where to change things
 
-- Validate new behaviour with `uv run gpt-trader run --profile dev --dev-fast`.
-- Confirm metrics output updates when telemetry changes (`metrics.json`).
-- Coordinate with operations before altering risk guard thresholds or order
-  routing.
-- Preview stale Codex worktrees under `/tmp/gpt-*` with `python scripts/maintenance/cleanup_worktrees.py`.
-- Add `--apply` to remove the worktrees and delete their local branches.
-- Only `codex/*` or `issue/*` branches with missing upstream remotes are eligible.
+| Intent | Start here |
+| --- | --- |
+| Add a strategy | `src/gpt_trader/features/live_trade/strategies/`, register in `src/gpt_trader/features/live_trade/factory.py` |
+| Add a runtime guard | `src/gpt_trader/features/live_trade/execution/guards/`, register in `src/gpt_trader/features/live_trade/execution/guard_manager.py` |
+| Add a pre-trade validation | `src/gpt_trader/features/live_trade/execution/validation.py` and `src/gpt_trader/features/live_trade/engines/strategy.py` |
+| Change order submission | `src/gpt_trader/features/live_trade/execution/order_submission.py` and `src/gpt_trader/features/live_trade/execution/broker_executor.py` |
+| Change risk rules | `src/gpt_trader/features/live_trade/risk/manager/__init__.py` and `src/gpt_trader/features/live_trade/risk/config.py` |
+| Add a config field | `src/gpt_trader/app/config/bot_config.py` (bot) or `src/gpt_trader/features/live_trade/risk/config.py` (risk), plus `config/environments/.env.template` |
+| Change degradation | `src/gpt_trader/features/live_trade/degradation.py` |
+| Add a health check | `src/gpt_trader/monitoring/health_checks.py` |
+| Add a Coinbase endpoint | `src/gpt_trader/features/brokerages/coinbase/client/` and `src/gpt_trader/features/brokerages/coinbase/endpoints.py` |
+| Add a slice | `scripts/maintenance/feature_slice_scaffold.py --name <slice>` (`--with-tests`, `--with-readme`, `--dry-run`) |
 
-## Cleanup Passes
+`TradingBot.flatten_and_stop()` in `src/gpt_trader/features/live_trade/bot.py`
+and `src/gpt_trader/features/optimize/` intentionally bypass the guard stack.
 
-Cleanup work removes drift, clarifies the canonical path, or surfaces a behavior
-decision that must happen before more automation is added. It is not a feature
-backlog — track cleanup candidates as GitHub issues, not in a doc.
+## Retiring things
 
-- Keep each pass small enough to verify and commit independently. Start from a
-  clean working tree and end with `git status --short --branch` showing only the
-  branch line.
-- Prefer removing or rehoming stale surfaces before rewriting core behavior.
-- Treat broker/profile availability as implementation state, not product
-  approval. Consult [DIRECTION.md](DIRECTION.md) before adding or enabling
-  execution paths.
-- Do not preserve compatibility shims only because they exist: keep them
-  intentionally, deprecate them with a target in [DEPRECATIONS.md](DEPRECATIONS.md),
-  or remove them with tests.
-- A pass that uncovers an unsettled behavior question records it as a `proposed`
-  decision in [decisions/](decisions/README.md), not as a drive-by change.
-
-Prefer this verification bundle after passes that touch docs, scripts, or
-config:
-
-```bash
-git status --short --branch
-uv run ruff check .
-uv run python scripts/ci/check_legacy_patterns.py
-uv run python scripts/ci/check_deprecation_registry.py
-uv run python scripts/maintenance/docs_link_audit.py
-uv run python scripts/maintenance/docs_reachability_check.py
-uv run python scripts/maintenance/generate_decision_index.py --check
-git diff --check
-```
-
-## Submitting Changes
-
-The contribution workflow (environment setup, branching, PR checklist, and PR
-expectations) is owned by [CONTRIBUTING.md](../CONTRIBUTING.md). Legacy
-contribution guides were removed from the tree; if you need to review them,
-pull from repository history.
+Delete and rely on git history; record removals in
+[DEPRECATIONS.md](DEPRECATIONS.md) and fix inbound links. Keep a compatibility
+shim only on purpose, with a target in the registry. An unsettled behaviour
+question becomes a `proposed` [decision](decisions/README.md), not a drive-by
+change.

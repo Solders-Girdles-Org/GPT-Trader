@@ -205,7 +205,7 @@ instead of creating a duplicate.
 ## Stage 4: Queue
 
 GitHub issues are the durable queue. Labels mark exceptions only (the full
-model is owned by [CONTRIBUTING.md](../../CONTRIBUTING.md#issue-labels)); the
+model is owned by [Development Guidelines](../DEVELOPMENT_GUIDELINES.md#pr-flow)); the
 promoter emits:
 
 | Label | Meaning |
