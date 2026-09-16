@@ -7,30 +7,40 @@ from unittest.mock import MagicMock
 import pytest
 
 from gpt_trader.features.live_trade.execution.guards import RuntimeGuardState
+from gpt_trader.features.live_trade.execution.guards.liquidation_buffer import (
+    LiquidationBufferGuard,
+)
 from gpt_trader.features.live_trade.guard_errors import (
     RiskGuardDataCorrupt,
     RiskGuardDataUnavailable,
 )
 
 
-def test_guard_liquidation_buffers_basic(guard_manager, sample_guard_state, mock_risk_manager):
-    guard_manager.guard_liquidation_buffers(sample_guard_state, incremental=True)
+@pytest.fixture
+def liquidation_buffer_guard(mock_broker, mock_risk_manager) -> LiquidationBufferGuard:
+    return LiquidationBufferGuard(broker=mock_broker, risk_manager=mock_risk_manager)
+
+
+def test_guard_liquidation_buffers_basic(
+    liquidation_buffer_guard, sample_guard_state, mock_risk_manager
+):
+    liquidation_buffer_guard.check(sample_guard_state, incremental=True)
 
     mock_risk_manager.check_liquidation_buffer.assert_called_once()
 
 
 def test_guard_liquidation_buffers_full_with_risk_info(
-    guard_manager, sample_guard_state, mock_broker, mock_risk_manager
+    liquidation_buffer_guard, sample_guard_state, mock_broker, mock_risk_manager
 ):
     mock_broker.get_position_risk.return_value = {"liquidation_price": "45000"}
 
-    guard_manager.guard_liquidation_buffers(sample_guard_state, incremental=False)
+    liquidation_buffer_guard.check(sample_guard_state, incremental=False)
 
     mock_broker.get_position_risk.assert_called_once()
     mock_risk_manager.check_liquidation_buffer.assert_called_once()
 
 
-def test_guard_liquidation_buffers_corrupt_data(guard_manager, mock_risk_manager):
+def test_guard_liquidation_buffers_corrupt_data(liquidation_buffer_guard):
     bad_position = MagicMock()
     bad_position.symbol = "BAD"
     bad_position.mark_price = "invalid"
@@ -47,16 +57,16 @@ def test_guard_liquidation_buffers_corrupt_data(guard_manager, mock_risk_manager
     )
 
     with pytest.raises(RiskGuardDataCorrupt):
-        guard_manager.guard_liquidation_buffers(state, incremental=True)
+        liquidation_buffer_guard.check(state, incremental=True)
 
 
 def test_guard_liquidation_buffers_risk_fetch_failure(
-    guard_manager, sample_guard_state, mock_broker
+    liquidation_buffer_guard, sample_guard_state, mock_broker
 ):
     mock_broker.get_position_risk.side_effect = Exception("API error")
 
     with pytest.raises(RiskGuardDataUnavailable):
-        guard_manager.guard_liquidation_buffers(sample_guard_state, incremental=False)
+        liquidation_buffer_guard.check(sample_guard_state, incremental=False)
 
 
 class TestLiquidationBufferGuardEdgeCases:

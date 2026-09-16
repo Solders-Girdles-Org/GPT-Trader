@@ -509,32 +509,3 @@ class GuardManager:
                 operation="runtime_guards",
                 stage="exception",
             )
-
-    # Backward compatibility: legacy method names that delegate to guards
-    def log_guard_telemetry(self, state: RuntimeGuardState) -> None:
-        """Log P&L telemetry for all positions."""
-        PnLTelemetryGuard().check(state)
-
-    def guard_daily_loss(self, state: RuntimeGuardState) -> None:
-        """Check daily loss limits and cancel orders if breached."""
-        self._guards[1].check(state)  # DailyLossGuard is at index 1
-
-    def guard_liquidation_buffers(self, state: RuntimeGuardState, incremental: bool) -> None:
-        """Check liquidation price buffers for all positions."""
-        self._guards[2].check(state, incremental)  # LiquidationBufferGuard
-
-    def guard_mark_staleness(self, state: RuntimeGuardState) -> None:
-        """Check if mark prices are stale."""
-        self._guards[3].check(state)  # MarkStalenessGuard
-
-    def guard_risk_metrics(self, state: RuntimeGuardState) -> None:
-        """Append risk metrics for monitoring."""
-        self._guards[4].check(state)  # RiskMetricsGuard
-
-    def guard_volatility(self, state: RuntimeGuardState) -> None:
-        """Check volatility circuit breakers."""
-        self._guards[5].check(state)  # VolatilityGuard
-
-    def guard_api_health(self, state: RuntimeGuardState) -> None:
-        """Check API health (error rate, rate limits, circuit breakers)."""
-        self._guards[6].check(state)  # ApiHealthGuard

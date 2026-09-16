@@ -7,42 +7,67 @@ from unittest.mock import MagicMock
 import pytest
 
 from gpt_trader.features.live_trade.execution.guards import RuntimeGuardState
+from gpt_trader.features.live_trade.execution.guards.daily_loss import DailyLossGuard
 from gpt_trader.features.live_trade.guard_errors import RiskGuardActionError
 
 
-def test_guard_daily_loss_not_triggered(guard_manager, sample_guard_state, mock_risk_manager):
+def _empty_state(equity: str = "10000") -> RuntimeGuardState:
+    return RuntimeGuardState(
+        timestamp=time.time(),
+        balances=[],
+        equity=Decimal(equity),
+        positions=[],
+        positions_pnl={},
+        positions_dict={},
+        guard_events=[],
+    )
+
+
+def test_guard_daily_loss_not_triggered(sample_guard_state, mock_risk_manager):
     mock_risk_manager.track_daily_pnl.return_value = False
+    cancel_callback = MagicMock()
+    invalidate_callback = MagicMock()
+    guard = DailyLossGuard(
+        risk_manager=mock_risk_manager,
+        cancel_all_orders=cancel_callback,
+        invalidate_cache=invalidate_callback,
+    )
 
-    guard_manager.guard_daily_loss(sample_guard_state)
+    guard.check(sample_guard_state)
 
-    mock_risk_manager.track_daily_pnl.assert_called_once()
-
-
-def test_guard_daily_loss_triggered_cancels_orders(
-    guard_manager, sample_guard_state, mock_risk_manager, mock_broker
-):
-    mock_risk_manager.track_daily_pnl.return_value = True
-    mock_broker.cancel_order.return_value = True
-
-    assert len(guard_manager.open_orders) == 2
-
-    guard_manager.guard_daily_loss(sample_guard_state)
-
-    assert mock_broker.cancel_order.call_count == 2
-    assert len(guard_manager.open_orders) == 0
-    guard_manager._invalidate_cache_callback.assert_called()
+    mock_risk_manager.track_daily_pnl.assert_called_once_with(
+        sample_guard_state.equity, sample_guard_state.positions_pnl
+    )
+    cancel_callback.assert_not_called()
+    invalidate_callback.assert_not_called()
 
 
-def test_guard_daily_loss_cancel_failure(
-    guard_manager, sample_guard_state, mock_risk_manager, mock_broker
-):
-    mock_risk_manager.track_daily_pnl.return_value = True
-    mock_broker.cancel_order.side_effect = Exception("Cancel failed")
+@pytest.mark.usefixtures("disable_api_health_guard")
+class TestDailyLossGuardViaManager:
+    """The guard's callbacks are wired to the manager's order cancellation and cache."""
 
-    guard_manager.guard_daily_loss(sample_guard_state)
+    def test_triggered_cancels_open_orders(self, guard_manager, mock_risk_manager, mock_broker):
+        mock_risk_manager.track_daily_pnl.return_value = True
+        mock_broker.cancel_order.return_value = True
 
-    assert mock_broker.cancel_order.call_count == 2
-    assert len(guard_manager.open_orders) == 2
+        assert len(guard_manager.open_orders) == 2
+
+        guard_manager.run_guards_for_state(_empty_state(), incremental=False)
+
+        assert mock_broker.cancel_order.call_count == 2
+        assert guard_manager.open_orders == []
+        guard_manager._invalidate_cache_callback.assert_called()
+
+    def test_cancel_failure_keeps_orders_tracked(
+        self, guard_manager, mock_risk_manager, mock_broker
+    ):
+        mock_risk_manager.track_daily_pnl.return_value = True
+        mock_broker.cancel_order.side_effect = Exception("Cancel failed")
+
+        guard_manager.run_guards_for_state(_empty_state(), incremental=False)
+
+        assert mock_broker.cancel_order.call_count == 2
+        assert len(guard_manager.open_orders) == 2
 
 
 class TestDailyLossGuardEdgeCases:

@@ -7,18 +7,26 @@ from unittest.mock import MagicMock
 import pytest
 
 from gpt_trader.features.live_trade.execution.guards import RuntimeGuardState
+from gpt_trader.features.live_trade.execution.guards.volatility import VolatilityGuard
 from gpt_trader.features.live_trade.guard_errors import RiskGuardDataUnavailable
 
 
-def test_guard_volatility_skips_short_window(guard_manager, sample_guard_state, mock_risk_manager):
+@pytest.fixture
+def volatility_guard(mock_broker, mock_risk_manager) -> VolatilityGuard:
+    return VolatilityGuard(broker=mock_broker, risk_manager=mock_risk_manager)
+
+
+def test_guard_volatility_skips_short_window(
+    volatility_guard, sample_guard_state, mock_broker, mock_risk_manager
+):
     mock_risk_manager.config.volatility_window_periods = 3
 
-    guard_manager.guard_volatility(sample_guard_state)
+    volatility_guard.check(sample_guard_state)
 
-    guard_manager.broker.get_candles.assert_not_called()
+    mock_broker.get_candles.assert_not_called()
 
 
-def test_guard_volatility_skips_no_symbols(guard_manager, mock_risk_manager):
+def test_guard_volatility_skips_no_symbols(volatility_guard, mock_broker, mock_risk_manager):
     state = RuntimeGuardState(
         timestamp=time.time(),
         balances=[],
@@ -30,13 +38,13 @@ def test_guard_volatility_skips_no_symbols(guard_manager, mock_risk_manager):
     )
     mock_risk_manager.last_mark_update = {}
 
-    guard_manager.guard_volatility(state)
+    volatility_guard.check(state)
 
-    guard_manager.broker.get_candles.assert_not_called()
+    mock_broker.get_candles.assert_not_called()
 
 
 def test_guard_volatility_checks_symbols(
-    guard_manager, sample_guard_state, mock_broker, mock_risk_manager
+    volatility_guard, sample_guard_state, mock_broker, mock_risk_manager
 ):
     mock_risk_manager.last_mark_update = {"BTC-PERP": time.time()}
     mock_risk_manager.config.volatility_window_periods = 20
@@ -47,14 +55,14 @@ def test_guard_volatility_checks_symbols(
 
     mock_risk_manager.check_volatility_circuit_breaker.return_value = MagicMock(triggered=False)
 
-    guard_manager.guard_volatility(sample_guard_state)
+    volatility_guard.check(sample_guard_state)
 
     mock_broker.get_candles.assert_called()
     mock_risk_manager.check_volatility_circuit_breaker.assert_called()
 
 
 def test_guard_volatility_records_triggered_events(
-    guard_manager, sample_guard_state, mock_broker, mock_risk_manager
+    volatility_guard, sample_guard_state, mock_broker, mock_risk_manager
 ):
     mock_risk_manager.last_mark_update = {"BTC-PERP": time.time()}
     mock_risk_manager.config.volatility_window_periods = 20
@@ -68,21 +76,21 @@ def test_guard_volatility_records_triggered_events(
     outcome.to_payload.return_value = {"type": "volatility_breach"}
     mock_risk_manager.check_volatility_circuit_breaker.return_value = outcome
 
-    guard_manager.guard_volatility(sample_guard_state)
+    volatility_guard.check(sample_guard_state)
 
     assert len(sample_guard_state.guard_events) == 1
     assert sample_guard_state.guard_events[0]["type"] == "volatility_breach"
 
 
 def test_guard_volatility_fetch_failure(
-    guard_manager, sample_guard_state, mock_broker, mock_risk_manager
+    volatility_guard, sample_guard_state, mock_broker, mock_risk_manager
 ):
     mock_risk_manager.last_mark_update = {"BTC-PERP": time.time()}
     mock_risk_manager.config.volatility_window_periods = 20
     mock_broker.get_candles.side_effect = Exception("API error")
 
     with pytest.raises(RiskGuardDataUnavailable):
-        guard_manager.guard_volatility(sample_guard_state)
+        volatility_guard.check(sample_guard_state)
 
 
 class TestVolatilityGuardEdgeCases:
