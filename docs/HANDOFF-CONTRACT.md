@@ -5,10 +5,6 @@ last-updated: 2026-09-16
 
 # Cross-agent handoff contract
 
----
-status: current
----
-
 One packet shape for every handoff between Codex, Claude Code, Hermes and
 RJ, in any direction. RJ decides scope and acceptance; RJ does not carry
 text between agents.
