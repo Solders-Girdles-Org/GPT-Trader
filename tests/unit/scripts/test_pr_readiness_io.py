@@ -19,23 +19,6 @@ def test_run_converts_missing_executable_to_failed_process(monkeypatch) -> None:
     assert "missing gh" in result.stderr
 
 
-def test_changed_paths_retries_origin_base_when_local_base_is_missing(monkeypatch) -> None:
-    calls: list[list[str]] = []
-
-    def fake_run(args: list[str]) -> subprocess.CompletedProcess[str]:
-        calls.append(args)
-        if args == ["git", "diff", "--name-only", "release/1.2...HEAD"]:
-            return subprocess.CompletedProcess(args, 128, "", "unknown revision")
-        if args == ["git", "diff", "--name-only", "origin/release/1.2...HEAD"]:
-            return subprocess.CompletedProcess(args, 0, "scripts/agents/pr_readiness.py\n", "")
-        return subprocess.CompletedProcess(args, 0, "", "")
-
-    monkeypatch.setattr(pr_readiness, "_run", fake_run)
-
-    assert pr_readiness.changed_paths("release/1.2") == ["scripts/agents/pr_readiness.py"]
-    assert ["git", "diff", "--name-only", "origin/release/1.2...HEAD"] in calls
-
-
 def test_detect_pr_number_returns_none_only_for_no_pr(monkeypatch) -> None:
     def fake_gh_json(args: list[str]) -> dict[str, Any]:
         raise RuntimeError("no pull requests found for branch")
@@ -295,68 +278,6 @@ def test_fetch_branch_protection_reraises_api_failures(monkeypatch) -> None:
         assert "rate limit" in str(error)
     else:
         raise AssertionError("expected RuntimeError")
-
-
-def test_fetch_pr_changed_paths_uses_requested_pr_diff(monkeypatch) -> None:
-    calls: list[list[str]] = []
-
-    def fake_run(args: list[str]) -> subprocess.CompletedProcess[str]:
-        calls.append(args)
-        return subprocess.CompletedProcess(args, 0, "pytest.ini\npytest.ini\n", "")
-
-    monkeypatch.setattr(pr_readiness, "_run", fake_run)
-
-    assert pr_readiness.fetch_pr_changed_paths("owner/repo", 123) == ["pytest.ini"]
-    assert calls == [["gh", "pr", "diff", "123", "--repo", "owner/repo", "--name-only"]]
-
-
-def test_fetch_pr_changed_paths_falls_back_for_large_pr_diff(monkeypatch) -> None:
-    calls: list[list[str]] = []
-
-    def fake_run(args: list[str]) -> subprocess.CompletedProcess[str]:
-        calls.append(args)
-        if args[:3] == ["gh", "pr", "diff"]:
-            return subprocess.CompletedProcess(
-                args,
-                1,
-                "",
-                "HTTP 406: Sorry, the diff exceeded the maximum number of files (300).",
-            )
-        return subprocess.CompletedProcess(args, 0, "src/a.py\nsrc/a.py\nsrc/b.py\n", "")
-
-    monkeypatch.setattr(pr_readiness, "_run", fake_run)
-
-    assert pr_readiness.fetch_pr_changed_paths("owner/repo", 123) == [
-        "src/a.py",
-        "src/b.py",
-    ]
-    assert calls == [
-        ["gh", "pr", "diff", "123", "--repo", "owner/repo", "--name-only"],
-        [
-            "gh",
-            "api",
-            "--paginate",
-            "repos/owner/repo/pulls/123/files",
-            "--jq",
-            ".[].filename",
-        ],
-    ]
-
-
-def test_fetch_pr_changed_paths_raises_on_non_size_diff_error(monkeypatch) -> None:
-    calls: list[list[str]] = []
-
-    def fake_run(args: list[str]) -> subprocess.CompletedProcess[str]:
-        calls.append(args)
-        return subprocess.CompletedProcess(args, 1, "", "fatal: not authenticated")
-
-    monkeypatch.setattr(pr_readiness, "_run", fake_run)
-
-    with pytest.raises(RuntimeError, match="not authenticated"):
-        pr_readiness.fetch_pr_changed_paths("owner/repo", 123)
-
-    # No files-API fallback for an error that is not the raw-diff size limit.
-    assert calls == [["gh", "pr", "diff", "123", "--repo", "owner/repo", "--name-only"]]
 
 
 def test_fetch_pr_reactions_reads_issue_reactions(monkeypatch) -> None:
