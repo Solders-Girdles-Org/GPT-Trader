@@ -40,6 +40,8 @@ cannot provide. The metadata block and reachability are enforced by
 
 ## Quick Links
 
+- [Cross-agent handoff contract](HANDOFF-CONTRACT.md) - mirror of the workspace contract: code handoffs are the PR, reviews go to GitHub.
+
 | Document | Purpose |
 |----------|---------|
 | [Information Architecture](INFORMATION_ARCHITECTURE.md) | Where every fact lives + the anti-bloat rule |
