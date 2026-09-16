@@ -159,6 +159,17 @@ def guard_manager(
 
 
 @pytest.fixture
+def disable_api_health_guard(guard_manager: GuardManager, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make ApiHealthGuard a no-op so full manager runs work against the bare broker mock.
+
+    The bare MagicMock broker exposes a ``client`` whose resilience status is itself a
+    mock, which the guard would read as a breached error rate.
+    """
+    api_guard = next(guard for guard in guard_manager._guards if guard.name == "api_health")
+    monkeypatch.setattr(api_guard, "check", lambda state, incremental=False: None)
+
+
+@pytest.fixture
 def mock_position() -> MagicMock:
     pos = MagicMock()
     pos.symbol = "BTC-PERP"

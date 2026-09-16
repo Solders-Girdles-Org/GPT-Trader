@@ -1,4 +1,4 @@
-"""Tests for GuardManager order cancellation, safe-run, guard steps, and telemetry."""
+"""Tests for GuardManager order cancellation, safe-run, guard steps, and daily-loss escalation."""
 
 import time
 from decimal import Decimal
@@ -7,7 +7,6 @@ from unittest.mock import MagicMock
 import pytest
 
 import gpt_trader.features.live_trade.execution.guard_manager as guard_manager_module
-import gpt_trader.features.live_trade.execution.guards.pnl_telemetry as pnl_telemetry_module
 from gpt_trader.features.live_trade.execution.guards import RuntimeGuardState
 from gpt_trader.features.live_trade.guard_errors import (
     RiskGuardActionError,
@@ -97,6 +96,7 @@ def test_safe_run_runtime_guards_reduce_only_failure(
     guard_manager._invalidate_cache_callback.assert_called()
 
 
+@pytest.mark.usefixtures("disable_api_health_guard")
 def test_guard_daily_loss_escalation_boundary_triggers_once(
     guard_manager, mock_risk_manager, mock_broker
 ):
@@ -124,7 +124,7 @@ def test_guard_daily_loss_escalation_boundary_triggers_once(
         guard_events=[],
     )
 
-    guard_manager.guard_daily_loss(safe_state)
+    guard_manager.run_guards_for_state(safe_state, incremental=False)
 
     assert mock_broker.cancel_order.call_count == 0
     mock_risk_manager.set_reduce_only_mode.assert_not_called()
@@ -140,7 +140,7 @@ def test_guard_daily_loss_escalation_boundary_triggers_once(
         guard_events=[],
     )
 
-    guard_manager.guard_daily_loss(breach_state)
+    guard_manager.run_guards_for_state(breach_state, incremental=False)
 
     assert mock_broker.cancel_order.call_count == 2
     assert guard_manager.open_orders == []
@@ -149,7 +149,7 @@ def test_guard_daily_loss_escalation_boundary_triggers_once(
     )
     assert guard_manager._invalidate_cache_callback.call_count == 2
 
-    guard_manager.guard_daily_loss(breach_state)
+    guard_manager.run_guards_for_state(breach_state, incremental=False)
 
     assert mock_broker.cancel_order.call_count == 2
     assert guard_manager._invalidate_cache_callback.call_count == 3
@@ -168,13 +168,6 @@ def record_guard_failure_mock(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     mock_failure = MagicMock()
     monkeypatch.setattr(guard_manager_module, "record_guard_failure", mock_failure)
     return mock_failure
-
-
-@pytest.fixture
-def plog_mock(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
-    mock_plog = MagicMock()
-    monkeypatch.setattr(pnl_telemetry_module, "_get_plog", lambda: mock_plog)
-    return mock_plog
 
 
 def test_run_guard_step_success(guard_manager, record_guard_success_mock):
@@ -218,21 +211,6 @@ def test_run_guard_step_unexpected_error(guard_manager, record_guard_failure_moc
         guard_manager.run_guard_step("test_guard", func)
 
     assert record_guard_failure_mock.called
-
-
-def test_log_guard_telemetry_success(guard_manager, sample_guard_state, plog_mock):
-    guard_manager.log_guard_telemetry(sample_guard_state)
-
-    plog_mock.log_pnl.assert_called_once()
-
-
-def test_log_guard_telemetry_failure_raises(guard_manager, sample_guard_state, plog_mock):
-    plog_mock.log_pnl.side_effect = Exception("Telemetry failed")
-
-    with pytest.raises(RiskGuardTelemetryError) as exc_info:
-        guard_manager.log_guard_telemetry(sample_guard_state)
-
-    assert "BTC-PERP" in str(exc_info.value.details)
 
 
 def test_run_runtime_guards_incremental_resets_guard_events(
