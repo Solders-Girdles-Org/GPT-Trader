@@ -13,7 +13,7 @@ def test_get_scripts_dir_points_to_agents_scripts() -> None:
 
     assert scripts_dir.name == "agents"
     assert scripts_dir.parent.name == "scripts"
-    assert (scripts_dir / "quality_gate.py").exists()
+    assert (scripts_dir / "pr_readiness.py").exists()
 
 
 def test_run_script_missing_returns_one_and_stderr(tmp_path, capsys) -> None:
@@ -35,17 +35,17 @@ def test_run_script_missing_returns_one_and_stderr(tmp_path, capsys) -> None:
 def test_run_script_forwards_args_and_sets_cwd(tmp_path, monkeypatch) -> None:
     scripts_dir = tmp_path / "scripts" / "agents"
     scripts_dir.mkdir(parents=True)
-    script_path = scripts_dir / "quality_gate.py"
+    script_path = scripts_dir / "pr_readiness.py"
     script_path.write_text("# stub")
 
     monkeypatch.setattr(cli, "_get_scripts_dir", lambda: scripts_dir)
-    monkeypatch.setattr(sys, "argv", ["agent-check", "--format", "text"])
+    monkeypatch.setattr(sys, "argv", ["agent-pr-ready", "--format", "text"])
 
     run_mock = Mock()
     run_mock.return_value = Mock(returncode=7)
     monkeypatch.setattr(cli.subprocess, "run", run_mock)
 
-    result = cli._run_script("quality_gate.py")
+    result = cli._run_script("pr_readiness.py")
 
     run_mock.assert_called_once_with(
         [sys.executable, str(script_path), "--format", "text"],
@@ -57,13 +57,8 @@ def test_run_script_forwards_args_and_sets_cwd(tmp_path, monkeypatch) -> None:
 @pytest.mark.parametrize(
     ("func", "script_name"),
     [
-        (cli.check, "quality_gate.py"),
-        (cli.impact, "change_impact.py"),
-        (cli.map_deps, "dependency_graph.py"),
-        (cli.tests, "generate_test_inventory.py"),
         (cli.naming, "naming_inventory.py"),
-        (cli.health, "health_report.py"),
-        (cli.regenerate, "regenerate_all.py"),
+        (cli.pr_ready, "pr_readiness.py"),
     ],
 )
 def test_entrypoints_call_run_script(func, script_name, monkeypatch) -> None:

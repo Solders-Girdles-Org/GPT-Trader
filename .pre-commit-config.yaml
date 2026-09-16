@@ -7,7 +7,6 @@ repos:
     -   id: check-yaml
         args: [--allow-multiple-documents]
     -   id: check-added-large-files
-        exclude: ^var/agents/testing/test_inventory\.json$
     -   id: mixed-line-ending
 
 -   repo: https://github.com/astral-sh/ruff-pre-commit
@@ -45,14 +44,6 @@ repos:
         pass_filenames: false
         # Change-gated: reads only tests/** (markers + tests/_triage manifest).
         files: ^tests/
-    -   id: dedupe-manifest
-        name: dedupe-manifest
-        entry: uv run python scripts/ci/check_dedupe_manifest.py
-        language: system
-        pass_filenames: false
-        # Deliberately always-run: validates the committed manifest against the
-        # regenerator, and staleness has no single path trigger (#1134).
-        always_run: true
     -   id: naming-check
         name: naming-standards
         entry: uv run python scripts/agents/naming_inventory.py --strict --quiet

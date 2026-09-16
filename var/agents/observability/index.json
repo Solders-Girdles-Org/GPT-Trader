@@ -1,8 +1,0 @@
-{
-  "description": "Prometheus-style metric catalog (static scan).",
-  "files": {
-    "metrics_catalog_json": "metrics_catalog.json",
-    "metrics_catalog_markdown": "metrics_catalog.md"
-  },
-  "version": "1.0"
-}

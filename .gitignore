@@ -122,10 +122,9 @@ coverage.json
 pip-audit-report.json
 .claude-flow/
 .hypothesis/
-# var/ directory - ignore all except agents/
+# var/ directory - local runtime state only
 var/*
 !var/README.md
-!var/agents/
 .mypy_cache/
 .pytest_cache/
 .kilocode/
@@ -143,24 +142,3 @@ docs/agents/naming_inventory.md
 status.json
 snapshot_report.html
 preflight_report_*.json
-var/agents/health/health_report.*
-var/agents/health/chaos_smoke.*
-var/agents/health/chaos_week.*
-var/agents/health/agent_regenerate_verify.txt
-# Large (~1.8MB, ~70% of var/agents), high-churn, machine-only test inventory.
-# Regenerated on demand (uv run agent-regenerate) and shipped via the scheduled
-# agent-artifacts refresh package when present; not committed. Not doc-linked.
-var/agents/testing/test_inventory.json
-# High-churn, machine-only generated artifacts (same treatment as
-# test_inventory.json above): regenerated on demand (uv run agent-regenerate)
-# and shipped via the scheduled agent-artifacts refresh package when present;
-# not committed. The curated reasoning/*.md summaries stay tracked.
-# Decision executed 2026-07-01 (owner-approved); scope contract in docs/agents/README.md.
-var/agents/reasoning/*.json
-var/agents/reasoning/*.dot
-var/agents/testing/source_test_map.json
-# Remaining high-churn testing inventories (regenerate on nearly every PR that
-# touches tests): same optional_files treatment. Decision accepted 2026-07-04;
-# see docs/decisions/stop-committing-high-churn-agent-inventories.md (#1130).
-var/agents/testing/index.json
-var/agents/testing/markers.json
