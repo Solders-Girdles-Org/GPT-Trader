@@ -15,23 +15,17 @@ findings -- exactly the gap that lets "green-but-unreviewed" work slip through.
 - Unresolved review threads, with parsed severity, author, and location.
 - Current-head review/reaction signals, including the repo's Codex connector
   ``+1`` convention.
-- Generated ``var/agents/`` context freshness via ``agent-regenerate --verify``
-  when the diff touches files that feed those artifacts.
 
 It prints a verdict and a markdown receipt suitable for a PR body. By default it
 always exits 0 (report, do not block); pass ``--exit-on-not-ready`` to opt into
 an advisory non-zero exit for scripts that *want* a gate.
-
-For change/test selection, use ``agent-impact`` -- this tool intentionally does
-not duplicate that analysis.
 
 Usage:
     uv run agent-pr-ready                      # auto-detect PR for current branch
     uv run agent-pr-ready --pr 1056
     uv run agent-pr-ready --format markdown    # receipt for the PR body
     uv run agent-pr-ready --format json
-    uv run agent-pr-ready --no-github          # local artifact freshness only
-    uv run agent-pr-ready --skip-artifact-verify
+    uv run agent-pr-ready --no-github          # skip gh; local-only report
     uv run agent-pr-ready --require-current-head-review-signal
     uv run agent-pr-ready --exit-on-not-ready  # opt-in advisory gate
 """
@@ -50,16 +44,6 @@ from typing import Any
 from urllib.parse import quote
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-
-# Changes under these roots can change generated var/agents/ context, so the
-# freshness check (agent-regenerate --verify) is worth running before merge.
-_ARTIFACT_SOURCE_PREFIXES = ("src/", "tests/", "scripts/", "config/")
-_ARTIFACT_SOURCE_FILES = (
-    "pyproject.toml",
-    "pytest.ini",
-    "config/environments/.env.template",
-)
-_ARTIFACT_SOURCE_SUFFIXES = (".py", ".yaml", ".yml")
 
 # Severity tokens emitted by review bots (CodeRabbit, Codex) in comment bodies,
 # ordered most-severe first so the highest match wins.
@@ -148,39 +132,15 @@ class Finding:
     message: str
 
 
-@dataclass(frozen=True)
-class ArtifactFreshness:
-    required: bool
-    checked: bool
-    fresh: bool | None
-    command: str | None
-    summary: str
-
-
 @dataclass
 class ReadinessReport:
     ready: bool
     findings: list[Finding] = field(default_factory=list)
-    artifact_advisory: str | None = None
-    artifact_freshness: ArtifactFreshness | None = None
 
 
 # --------------------------------------------------------------------------- #
 # Pure logic (unit-tested): no git, no gh, no I/O.
 # --------------------------------------------------------------------------- #
-def affects_agent_artifacts(paths: list[str]) -> bool:
-    """True when any changed path can make generated var/agents/ context stale."""
-    for raw in paths:
-        path = raw.strip()
-        if not path:
-            continue
-        if path in _ARTIFACT_SOURCE_FILES:
-            return True
-        if path.startswith(_ARTIFACT_SOURCE_PREFIXES) and path.endswith(_ARTIFACT_SOURCE_SUFFIXES):
-            return True
-    return False
-
-
 def parse_severity(body: str) -> str | None:
     """Extract a normalized severity from a review comment body, if present."""
     for label, pattern in _SEVERITY_PATTERNS:
@@ -632,10 +592,6 @@ def format_text(state: PullRequestState | None, report: ReadinessReport) -> str:
         lines.append(f"review threads: {unresolved} unresolved / {len(state.threads)} total")
         lines.append(f"current-head review signals: {_review_signal_summary(state)}")
     lines.append(f"verdict: {_verdict(report)}")
-    if report.artifact_freshness:
-        lines.append(f"artifacts: {report.artifact_freshness.summary}")
-    elif report.artifact_advisory:
-        lines.append(f"artifacts: {report.artifact_advisory}")
     lines.append("findings:")
     for finding in report.findings:
         glyph = _SEVERITY_GLYPH.get(finding.severity, "-")
@@ -659,10 +615,6 @@ def format_markdown(state: PullRequestState | None, report: ReadinessReport) -> 
         lines.append(f"- Current-head review signals: {_review_signal_summary(state)}")
         if state.protection.conversation_resolution:
             lines.append("- Conversation resolution: **required** by branch protection")
-    if report.artifact_freshness:
-        lines.append(f"- Artifacts: {report.artifact_freshness.summary}")
-    elif report.artifact_advisory:
-        lines.append(f"- Artifacts: {report.artifact_advisory}")
     lines.append("")
     lines.append("### Findings")
     for finding in report.findings:
@@ -675,7 +627,6 @@ def format_json(state: PullRequestState | None, report: ReadinessReport) -> str:
     payload: dict[str, Any] = {
         "ready": report.ready,
         "verdict": _verdict(report),
-        "artifact_advisory": report.artifact_advisory,
         "findings": [asdict(finding) for finding in report.findings],
     }
     if state is not None:
@@ -691,8 +642,6 @@ def format_json(state: PullRequestState | None, report: ReadinessReport) -> str:
             "review_signals": [asdict(signal) for signal in state.review_signals],
             "protection": asdict(state.protection),
         }
-    if report.artifact_freshness is not None:
-        payload["artifact_freshness"] = asdict(report.artifact_freshness)
     return json.dumps(payload, indent=2)
 
 
@@ -704,26 +653,6 @@ def _run(args: list[str]) -> subprocess.CompletedProcess[str]:
         return subprocess.run(args, capture_output=True, text=True, cwd=PROJECT_ROOT, check=False)
     except OSError as error:
         return subprocess.CompletedProcess(args, 127, "", str(error))
-
-
-def changed_paths(base: str) -> list[str]:
-    """Changed files for the current branch vs base (committed + working tree)."""
-    seen: list[str] = []
-    base_specs = [f"{base}...HEAD"]
-    if not base.startswith("origin/"):
-        base_specs.append(f"origin/{base}...HEAD")
-    commands = [["git", "diff", "--name-only", spec] for spec in base_specs] + [
-        ["git", "diff", "--name-only"],
-        ["git", "diff", "--name-only", "--cached"],
-    ]
-    for args in commands:
-        result = _run(args)
-        if result.returncode == 0:
-            for line in result.stdout.splitlines():
-                path = line.strip()
-                if path and path not in seen:
-                    seen.append(path)
-    return seen
 
 
 def _gh_json(args: list[str]) -> Any:
@@ -985,49 +914,6 @@ query($owner: String!, $name: String!, $number: Int!) {
     return None, None
 
 
-def fetch_pr_changed_paths(repo: str, pr: int) -> list[str]:
-    result = _run(["gh", "pr", "diff", str(pr), "--repo", repo, "--name-only"])
-    if result.returncode != 0:
-        message = result.stderr.strip() or f"Could not load PR #{pr} diff"
-        if _is_pr_diff_too_large(message):
-            return fetch_pr_changed_paths_from_files_api(repo, pr)
-        raise RuntimeError(message)
-    return _unique_lines(result.stdout)
-
-
-def _is_pr_diff_too_large(message: str) -> bool:
-    normalized = message.lower()
-    return "http 406" in normalized and "diff exceeded" in normalized
-
-
-def fetch_pr_changed_paths_from_files_api(repo: str, pr: int) -> list[str]:
-    """Changed files for large PRs where GitHub refuses the raw diff endpoint."""
-    if repo.count("/") != 1:
-        raise RuntimeError("--repo must use owner/name format")
-    result = _run(
-        [
-            "gh",
-            "api",
-            "--paginate",
-            f"repos/{repo}/pulls/{pr}/files",
-            "--jq",
-            ".[].filename",
-        ]
-    )
-    if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or f"Could not load PR #{pr} files")
-    return _unique_lines(result.stdout)
-
-
-def _unique_lines(output: str) -> list[str]:
-    seen: list[str] = []
-    for line in output.splitlines():
-        path = line.strip()
-        if path and path not in seen:
-            seen.append(path)
-    return seen
-
-
 def fetch_review_threads(repo: str, pr: int) -> list[dict[str, Any]]:
     if repo.count("/") != 1:
         raise RuntimeError("--repo must use owner/name format")
@@ -1099,87 +985,6 @@ query($owner: String!, $name: String!, $number: Int!, $cursor: String) {
 # --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
-def _local_head_oid() -> str:
-    result = _run(["git", "rev-parse", "HEAD"])
-    return result.stdout.strip() if result.returncode == 0 else ""
-
-
-def check_artifact_freshness(
-    paths: list[str], *, verify: bool = True, head_oid: str | None = None
-) -> ArtifactFreshness:
-    """Verify generated agent artifacts when changed paths can affect them.
-
-    ``agent-regenerate --verify`` inspects the *local* working tree. When a PR is
-    assessed from a different checkout (e.g. ``--pr N`` run from ``main``), that
-    local tree is unrelated to the PR, so pass ``head_oid`` to guard against
-    attributing local freshness/staleness to the PR: if the local HEAD does not
-    match the PR head, the verify is skipped with an explanatory note instead of
-    producing a misleading verified/blocked verdict.
-    """
-    if not affects_agent_artifacts(paths):
-        return ArtifactFreshness(
-            required=False,
-            checked=False,
-            fresh=True,
-            command=None,
-            summary="not required (diff does not touch generated-context sources).",
-        )
-    command = "uv run agent-regenerate --verify"
-    if not verify:
-        return ArtifactFreshness(
-            required=True,
-            checked=False,
-            fresh=None,
-            command=command,
-            summary=f"not checked; run `{command}` before merge.",
-        )
-    if head_oid:
-        local_head = _local_head_oid()
-        if local_head and not _head_matches(local_head, head_oid):
-            return ArtifactFreshness(
-                required=True,
-                checked=False,
-                fresh=None,
-                command=command,
-                summary=(
-                    f"not checked; local checkout {local_head[:8]} differs from PR head "
-                    f"{head_oid[:8]}. Run `{command}` from the PR branch to verify."
-                ),
-            )
-    result = _run(["uv", "run", "agent-regenerate", "--verify"])
-    if result.returncode == 0:
-        return ArtifactFreshness(
-            required=True,
-            checked=True,
-            fresh=True,
-            command=command,
-            summary=f"verified fresh via `{command}`.",
-        )
-    detail = _process_summary(result)
-    return ArtifactFreshness(
-        required=True,
-        checked=True,
-        fresh=False,
-        command=command,
-        summary=f"stale or unverifiable; `{command}` exited {result.returncode}. {detail}",
-    )
-
-
-def apply_artifact_freshness(
-    report: ReadinessReport,
-    freshness: ArtifactFreshness,
-) -> None:
-    report.artifact_freshness = freshness
-    report.artifact_advisory = freshness.summary if freshness.required else None
-    if freshness.required and freshness.checked and freshness.fresh is False:
-        _remove_clean_mergeable_info(report.findings)
-        report.findings.append(Finding("blocker", freshness.summary))
-    elif freshness.required and not freshness.checked:
-        _remove_clean_mergeable_info(report.findings)
-        report.findings.append(Finding("warning", freshness.summary))
-    report.ready = not any(finding.severity == "blocker" for finding in report.findings)
-
-
 def apply_protection_drift(
     report: ReadinessReport,
     protection_raw: dict[str, Any] | None,
@@ -1207,14 +1012,6 @@ def apply_protection_drift(
         _remove_clean_mergeable_info(report.findings)
     for item in drift:
         report.findings.append(Finding("warning", f"Branch protection drift: {item}"))
-
-
-def _process_summary(result: subprocess.CompletedProcess[str]) -> str:
-    text = "\n".join(part for part in (result.stdout, result.stderr) if part)
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    if not lines:
-        return ""
-    return " ".join(lines[-3:])
 
 
 def _remove_clean_mergeable_info(findings: list[Finding]) -> None:
@@ -1248,12 +1045,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--no-github",
         action="store_true",
-        help="Skip gh calls; report only the local artifact-freshness status.",
-    )
-    parser.add_argument(
-        "--skip-artifact-verify",
-        action="store_true",
-        help="Do not run agent-regenerate --verify; report artifact freshness as unchecked.",
+        help="Skip gh calls; print a local-only report without PR state.",
     )
     parser.add_argument(
         "--review-bot",
@@ -1288,15 +1080,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
     if args.no_github:
-        freshness = check_artifact_freshness(
-            changed_paths(args.base or "main"),
-            verify=not args.skip_artifact_verify,
-        )
         report = ReadinessReport(
             ready=True,
             findings=[Finding("info", "GitHub checks skipped (--no-github).")],
         )
-        apply_artifact_freshness(report, freshness)
         print(_render(args.format, None, report))
         return 1 if (args.exit_on_not_ready and not report.ready) else 0
 
@@ -1307,27 +1094,16 @@ def main(argv: list[str] | None = None) -> int:
         return _github_failure(args, f"Could not reach GitHub via gh: {error}")
 
     if pr is None:
-        freshness = check_artifact_freshness(
-            changed_paths(args.base or "main"),
-            verify=not args.skip_artifact_verify,
-        )
         report = ReadinessReport(
             ready=True,
             findings=[Finding("info", "No open PR for the current branch.")],
         )
-        apply_artifact_freshness(report, freshness)
         print(_render(args.format, None, report))
         return 1 if (args.exit_on_not_ready and not report.ready) else 0
 
     try:
         pr_payload = fetch_pr_payload(repo, pr)
         base_ref_name = str(args.base or pr_payload.get("baseRefName") or "main")
-        paths = fetch_pr_changed_paths(repo, pr)
-        freshness = check_artifact_freshness(
-            paths,
-            verify=not args.skip_artifact_verify,
-            head_oid=str(pr_payload.get("headRefOid") or "") or None,
-        )
         protection_raw = fetch_branch_protection(repo, base_ref_name)
         protection = parse_branch_protection(protection_raw)
         merge_queue_active = fetch_merge_queue_active(repo, base_ref_name)
@@ -1351,7 +1127,6 @@ def main(argv: list[str] | None = None) -> int:
         require_current_head_review_signal=args.require_current_head_review_signal,
         merge_queue_active=merge_queue_active,
     )
-    apply_artifact_freshness(report, freshness)
     apply_protection_drift(report, protection_raw, base_ref_name)
     print(_render(args.format, state, report))
     return 1 if (args.exit_on_not_ready and not report.ready) else 0
@@ -1366,15 +1141,10 @@ def _render(fmt: str, state: PullRequestState | None, report: ReadinessReport) -
 
 
 def _github_failure(args: argparse.Namespace, message: str) -> int:
-    freshness = check_artifact_freshness(
-        changed_paths(args.base or "main"),
-        verify=not args.skip_artifact_verify,
-    )
     report = ReadinessReport(
         ready=False,
         findings=[Finding("blocker", message)],
     )
-    apply_artifact_freshness(report, freshness)
     print(_render(args.format, None, report))
     return 1 if args.exit_on_not_ready else 0
 

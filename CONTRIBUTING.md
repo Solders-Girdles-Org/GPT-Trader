@@ -39,7 +39,7 @@ That's it! Now, every time you run `git commit`, the pre-commit hooks will run a
 - Document any skips or deselections tied to legacy code paths.
 
 ### Pre-PR Verification Checklist
-1. Review `docs/README.md` and prefer code + `var/agents/**` generated inventories for anything that drifts.
+1. Review `docs/README.md` and prefer the code (`rg`) over prose for anything that drifts.
 2. Refresh dependencies: `uv sync`.
 3. Run the full local gate: `uv run local-ci` — the command set and
    blocking/advisory contract are owned by

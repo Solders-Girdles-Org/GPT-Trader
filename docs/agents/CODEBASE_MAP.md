@@ -20,7 +20,7 @@ Use this as a “where do I start?” index when you already know what you’re 
 | Modify live execution (guarded engine) | `src/gpt_trader/features/live_trade/engines/strategy.py` | Live loop uses `TradingEngine._validate_and_place_order()`; `submit_order()` is external entrypoint |
 | Change risk rules | `src/gpt_trader/features/live_trade/risk/manager/__init__.py` | Also see runtime guards in `src/gpt_trader/features/live_trade/execution/guards/` |
 | Add monitoring / alerts | `src/gpt_trader/monitoring/` | Heartbeat/status wiring in `src/gpt_trader/features/live_trade/engines/strategy.py` |
-| Backtesting / simulation | `src/gpt_trader/backtesting/` | Entrypoints vary; start with `var/agents/reasoning/backtest_entrypoints_map.md` |
+| Backtesting / simulation | `src/gpt_trader/backtesting/` | Entrypoints vary; start with `scripts/analysis/backtest_runner.py` |
 | Security & secrets | `src/gpt_trader/security/` | Reference: `docs/SECURITY.md` |
 
 ## Golden Path
@@ -32,6 +32,5 @@ Use this as a “where do I start?” index when you already know what you’re 
 ## Useful Commands
 
 - `uv run gpt-trader --help`
-- `uv run agent-map` (dependency map tooling)
-- `uv run agent-tests` (test selection helpers)
 - `rg -n "symbol" src/gpt_trader/features/live_trade` (fast codebase search)
+- `uv run pytest tests/unit/<mirrored path> -q` (tests mirror `src/` paths)

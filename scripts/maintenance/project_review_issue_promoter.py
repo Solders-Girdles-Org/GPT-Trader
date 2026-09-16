@@ -87,29 +87,29 @@ def read_packet(path: Path | None) -> dict[str, Any]:
 def example_packet() -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
-        "finding_id": "agent-artifacts-stale-example",
-        "title": "Refresh stale generated agent artifacts",
+        "finding_id": "docs-link-audit-example",
+        "title": "Fix dangling links reported by the docs link audit",
         "severity": "low",
-        "category": "ci",
-        "summary": "The generated agent context no longer verifies cleanly.",
+        "category": "docs",
+        "summary": "The docs link audit reports links to paths that no longer exist.",
         "evidence": [
             {
                 "kind": "command",
-                "command": "uv run agent-regenerate --verify",
-                "detail": "Verify reported stale generated files.",
+                "command": "uv run python scripts/maintenance/docs_link_audit.py",
+                "detail": "The audit reported dangling repo-path links.",
             }
         ],
         "scope": {
-            "paths": ["var/agents"],
+            "paths": ["docs"],
             "out_of_scope": ["live trading changes"],
             "touches_trading_execution": False,
         },
         "dedupe": {
-            "search_terms": ["agent-regenerate", "stale generated agent artifacts"],
+            "search_terms": ["docs link audit", "dangling links"],
             "related_issues": [],
         },
-        "acceptance_criteria": ["`uv run agent-regenerate --verify` passes."],
-        "suggested_verification": ["uv run agent-regenerate --verify"],
+        "acceptance_criteria": ["`uv run python scripts/maintenance/docs_link_audit.py` passes."],
+        "suggested_verification": ["uv run python scripts/maintenance/docs_link_audit.py"],
         "routing": {
             "candidate_for": ["implementation"],
             "decision_needed": False,

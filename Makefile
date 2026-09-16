@@ -1,5 +1,5 @@
 .PHONY: dev-up dev-down lint fmt fmt-check lint-fix lint-fmt-fix typecheck docs-audit test-guardrails ci-required test smoke preflight preflight-readiness dash cov cov-critical clean clean-dry-run scaffold-slice \
-	readiness-window agent-setup agent-impact agent-impact-full agent-health-fast agent-health-full agent-chaos-smoke agent-chaos-week \
+	readiness-window agent-setup agent-chaos-smoke agent-chaos-week \
 	agent-docs-links canary-liveness canary-liveness-check canary-daily canary-decision-traces \
 	canary-decision-trace-probe canary-runtime-info canary-stop canary-start \
 	canary-restart canary-status canary-watchdog canary-watchdog-once ops-controls-smoke \
@@ -9,10 +9,9 @@
 
 COMPOSE_DIR=deploy/gpt_trader/docker
 COMPOSE_FILE=$(COMPOSE_DIR)/docker-compose.yaml
-AGENT_HEALTH_FAST_QUALITY_CHECKS?=lint,format,types
 AGENT_CHAOS_DAYS?=2
 AGENT_CHAOS_SCENARIO?=volatile_market
-AGENT_CHAOS_OUTPUT?=var/agents/health/chaos_smoke.json
+AGENT_CHAOS_OUTPUT?=var/results/chaos_smoke.json
 AGENT_CHAOS_MAX_DRAWDOWN_PCT?=10
 AGENT_CHAOS_MAX_FEES_PCT?=4.5
 PREFLIGHT_PROFILE?=canary
@@ -69,7 +68,6 @@ test-guardrails:
 	uv run python scripts/ci/check_legacy_patterns.py
 	uv run python scripts/ci/check_import_boundaries.py
 	uv run python scripts/ci/check_legacy_test_triage.py
-	uv run python scripts/ci/check_dedupe_manifest.py
 	$(MAKE) test-triage-check
 
 stage1-smoke:
@@ -264,25 +262,8 @@ scaffold-slice:
 agent-setup:
 	uv sync --all-extras
 
-agent-impact:
-	uv run agent-impact --from-git --include-importers --source-files --exclude-integration --format text
-
-agent-impact-full:
-	uv run agent-impact --from-git --include-importers --format text
-
-agent-health-fast:
-	BROKER=coinbase COINBASE_SANDBOX=1 COINBASE_API_MODE=advanced \
-	RISK_MAX_LEVERAGE=3 RISK_MAX_POSITION_PCT_PER_SYMBOL=0.10 \
-	uv run agent-health --quality-checks $(AGENT_HEALTH_FAST_QUALITY_CHECKS) \
-	--format json --output var/agents/health/health_report.json
-
-agent-health-full:
-	BROKER=coinbase COINBASE_SANDBOX=1 COINBASE_API_MODE=advanced \
-	RISK_MAX_LEVERAGE=3 RISK_MAX_POSITION_PCT_PER_SYMBOL=0.10 \
-	uv run agent-health --format json --output var/agents/health/health_report.json \
-	--text-output var/agents/health/health_report.txt --pytest-args -q tests/unit
-
 agent-chaos-smoke:
+	mkdir -p $(dir $(AGENT_CHAOS_OUTPUT))
 	uv run python scripts/analysis/paper_trade_stress_test.py \
 		--days $(AGENT_CHAOS_DAYS) \
 		--chaos \
@@ -292,7 +273,7 @@ agent-chaos-smoke:
 		--export $(AGENT_CHAOS_OUTPUT)
 
 agent-chaos-week:
-	AGENT_CHAOS_DAYS=7 AGENT_CHAOS_OUTPUT=var/agents/health/chaos_week.json \
+	AGENT_CHAOS_DAYS=7 AGENT_CHAOS_OUTPUT=var/results/chaos_week.json \
 	$(MAKE) agent-chaos-smoke
 
 agent-docs-links:

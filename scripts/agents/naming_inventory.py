@@ -4,7 +4,7 @@ Usage::
 
     python scripts/agents/naming_inventory.py \
         --summary docs/agents/naming_inventory.md \
-        --json var/agents/naming_inventory.json
+        --json var/results/naming_inventory.json
 """
 
 from __future__ import annotations
@@ -112,7 +112,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--json",
         type=Path,
-        default=Path("var/agents/naming_inventory.json"),
+        default=Path("var/results/naming_inventory.json"),
         help="Optional JSON report output path.",
     )
     parser.add_argument(

@@ -17,7 +17,7 @@ script already wraps them.
 | `scripts/monitoring/` | Monitoring exporters, dashboards, and canary observation harnesses. These should read runtime data or emit metrics, not own core execution. | Prometheus exporter, perps dashboard, reduce-only canary probe |
 | `scripts/ci/` | Deterministic checks used by CI, local CI, pre-commit hooks, or Makefile quality gates. | legacy-pattern checks, deprecation registry checks |
 | `scripts/maintenance/` | Repo hygiene, docs audits, scaffolding, and workspace cleanup tools. These are maintainer utilities, not trading-system runtime paths. | docs link audit, docs reachability check, feature-slice scaffold |
-| `scripts/agents/` | AI-agent and generated-inventory helpers. Changes here can affect `var/agents/**`; run `uv run agent-regenerate --verify` after edits. | test inventory, schema exports, agent health reports |
+| `scripts/agents/` | Agent-facing commands behind the `agent-*` entry points. | naming scan, PR readiness reconciliation |
 
 ## Root Exceptions
 
@@ -51,4 +51,3 @@ When moving, deleting, or renaming a script:
 3. Adjust any direct-execution path shim that depends on `Path(__file__).resolve().parents[...]`.
 4. Search for stale path references with `rg "old/script/path.py"`.
 5. Run the focused checks for the changed area.
-6. Run `uv run agent-regenerate --verify` when the move affects generated-artifact inputs or docs inventories.

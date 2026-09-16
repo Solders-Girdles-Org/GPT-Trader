@@ -296,6 +296,5 @@ shipped CLI adapters.
   `tests/unit/gpt_trader/...` mirroring source paths.
 - Quality gate before PR: `make ci-required`, plus
   `uv run ruff check . --fix`, `uv run black .`, `uv run mypy src/gpt_trader`.
-  (`uv run agent-check` is an optional JSON summary helper, not the gate.)
 - Import boundaries: `scripts/ci/check_import_boundaries.py` runs in CI —
   keep interface code free of cross-slice imports it would flag.

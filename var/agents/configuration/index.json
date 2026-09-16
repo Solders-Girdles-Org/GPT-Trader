@@ -1,8 +1,0 @@
-{
-  "description": "Environment variable reference (static scan + .env.template enrichment).",
-  "files": {
-    "environment_variables_json": "environment_variables.json",
-    "environment_variables_markdown": "environment_variables.md"
-  },
-  "version": "1.0"
-}

@@ -5,9 +5,8 @@ Wraps scripts/agents/*.py to expose as `uv run` commands.
 Each function corresponds to an entry point in pyproject.toml.
 
 Usage:
-    uv run agent-check --format text
-    uv run agent-impact --from-git
-    uv run agent-map --component-summary
+    uv run agent-naming --strict --quiet
+    uv run agent-pr-ready --format markdown
 """
 
 from __future__ import annotations
@@ -27,7 +26,7 @@ def _run_script(script_name: str) -> int:
     """Run a script from scripts/agents/ with forwarded args.
 
     Args:
-        script_name: Name of the script file (e.g., "quality_gate.py")
+        script_name: Name of the script file (e.g., "pr_readiness.py")
 
     Returns:
         Exit code from the script
@@ -48,77 +47,6 @@ def _run_script(script_name: str) -> int:
     return result.returncode
 
 
-def check() -> int:
-    """Run quality gate checks.
-
-    Entry point: agent-check
-
-    Runs lint, format, types, and tests with machine-readable output.
-
-    Examples:
-        uv run agent-check                    # All checks, JSON output
-        uv run agent-check --format text      # Human-readable output
-        uv run agent-check --check lint,types # Specific checks
-        uv run agent-check --files src/path/  # Check specific paths
-        uv run agent-check --full             # Include slow tests
-    """
-    return _run_script("quality_gate.py")
-
-
-def impact() -> int:
-    """Analyze change impact and suggest tests.
-
-    Entry point: agent-impact
-
-    Analyzes changed files and suggests relevant tests to run.
-
-    Examples:
-        uv run agent-impact --from-git        # Analyze git changes
-        uv run agent-impact --from-git --base main
-        uv run agent-impact --files src/path/file.py
-        uv run agent-impact --from-git --source-files
-        uv run agent-impact --from-git --exclude-integration
-        uv run agent-impact --include-importers
-        uv run agent-impact --format text
-    """
-    return _run_script("change_impact.py")
-
-
-def map_deps() -> int:
-    """Generate dependency graph.
-
-    Entry point: agent-map
-
-    Builds and queries module dependency relationships.
-
-    Examples:
-        uv run agent-map                      # Full graph JSON
-        uv run agent-map --format text        # Summary view
-        uv run agent-map --format dot         # GraphViz output
-        uv run agent-map --check-circular     # Find circular imports
-        uv run agent-map --depends-on gpt_trader.errors
-    """
-    return _run_script("dependency_graph.py")
-
-
-def tests() -> int:
-    """Generate test inventory.
-
-    Entry point: agent-tests
-
-    Generates comprehensive test inventory with marker and path filtering.
-
-    Examples:
-        uv run agent-tests                    # Generate full inventory
-        uv run agent-tests --by-marker risk   # Tests with risk marker
-        uv run agent-tests --by-path tests/unit/gpt_trader/cli
-        uv run agent-tests --source gpt_trader.cli
-        uv run agent-tests --source gpt_trader.cli --source-files
-        uv run agent-tests --stdout           # Output to stdout
-    """
-    return _run_script("generate_test_inventory.py")
-
-
 def naming() -> int:
     """Check naming standards.
 
@@ -134,71 +62,13 @@ def naming() -> int:
     return _run_script("naming_inventory.py")
 
 
-def health() -> int:
-    """Aggregate health checks (lint/types/tests/preflight/config).
-
-    Entry point: agent-health
-
-    Examples:
-        uv run agent-health
-        uv run agent-health --format json --output var/agents/health/health_report.json
-        uv run agent-health --pytest-args -q tests/unit
-    """
-    return _run_script("health_report.py")
-
-
-def regenerate() -> int:
-    """Regenerate all static context files.
-
-    Entry point: agent-regenerate
-
-    Regenerates all files in var/agents/ by running all generator scripts.
-
-    Examples:
-        uv run agent-regenerate               # Regenerate all
-        uv run agent-regenerate --verify      # Check freshness only
-    """
-    return _run_script("regenerate_all.py")
-
-
-def artifacts() -> int:
-    """Validate and package generated agent artifacts.
-
-    Entry point: agent-artifacts
-
-    Examples:
-        uv run agent-artifacts validate
-        uv run agent-artifacts package --output-dir dist/agent-artifacts
-        uv run agent-artifacts verify-package
-    """
-    return _run_script("agent_artifacts.py")
-
-
-def dedupe() -> int:
-    """Generate test deduplication candidates.
-
-    Entry point: agent-dedupe
-
-    Analyzes the test suite to identify clusters of test files that could
-    benefit from consolidation, merging, or cleanup.
-
-    Examples:
-        uv run agent-dedupe                   # Generate/update manifest
-        uv run agent-dedupe --verify          # Check freshness (for CI)
-        uv run agent-dedupe --cluster abc123  # Show cluster details
-        uv run agent-dedupe --stats           # Summary statistics
-        uv run agent-dedupe --next-pr         # Suggest next PR packet
-    """
-    return _run_script("generate_dedupe_candidates.py")
-
-
 def pr_ready() -> int:
     """Reconcile a PR's real mergeability against green CI (transparency, not a gate).
 
     Entry point: agent-pr-ready
 
     Surfaces what "checks are green" hides: required-check state, mergeStateStatus,
-    unresolved review threads (with severity), and an artifact-freshness advisory.
+    unresolved review threads (with severity), and branch-protection drift.
     Always exits 0 by default; pass --exit-on-not-ready for an opt-in advisory gate.
 
     Examples:
@@ -206,7 +76,7 @@ def pr_ready() -> int:
         uv run agent-pr-ready --pr 1056
         uv run agent-pr-ready --format markdown    # receipt for the PR body
         uv run agent-pr-ready --format json
-        uv run agent-pr-ready --no-github          # local artifact advisory only
+        uv run agent-pr-ready --no-github          # skip gh; local-only report
         uv run agent-pr-ready --exit-on-not-ready  # opt-in advisory gate
     """
     return _run_script("pr_readiness.py")

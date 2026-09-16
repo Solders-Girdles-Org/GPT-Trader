@@ -28,7 +28,7 @@ Two rules keep this repo from sprawling:
 | Use **dependency injection** (`ApplicationContainer`) | [docs/DI_POLICY.md](docs/DI_POLICY.md) |
 | Write or run **tests** | [docs/testing.md](docs/testing.md) |
 | Run the **agent review/scout pipeline** or handle review artifacts | [docs/agents/project_review_pipeline.md](docs/agents/project_review_pipeline.md) |
-| Find **generated inventories/maps** (env vars, metrics, flows) | `var/agents/**` + [docs/agents/README.md](docs/agents/README.md) |
+| Find **env vars, metrics, events, config schemas** | The code (`rg -n` under `src/gpt_trader/`); pointers in [docs/agents/README.md](docs/agents/README.md) |
 
 ## Environment (one time)
 
@@ -54,21 +54,15 @@ uv run black .                          # format
 uv run mypy src/gpt_trader              # type check
 uv run agent-naming                     # naming conventions
 uv run local-ci                         # full local PR gate (make ci-required = alias)
-uv run local-ci --profile quick         # faster loop (skips readiness, artifacts, optional suites)
+uv run local-ci --profile quick         # faster loop (skips readiness and optional suites)
 ```
 
 ## Before you open a PR
 
-- Run `uv run local-ci` (lint/format, docs audits, type check, advisory
-  agent-artifact freshness, test guardrails, unit/property/contract/integration
-  tests). The blocking/advisory contract is
-  owned by [docs/DEVELOPMENT_GUIDELINES.md](docs/DEVELOPMENT_GUIDELINES.md).
-- If your change can affect generated `var/agents/**` context, run
-  `uv run agent-regenerate` and commit the updated artifacts; confirm with
-  `uv run agent-regenerate --verify`. The exact freshness/CI contract (which
-  inputs count and where it blocks vs. warns) lives in
-  [docs/DEVELOPMENT_GUIDELINES.md](docs/DEVELOPMENT_GUIDELINES.md) and the CI
-  classifier.
+- Run `uv run local-ci` (lint/format, docs audits, type check, test
+  guardrails, unit/property/contract/integration tests). The blocking/advisory
+  contract is owned by
+  [docs/DEVELOPMENT_GUIDELINES.md](docs/DEVELOPMENT_GUIDELINES.md).
 - Fill out [.github/pull_request_template.md](.github/pull_request_template.md);
   link the issue/finding with `Closes #<n>` when there is one.
 
@@ -76,8 +70,8 @@ uv run local-ci --profile quick         # faster loop (skips readiness, artifact
 
 `main` is protected. Merging carries standing operator approval (2026-07-02):
 no per-PR sign-off is needed once the readiness gate passes. Before merging:
-re-read current-head review/reaction signals, resolve every review thread, and
-confirm generated artifacts are fresh. **Green CI is not sufficient** — run
+re-read current-head review/reaction signals and resolve every review thread.
+**Green CI is not sufficient** — run
 `uv run agent-pr-ready`, which reconciles real mergeability against green
 checks, and merge only when it reports ready.
 
