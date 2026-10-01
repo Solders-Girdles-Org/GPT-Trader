@@ -37,6 +37,16 @@ in [Direction](DIRECTION.md#immediate-product-outcome). Do not start the old
 runtime, use its approval grants for the new product, or infer a deployment from
 this page.
 
+## Dependency workflow continuation
+
+The [coordinated dependency closeout](https://github.com/Solders-Girdles-Org/GPT-Trader/pull/1292)
+updates the SHA-pinned workflow actions together and groups future CodeQL updates
+to keep initialization and analysis on one version. It also refreshes the five
+locked packages needed to clear the current dependency vulnerability audit.
+setup-uv keeps the preceding cache-pruning policy explicitly. Follow that PR for
+exact verification, review, merge and supersession receipts; source adoption
+grants no release or runtime authority.
+
 ## Retained source pointers (2026-09-04 baseline)
 
 Pointers checked against `main` through the merged transactional state,
