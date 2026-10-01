@@ -43,7 +43,8 @@ runs:
   using: composite
   steps:
     - name: Install uv
-      uses: astral-sh/setup-uv@v4
+      # astral-sh/setup-uv@v4
+      uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a
       with:
         version: ${{ inputs.uv-version }}
         # Disable internal uv cache - we use actions/cache for .venv below
@@ -51,14 +52,16 @@ runs:
 
     - name: Set up Python
       id: setup-python
-      uses: actions/setup-python@v6
+      # actions/setup-python@v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
       with:
         python-version: ${{ inputs.python-version }}
 
     - name: Load cached venv
       if: inputs.cache-path != ''
       id: deps-cache
-      uses: actions/cache@v4
+      # actions/cache@v4
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
       with:
         path: ${{ inputs.cache-path }}
         key: ${{ inputs.cache-prefix }}-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-uv${{ inputs.uv-version }}-${{ hashFiles('**/uv.lock') }}
