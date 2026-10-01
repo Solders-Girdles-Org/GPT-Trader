@@ -141,7 +141,7 @@ jobs:
           prune-cache: true  # Preserve the pre-v9 cache policy.
 
       - name: Set up Python
-        # actions/setup-python@v5
+        # actions/setup-python@v6
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version-file: ".python-version"
@@ -182,7 +182,7 @@ jobs:
           prune-cache: true  # Preserve the pre-v9 cache policy.
 
       - name: Set up Python
-        # actions/setup-python@v5
+        # actions/setup-python@v6
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version-file: ".python-version"
@@ -252,7 +252,7 @@ jobs:
           prune-cache: true  # Preserve the pre-v9 cache policy.
 
       - name: Set up Python
-        # actions/setup-python@v5
+        # actions/setup-python@v6
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version-file: ".python-version"
@@ -281,7 +281,7 @@ jobs:
           prune-cache: true  # Preserve the pre-v9 cache policy.
 
       - name: Set up Python
-        # actions/setup-python@v5
+        # actions/setup-python@v6
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version-file: ".python-version"
@@ -325,7 +325,7 @@ jobs:
           prune-cache: true  # Preserve the pre-v9 cache policy.
 
       - name: Set up Python
-        # actions/setup-python@v5
+        # actions/setup-python@v6
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version-file: ".python-version"
@@ -376,7 +376,7 @@ jobs:
           prune-cache: true  # Preserve the pre-v9 cache policy.
 
       - name: Set up Python
-        # actions/setup-python@v5
+        # actions/setup-python@v6
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version-file: ".python-version"
@@ -410,7 +410,7 @@ jobs:
           prune-cache: true  # Preserve the pre-v9 cache policy.
 
       - name: Set up Python
-        # actions/setup-python@v5
+        # actions/setup-python@v6
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version-file: ".python-version"
@@ -442,7 +442,7 @@ jobs:
           prune-cache: true  # Preserve the pre-v9 cache policy.
 
       - name: Set up Python
-        # actions/setup-python@v5
+        # actions/setup-python@v6
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version-file: ".python-version"
@@ -474,7 +474,7 @@ jobs:
           prune-cache: true  # Preserve the pre-v9 cache policy.
 
       - name: Set up Python
-        # actions/setup-python@v5
+        # actions/setup-python@v6
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version-file: ".python-version"
@@ -524,7 +524,7 @@ jobs:
           prune-cache: true  # Preserve the pre-v9 cache policy.
 
       - name: Set up Python
-        # actions/setup-python@v5
+        # actions/setup-python@v6
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         if: needs.changes.result == 'success' && needs.changes.outputs.dependencies == 'true'
         with:

@@ -74,20 +74,27 @@ def test_broker_auth_fallback_uses_simple_auth():
 
 
 @pytest.mark.parametrize("auth_type", [CDPJWTAuth, SimpleAuth])
+@pytest.mark.parametrize("escaped_sec1", [False, True])
 @pytest.mark.parametrize(
     "request_path",
     ["/api/v3/brokerage/products", "https://api.coinbase.com/api/v3/brokerage/products?limit=1"],
 )
 def test_jwt_signing_round_trip_preserves_coinbase_claims(
-    auth_type, request_path, monkeypatch, fake_clock
+    auth_type, request_path, escaped_sec1, monkeypatch, fake_clock
 ):
     """Exercise the real PyJWT ES256 transport without account keys or a network."""
     key = ec.generate_private_key(ec.SECP256R1())
     private_pem = key.private_bytes(
         serialization.Encoding.PEM,
-        serialization.PrivateFormat.PKCS8,
+        (
+            serialization.PrivateFormat.TraditionalOpenSSL
+            if escaped_sec1
+            else serialization.PrivateFormat.PKCS8
+        ),
         serialization.NoEncryption(),
     ).decode()
+    if escaped_sec1:
+        private_pem = private_pem.replace("\n", "\\n")
     key_name = "organizations/test/apiKeys/test"
     monkeypatch.setattr(auth_module.time, "time", fake_clock.time)
     auth = auth_type(key_name, private_pem)
