@@ -112,7 +112,7 @@ jobs:
 
       - name: Run Trivy vulnerability scanner
         # aquasecurity/trivy-action pinned to audited commit
-        uses: aquasecurity/trivy-action@c07df6fec6fa692e6fd1200d50aaa1fdd66f03c8
+        uses: aquasecurity/trivy-action@c03d123cb480c08c69b054af418ea5e69fe6e57e
         with:
           image-ref: ${{ steps.scan-target.outputs.image }}
           format: 'sarif'
