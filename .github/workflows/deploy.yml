@@ -67,7 +67,7 @@ jobs:
 
       - name: Log in to GitHub Container Registry
         # docker/login-action@v4
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0
+        uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -121,6 +121,6 @@ jobs:
       - name: Upload Trivy results to GitHub Security
         if: always()
         # github/codeql-action/upload-sarif@v4
-        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9
+        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81
         with:
           sarif_file: 'trivy-results.sarif'

@@ -134,10 +134,11 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        # astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         with:
           enable-cache: true
+          prune-cache: true  # Preserve the pre-v9 cache policy.
 
       - name: Set up Python
         # actions/setup-python@v5
@@ -174,10 +175,11 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        # astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         with:
           enable-cache: true
+          prune-cache: true  # Preserve the pre-v9 cache policy.
 
       - name: Set up Python
         # actions/setup-python@v5
@@ -243,10 +245,11 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        # astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         with:
           enable-cache: true
+          prune-cache: true  # Preserve the pre-v9 cache policy.
 
       - name: Set up Python
         # actions/setup-python@v5
@@ -271,10 +274,11 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        # astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         with:
           enable-cache: true
+          prune-cache: true  # Preserve the pre-v9 cache policy.
 
       - name: Set up Python
         # actions/setup-python@v5
@@ -314,10 +318,11 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        # astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         with:
           enable-cache: true
+          prune-cache: true  # Preserve the pre-v9 cache policy.
 
       - name: Set up Python
         # actions/setup-python@v5
@@ -364,10 +369,11 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        # astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         with:
           enable-cache: true
+          prune-cache: true  # Preserve the pre-v9 cache policy.
 
       - name: Set up Python
         # actions/setup-python@v5
@@ -397,10 +403,11 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        # astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         with:
           enable-cache: true
+          prune-cache: true  # Preserve the pre-v9 cache policy.
 
       - name: Set up Python
         # actions/setup-python@v5
@@ -428,10 +435,11 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        # astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         with:
           enable-cache: true
+          prune-cache: true  # Preserve the pre-v9 cache policy.
 
       - name: Set up Python
         # actions/setup-python@v5
@@ -459,10 +467,11 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        # astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         with:
           enable-cache: true
+          prune-cache: true  # Preserve the pre-v9 cache policy.
 
       - name: Set up Python
         # actions/setup-python@v5
@@ -507,11 +516,12 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        # astral-sh/setup-uv@v7
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        # astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         if: needs.changes.result == 'success' && needs.changes.outputs.dependencies == 'true'
         with:
           enable-cache: true
+          prune-cache: true  # Preserve the pre-v9 cache policy.
 
       - name: Set up Python
         # actions/setup-python@v5
