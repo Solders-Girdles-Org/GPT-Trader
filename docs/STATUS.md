@@ -41,8 +41,9 @@ this page.
 
 The [coordinated dependency closeout](https://github.com/Solders-Girdles-Org/GPT-Trader/pull/1292)
 updates the SHA-pinned workflow actions together and groups future CodeQL updates
-to keep initialization and analysis on one version. setup-uv keeps the preceding
-cache-pruning policy explicitly. Follow that PR for exact verification, review,
+to keep initialization and analysis on one version. It also refreshes the five
+locked packages needed to clear the current dependency vulnerability audit.
+setup-uv keeps the preceding cache-pruning policy explicitly. Follow that PR for exact verification, review,
 merge and supersession receipts; source adoption grants no release or runtime
 authority. The strongest alternative, merging the split CodeQL PRs one by one,
 was rejected because their own check logs demonstrate incompatible versions.
