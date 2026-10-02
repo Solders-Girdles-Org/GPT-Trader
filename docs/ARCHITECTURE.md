@@ -11,14 +11,16 @@ explained decisions, bounded simulated fills and reconciled cash out, with no
 broker, scheduler or credentials. The **retained runtime** is the paper/live
 spine on the staged-autonomy ladder in [DIRECTION.md](DIRECTION.md): market
 data through proposers, an audited approval workflow, a risk kernel and guard
-stack, into a paper broker today and, only after the gates there, a live one.
+stack, with paper execution support and a separately gated live path. These
+are source capabilities; this overview does not establish an active deployment.
 This document describes structure. [STATUS.md](STATUS.md) points at what is
 shipped; [decisions/](decisions/README.md) hold the rationale.
 
 ## Packages
 
-All code lives under `src/gpt_trader/`; tests mirror these paths under
-`tests/unit/`.
+The Python packages below live under `src/gpt_trader/`; tests mirror these
+paths under `tests/unit/`. This is a routing summary, not a generated module
+inventory; inspect the source and `pyproject.toml` for exact entrypoints.
 
 | Package | Role |
 | --- | --- |
@@ -34,6 +36,8 @@ All code lives under `src/gpt_trader/`; tests mirror these paths under
 | `persistence/` | SQLite event and order stores with JSONL fallback |
 | `monitoring/`, `preflight/`, `security/` | Health checks, metrics, alerts, daily report; readiness preflight; secrets and input validation |
 | `cli/`, `web/` | The `gpt-trader` commands (`experiment`, `run`, `ideas`, `record`, `console`, `report`, `preflight` and others) and the FastAPI operator console; both are thin adapters over the services |
+| `agents/` | CLI wrappers for the maintained `agent-naming` and `agent-pr-ready` development commands in `scripts/agents/`; no research, trading or generated-inventory lifecycle |
+| `ci/` | The `local-ci` command and its PR, quick and strict verification profiles; the PR profile mirrors the required hosted checks |
 
 ## Data flow
 
@@ -93,10 +97,14 @@ configure experiments. `scripts/ci/check_import_boundaries.py` enforces the
 edges: no slice imports the CLI, preflight or the container; `monitoring` does
 not import `features` at runtime; `trade_ideas` imports only `core` and
 `errors`; cross-slice edges are an allowlist that only shrinks; the web
-console reaches only its trade-idea adapter contract. Layer detail:
-[BOUNDARIES](architecture/BOUNDARIES.md), [SEAMS](architecture/SEAMS.md),
-[ENTRYPOINTS](architecture/ENTRYPOINTS.md),
-[OWNERSHIP](architecture/OWNERSHIP.md).
+console reaches only its trade-idea adapter contract.
+
+The linked [dependency policy](DI_POLICY.md) owns wiring examples. Detailed
+runtime [boundaries](architecture/BOUNDARIES.md), [seams](architecture/SEAMS.md),
+[entrypoints](architecture/ENTRYPOINTS.md) and [ownership](architecture/OWNERSHIP.md)
+remain separate navigation references. Their container and runtime workflow
+guidance does not make those components mandatory for the recorded experiment;
+its explicit dependencies follow the [accepted product decision](decisions/recorded-experiment-product.md).
 
 ## Where evidence and results live
 

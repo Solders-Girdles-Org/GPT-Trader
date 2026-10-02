@@ -37,6 +37,15 @@ in [Direction](DIRECTION.md#immediate-product-outcome). Do not start the old
 runtime, use its approval grants for the new product, or infer a deployment from
 this page.
 
+## Documentation continuation
+
+[Architecture](ARCHITECTURE.md) routes the recorded experiment, retained runtime
+and maintained development tools to their source. Detailed runtime references
+and the dependency policy remain linked for their specific contracts; they do
+not impose runtime composition on the experiment. The PR template names the
+current [local verification contract](DEVELOPMENT_GUIDELINES.md#verify-before-a-pr)
+without the retired agent-inventory freshness step.
+
 ## Dependency workflow continuation
 
 The [coordinated dependency closeout](https://github.com/Solders-Girdles-Org/GPT-Trader/pull/1292)
