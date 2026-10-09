@@ -56,6 +56,16 @@ setup-uv keeps the preceding cache-pruning policy explicitly. Follow that PR for
 exact verification, review, merge and supersession receipts; source adoption
 grants no release or runtime authority.
 
+The [Ruff consolidation](https://github.com/Solders-Girdles-Org/GPT-Trader/pull/1302)
+makes Ruff the single linter and formatter: `ruff format` replaces Black, and
+Ruff's `UP` rules replace the pyupgrade hook. Pre-commit runs Ruff from
+`uv.lock`. Open follow-ups: tracked `data/` packages hidden from Ruff by
+`.gitignore` ([#1301](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1301)),
+`agent-pr-ready` PR auto-detection
+([#1303](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1303)), and the
+`multidict` audit finding
+([#1304](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1304)).
+
 ## Retained source pointers (2026-09-04 baseline)
 
 Pointers checked against `main` through the merged transactional state,
