@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from contextlib import nullcontext
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -110,7 +110,7 @@ def test_update_trade_aggregator_creates_and_emits(monkeypatch) -> None:
         price=Decimal("50000"),
         size=Decimal("1"),
         side="buy",
-        timestamp=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        timestamp=datetime(2024, 1, 1, tzinfo=UTC),
     )
     emit_summary = MagicMock()
     monkeypatch.setattr(telemetry_health, "emit_trade_flow_summary", emit_summary)
@@ -134,7 +134,7 @@ def test_update_trade_aggregator_skips_missing_fields(monkeypatch) -> None:
         price=None,
         size=Decimal("1"),
         side="buy",
-        timestamp=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        timestamp=datetime(2024, 1, 1, tzinfo=UTC),
     )
     emit_summary = MagicMock()
     monkeypatch.setattr(telemetry_health, "emit_trade_flow_summary", emit_summary)

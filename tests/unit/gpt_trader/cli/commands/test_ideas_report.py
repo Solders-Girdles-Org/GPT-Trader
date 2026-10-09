@@ -229,7 +229,7 @@ def test_report_text_includes_monthly_trend_buckets_and_is_read_only(
     service.reject(rejected.decision_id, actor_id="rj", reason="Setup invalidated")
     before = _snapshot_files(root)
     expected_june_line = (
-        "2026-06: ideas=1, approval_rate=0.00%, " "closeout_coverage=0.00%, realized_profit_loss=0"
+        "2026-06: ideas=1, approval_rate=0.00%, closeout_coverage=0.00%, realized_profit_loss=0"
     )
 
     exit_code, output = _run_text(

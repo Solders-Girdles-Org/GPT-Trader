@@ -275,7 +275,7 @@ class PaperIdeaExecutor:
         expires_at = view.idea.time_horizon.expires_at
         if expires_at is not None and expires_at <= self._now_factory():
             raise IdeaNotExecutableError(
-                f"Idea {decision_id} is not executable: expired at " f"{expires_at.isoformat()}",
+                f"Idea {decision_id} is not executable: expired at {expires_at.isoformat()}",
                 field="expires_at",
                 value=expires_at.isoformat(),
             )

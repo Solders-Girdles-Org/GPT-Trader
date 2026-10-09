@@ -5,7 +5,7 @@ import argparse
 import sqlite3
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 try:
@@ -92,7 +92,7 @@ def check_liveness(
     connection = sqlite3.connect(str(events_db))
     try:
         rows: list[EventAge] = []
-        now_ts = now or datetime.now(timezone.utc)
+        now_ts = now or datetime.now(UTC)
         for event_type in event_types:
             event_id, raw_ts = _fetch_latest_event(connection, event_type)
             parsed = formatting.parse_timestamp(raw_ts)

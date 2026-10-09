@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from gpt_trader.persistence.orders_store import OrderRecord, OrderStatus
@@ -17,7 +17,7 @@ def create_test_order(
     **kwargs,
 ) -> OrderRecord:
     """Create a test order with defaults."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return OrderRecord(
         order_id=order_id,
         client_order_id=kwargs.get("client_order_id", f"client-{order_id}"),

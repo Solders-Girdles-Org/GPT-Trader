@@ -85,9 +85,9 @@ def test_order_lifecycle_invariants(
         else:
             price_diff = effective_fill_price - validation.adjusted_price
         max_slippage = validation.adjusted_price * Decimal("0.05")  # 5% max slippage
-        assert (
-            price_diff <= max_slippage
-        ), f"Fill price {effective_fill_price} exceeds slippage tolerance from {validation.adjusted_price}"
+        assert price_diff <= max_slippage, (
+            f"Fill price {effective_fill_price} exceeds slippage tolerance from {validation.adjusted_price}"
+        )
 
         # Notional should be reasonable
         fill_notional = validation.adjusted_quantity * effective_fill_price

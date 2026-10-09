@@ -145,9 +145,9 @@ class TestSignalGeneration:
             product=None,
         )
 
-        assert (
-            decision.action == Action.HOLD
-        ), f"Expected HOLD (shorts disabled), got {decision.action}"
+        assert decision.action == Action.HOLD, (
+            f"Expected HOLD (shorts disabled), got {decision.action}"
+        )
 
     def test_hold_in_neutral_zone(self):
         """Should HOLD when Z-Score is within neutral zone."""

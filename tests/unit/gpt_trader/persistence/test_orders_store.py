@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -291,7 +291,7 @@ class TestOrdersStore:
     def test_list_orders_filters_and_limit(self) -> None:
         with TemporaryDirectory() as tmpdir:
             with OrdersStore(tmpdir) as store:
-                base = datetime(2025, 1, 1, tzinfo=timezone.utc)
+                base = datetime(2025, 1, 1, tzinfo=UTC)
                 older = create_test_order(
                     order_id="old",
                     status=OrderStatus.OPEN,

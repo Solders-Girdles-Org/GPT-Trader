@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import shutil
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -45,7 +45,7 @@ def check_system_time(checker: PreflightCheck) -> bool:
 
     ctx = checker.context
     try:
-        system_time = datetime.now(timezone.utc)
+        system_time = datetime.now(UTC)
 
         api_key, private_key = ctx.resolve_cdp_credentials()
         if api_key and private_key:

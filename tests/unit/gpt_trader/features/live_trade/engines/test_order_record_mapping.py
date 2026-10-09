@@ -7,7 +7,7 @@ These exercise the logic extracted from TradingEngine into
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -118,12 +118,12 @@ class TestParseTimestamp:
         assert parse_timestamp(123) == 123.0
 
     def test_datetime(self) -> None:
-        dt = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        dt = datetime(2026, 1, 1, tzinfo=UTC)
         assert parse_timestamp(dt) == dt.timestamp()
 
     def test_iso_string(self) -> None:
         assert parse_timestamp("2026-01-01T00:00:00+00:00") == pytest.approx(
-            datetime(2026, 1, 1, tzinfo=timezone.utc).timestamp()
+            datetime(2026, 1, 1, tzinfo=UTC).timestamp()
         )
 
     def test_none_and_invalid_fall_back_to_now(self) -> None:
@@ -139,7 +139,7 @@ class TestParseTimestamp:
 
 class TestBuildRecordFromBrokerOrder:
     def test_builds_full_record(self) -> None:
-        now = datetime(2026, 6, 28, tzinfo=timezone.utc)
+        now = datetime(2026, 6, 28, tzinfo=UTC)
         order = {
             "order_id": "o1",
             "client_order_id": "c1",
@@ -176,15 +176,13 @@ class TestBuildRecordFromBrokerOrder:
         record = build_record_from_broker_order(
             {"order_id": "o2", "status": "filled"},
             bot_id="b",
-            now=datetime.now(timezone.utc),
+            now=datetime.now(UTC),
         )
         assert record is not None
         assert record.client_order_id == "o2"
 
     def test_missing_order_id_returns_none(self) -> None:
         assert (
-            build_record_from_broker_order(
-                {"status": "open"}, bot_id="b", now=datetime.now(timezone.utc)
-            )
+            build_record_from_broker_order({"status": "open"}, bot_id="b", now=datetime.now(UTC))
             is None
         )

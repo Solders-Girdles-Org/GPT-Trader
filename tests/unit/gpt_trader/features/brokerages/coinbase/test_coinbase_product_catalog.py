@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import MagicMock
 
@@ -111,7 +111,7 @@ class TestProductCatalog:
         }
         funding_rate, next_funding = catalog.get_funding(mock_client, "BTC-PERP")
         assert funding_rate == Decimal("0.0001")
-        assert next_funding == datetime(2024, 1, 15, 16, 0, 0, tzinfo=timezone.utc)
+        assert next_funding == datetime(2024, 1, 15, 16, 0, 0, tzinfo=UTC)
 
     def test_catalog_get_funding_for_spot(self) -> None:
         catalog = self.make_catalog()

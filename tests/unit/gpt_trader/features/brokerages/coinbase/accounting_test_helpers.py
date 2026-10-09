@@ -1,6 +1,6 @@
 """Actual durable WS/REST accounting, crash recovery and evidence boundaries."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import Mock
 
@@ -11,7 +11,7 @@ from gpt_trader.features.brokerages.coinbase.user_event_handler import CoinbaseU
 from gpt_trader.features.brokerages.coinbase.ws_events import FillEvent
 from gpt_trader.persistence.orders_store import OrderRecord, OrdersStore, OrderStatus
 
-NOW = datetime(2026, 9, 1, 12, tzinfo=timezone.utc)
+NOW = datetime(2026, 9, 1, 12, tzinfo=UTC)
 
 
 def _setup(tmp_path):

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 # Default histogram buckets for latency measurements (seconds)
@@ -163,7 +163,7 @@ class _GuardMetricsCollector:
             Counters without labels maintain backward-compatible dict format.
         """
         return {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "counters": dict(self.counters),
             "gauges": dict(self.gauges),
             "histograms": {k: v.to_dict() for k, v in self.histograms.items()},

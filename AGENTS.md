@@ -29,7 +29,7 @@ credentials).
 
 ```bash
 uv run pytest tests/unit -n auto -q      # unit tests
-uv run ruff check . --fix && uv run black .
+uv run ruff check . --fix && uv run ruff format .
 uv run mypy src/gpt_trader
 uv run agent-naming                      # naming standard (also a pre-commit hook)
 uv run local-ci                          # the PR gate; make ci-required is an alias

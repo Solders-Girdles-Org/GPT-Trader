@@ -120,9 +120,9 @@ def test_escalation_does_not_trigger_below_threshold(
 
     for i in range(threshold - 1):
         escalated = tracker.record_failure("test_check")
-        assert (
-            escalated is False
-        ), f"Escalation should not trigger at failure {i + 1} (threshold {threshold})"
+        assert escalated is False, (
+            f"Escalation should not trigger at failure {i + 1} (threshold {threshold})"
+        )
 
 
 @seed(4012)

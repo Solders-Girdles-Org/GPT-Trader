@@ -249,8 +249,7 @@ class BaselineProposer:
                 expires_at=as_of + timedelta(hours=config.expiry_hours),
             ),
             data_used=(
-                f"{snapshot.source}:{series.symbol}:{series.granularity}"
-                f":as_of={as_of.isoformat()}",
+                f"{snapshot.source}:{series.symbol}:{series.granularity}:as_of={as_of.isoformat()}",
                 sizing.data_used,
             ),
             confidence=confidence,

@@ -7,7 +7,7 @@ import argparse
 import sqlite3
 import sys
 from collections.abc import Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 DEFAULT_EVENT_TYPES = ("api_error", "guard_triggered")
@@ -42,7 +42,7 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def _format_utc(dt: datetime) -> str:
-    return dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
+    return dt.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%SZ")
 
 
 def _parse_timestamp(raw: str) -> datetime:
@@ -54,8 +54,8 @@ def _parse_timestamp(raw: str) -> datetime:
     except ValueError:
         parsed = datetime.strptime(text, "%Y-%m-%d %H:%M:%S")
     if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _format_duration(seconds: float) -> str:
@@ -160,7 +160,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     clears_at = last_event_at + timedelta(hours=float(args.hours))
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     remaining_seconds = (clears_at - now).total_seconds()
     status = "cleared" if remaining_seconds <= 0 else "pending"
 

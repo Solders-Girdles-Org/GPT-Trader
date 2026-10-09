@@ -52,7 +52,7 @@ def damped_sideways_closes(count: int) -> list[str]:
     sharp dip as the final bar hands the switcher's mean-reversion delegate a
     deep negative Z-Score without flipping the confirmed regime.
     """
-    return [f"{100 + (1 if i % 2 == 0 else -1) * 0.05 * (0.995 ** i):.4f}" for i in range(count)]
+    return [f"{100 + (1 if i % 2 == 0 else -1) * 0.05 * (0.995**i):.4f}" for i in range(count)]
 
 
 REGIME_SWITCHER_DIP = damped_sideways_closes(59) + ["96"]

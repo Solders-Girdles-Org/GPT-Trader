@@ -7,7 +7,7 @@ import signal
 from argparse import ArgumentParser
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
@@ -100,7 +100,7 @@ class SignalInterrupt(Exception):
 
 
 def _utc_timestamp() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    return datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
 
 def _install_signal_handlers() -> None:
@@ -448,7 +448,7 @@ def build_summary_payload(
 ) -> dict[str, Any]:
     summary = summarize_smoke_results(results, max_top_failures=max_top_failures)
     payload = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "outcome": outcome.label,
         "exit_code": outcome.exit_code,
         "summary_version": SUMMARY_SCHEMA_VERSION,
@@ -513,7 +513,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(json.dumps(summary_payload, indent=2, default=str))
         else:
             output = {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "outcome": outcome.label,
                 "exit_code": outcome.exit_code,
                 "results": [

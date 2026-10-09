@@ -58,7 +58,6 @@ def test_actual_partial_reduce_and_close_account_once(tmp_path, monkeypatch, dir
 
 
 def test_lost_receipt_reserves_quantity_and_never_resends(tmp_path, monkeypatch):
-
     service, broker, executor, _ = setup_position(tmp_path, monkeypatch)
     proposal(service, "reduce-a", ".7")
     proposal(service, "reduce-b", ".7")

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -123,7 +123,7 @@ class CliResponse:
     was_noop: bool = False
 
     # Internal - set automatically
-    _timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    _timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self) -> None:
         """Set exit_code based on success if not explicitly set."""

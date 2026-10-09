@@ -21,7 +21,9 @@ class TestDeprecatedEnvUsage:
     ) -> None:
         monkeypatch.setattr(check_legacy_patterns, "REPO_ROOT", tmp_path)
         allowed_path = tmp_path / "docs" / "DEPRECATIONS.md"
-        env_var = "COINBASE_ENABLE_" "DERIVATIVES"
+        # Explicit `+` keeps the token split (so the guard does not flag this file)
+        # and survives `ruff format`, which joins implicit concatenations.
+        env_var = "COINBASE_ENABLE_" + "DERIVATIVES"
         _write_file(allowed_path, f"{env_var}=1\n")
 
         errors = check_legacy_patterns._check_deprecated_env_usage([allowed_path])
@@ -33,12 +35,12 @@ class TestDeprecatedEnvUsage:
     ) -> None:
         monkeypatch.setattr(check_legacy_patterns, "REPO_ROOT", tmp_path)
         disallowed_path = tmp_path / "notes.md"
-        env_var = "COINBASE_ENABLE_" "DERIVATIVES"
+        env_var = "COINBASE_ENABLE_" + "DERIVATIVES"
         _write_file(disallowed_path, f"{env_var}=1\n")
 
         errors = check_legacy_patterns._check_deprecated_env_usage([disallowed_path])
 
-        env_var = "COINBASE_ENABLE_" "DERIVATIVES"
+        env_var = "COINBASE_ENABLE_" + "DERIVATIVES"
         assert errors == [f"notes.md: legacy env var '{env_var}' referenced outside allowlist"]
 
 
@@ -73,7 +75,7 @@ class TestBlockingCallsInAsync:
         file_path = tmp_path / "src" / "example.py"
         _write_file(
             file_path,
-            "import time\n" "\n" "def do_work():\n" "    time." "sleep(1)\n",
+            "import time\n\ndef do_work():\n    time." + "sleep(1)\n",
         )
 
         errors = check_legacy_patterns._check_blocking_calls_in_async([file_path])

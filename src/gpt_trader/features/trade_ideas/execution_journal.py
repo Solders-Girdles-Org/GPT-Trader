@@ -275,9 +275,7 @@ class ExecutionJournal:
             payload["observed_at"]
         ).utcoffset() is None or datetime.fromisoformat(
             payload["resolved_at"]
-        ) > datetime.fromisoformat(
-            payload["observed_at"]
-        ):
+        ) > datetime.fromisoformat(payload["observed_at"]):
             raise ExecutionJournalIntegrityError(
                 "Simulated resolution cannot precede observation evidence"
             )

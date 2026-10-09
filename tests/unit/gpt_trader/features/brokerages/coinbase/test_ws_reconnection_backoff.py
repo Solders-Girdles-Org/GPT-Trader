@@ -69,9 +69,9 @@ class TestCalculateBackoffWithJitter:
             min_expected = base * (1 - jitter_pct)
             max_expected = base * (1 + jitter_pct)
 
-            assert (
-                min_expected <= delay <= max_expected
-            ), f"Delay {delay} out of bounds [{min_expected}, {max_expected}]"
+            assert min_expected <= delay <= max_expected, (
+                f"Delay {delay} out of bounds [{min_expected}, {max_expected}]"
+            )
 
     def test_jitter_produces_different_values(self) -> None:
         """Test that jitter produces variation across calls."""

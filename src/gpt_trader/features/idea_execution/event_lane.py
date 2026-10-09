@@ -139,8 +139,7 @@ class EventDrivenIdeaLane:
                 approval_check,
                 actor_id=self._actor_id,
                 reason=(
-                    f"{EVENT_LANE_REASON_PREFIX}skipped because approval-policy "
-                    "violations remain"
+                    f"{EVENT_LANE_REASON_PREFIX}skipped because approval-policy violations remain"
                 ),
             )
             return EventLaneOutcome(
@@ -174,7 +173,7 @@ class EventDrivenIdeaLane:
                 decision_id=decision_id,
                 stage=EventLaneStage.APPROVED,
                 detail=(
-                    f"{AUTO_EXECUTION_ENV_VAR} is off; approved idea awaits " "the batch executor"
+                    f"{AUTO_EXECUTION_ENV_VAR} is off; approved idea awaits the batch executor"
                 ),
             )
 

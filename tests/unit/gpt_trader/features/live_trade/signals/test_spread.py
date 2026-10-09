@@ -166,9 +166,9 @@ class TestSpreadSignal:
             base_context.market_data = MarketDataContext(spread_bps=Decimal(str(spread)))
             result = signal.generate(base_context)
 
-            assert (
-                result.metadata["quality"] == expected_quality
-            ), f"Spread {spread} should be {expected_quality}"
+            assert result.metadata["quality"] == expected_quality, (
+                f"Spread {spread} should be {expected_quality}"
+            )
 
     def test_custom_thresholds(self, base_context: StrategyContext) -> None:
         """Test signal with custom thresholds."""

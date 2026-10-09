@@ -4,7 +4,7 @@ An agent-developed, Coinbase-oriented trading system on a staged path toward bou
 
 [![CI](https://github.com/Solders-Girdles-Org/GPT-Trader/actions/workflows/ci.yml/badge.svg)](https://github.com/Solders-Girdles-Org/GPT-Trader/actions/workflows/ci.yml)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 ## Overview
@@ -88,7 +88,7 @@ uv run python scripts/maintenance/feature_slice_scaffold.py --name <slice> --dry
 ```bash
 # Linting and formatting
 uv run ruff check . --fix
-uv run black .
+uv run ruff format .
 
 # Type checking
 uv run mypy src/gpt_trader

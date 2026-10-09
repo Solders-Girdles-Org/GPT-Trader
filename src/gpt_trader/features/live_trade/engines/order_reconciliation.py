@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -77,7 +77,7 @@ class OrderReconciliationService:
         orders_store = self._orders_store_provider()
         if not orders or orders_store is None:
             return []
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         recovered: list[OrderRecord] = []
         for order in orders:
             record = build_record_from_broker_order(order, bot_id=bot_id, now=now)
@@ -140,7 +140,7 @@ class OrderReconciliationService:
         get_order = getattr(broker, "get_order", None)
         if not callable(get_order):
             return []
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         refreshed_orders: list[Any] = []
         for record in records:
             try:
@@ -289,7 +289,7 @@ class OrderReconciliationService:
             _index_order(order)
 
         if orders_store is not None and pending_by_client_id:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             for order in orders:
                 order_id = get_order_field(order, "order_id", "id")
                 client_order_id = get_order_field(order, "client_order_id", "client_id")

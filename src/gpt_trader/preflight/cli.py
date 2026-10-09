@@ -4,7 +4,7 @@ import json
 import os
 import sys
 from collections.abc import Callable, Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from gpt_trader.app.config.profile_loader import (
     DEFAULT_PREFLIGHT_PROFILE_NAME,
@@ -37,7 +37,7 @@ def _header(profile: str) -> None:
     print("=" * 70)
     print("GPT-TRADER PRODUCTION PREFLIGHT CHECK")
     print(f"Profile: {profile}")
-    print(f"Time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    print(f"Time: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}")
     print("=" * 70)
     print(f"{Colors.RESET}")
 

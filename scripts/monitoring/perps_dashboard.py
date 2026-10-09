@@ -19,7 +19,6 @@ import time
 from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Deque
 
 from rich.layout import Layout
 from rich.live import Live
@@ -37,8 +36,8 @@ def load_events(
     jsonl_path: Path,
     events_db: Path | None = None,
     max_lines: int = 5000,
-) -> Deque[dict]:
-    events: Deque[dict] = deque(maxlen=max_lines)
+) -> deque[dict]:
+    events: deque[dict] = deque(maxlen=max_lines)
     if events_db is not None and events_db.exists():
         connection: sqlite3.Connection | None = None
         try:
@@ -111,7 +110,7 @@ def parse_time(value: str | None) -> datetime | None:
     return parsed.astimezone()
 
 
-def summarize(events: Deque[dict], window: timedelta) -> dict:
+def summarize(events: deque[dict], window: timedelta) -> dict:
     now = datetime.now().astimezone()
     cutoff = now - window
     success = 0
@@ -301,9 +300,7 @@ def make_events_panel(events: list[dict]) -> Panel:
 
         if etype == "order_success":
             style = "green"
-            details = (
-                f"{e.get('side','').upper()} {sym} {e.get('quantity','')} @ {e.get('price', 'MKT')}"
-            )
+            details = f"{e.get('side', '').upper()} {sym} {e.get('quantity', '')} @ {e.get('price', 'MKT')}"
         elif etype == "order_failed":
             style = "red"
             details = f"{sym} {e.get('reason', '')}"

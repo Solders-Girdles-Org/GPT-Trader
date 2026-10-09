@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -20,7 +20,7 @@ def _make_order(
     filled_quantity: Decimal | None = None,
     average_fill_price: Decimal | None = None,
 ) -> OrderRecord:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return OrderRecord(
         order_id=order_id,
         client_order_id=f"client-{order_id}",

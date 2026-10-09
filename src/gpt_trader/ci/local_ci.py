@@ -181,6 +181,9 @@ def build_steps(profile: LocalCIProfile, args: argparse.Namespace) -> list[Plann
                 "run",
                 "ruff",
                 "check",
+                # Clear lint.exclude so the named scripts/ paths are linted.
+                "--config",
+                "lint.exclude = []",
                 "scripts/ops",
                 "scripts/ci",
                 "scripts/analysis/backtest_runner.py",
@@ -189,8 +192,8 @@ def build_steps(profile: LocalCIProfile, args: argparse.Namespace) -> list[Plann
             ],
         ),
         PlannedStep(
-            label="Format (Black)",
-            command=["uv", "run", "black", "--check", "."],
+            label="Format (Ruff)",
+            command=["uv", "run", "ruff", "format", "--check", "."],
         ),
         PlannedStep(
             label="Guard against orchestration imports (removed in v3.0)",

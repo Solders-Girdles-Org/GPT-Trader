@@ -15,7 +15,7 @@ import re
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -243,8 +243,8 @@ def _parse_timestamp(text: str | None) -> datetime | None:
     except ValueError:
         return None
     if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _parse_daily_report_date(path: Path, data: dict[str, Any]) -> date | None:
@@ -269,7 +269,7 @@ def _parse_preflight_report_date(path: Path, data: dict[str, Any]) -> date | Non
             parsed = datetime.strptime("".join(match.groups()), "%Y%m%d%H%M%S")
         except ValueError:
             return None
-        return parsed.replace(tzinfo=timezone.utc).date()
+        return parsed.replace(tzinfo=UTC).date()
     return None
 
 
@@ -813,12 +813,12 @@ def _resolve_max_report_age_days(cli_value: int | None) -> int | None:
 
 def _report_entry_timestamp(entry: ReportEntry) -> datetime:
     if entry.generated_at is not None:
-        return entry.generated_at.astimezone(timezone.utc)
+        return entry.generated_at.astimezone(UTC)
     try:
         mtime = entry.path.stat().st_mtime
     except OSError:
-        return datetime.combine(entry.report_date, time.min, tzinfo=timezone.utc)
-    return datetime.fromtimestamp(mtime, timezone.utc)
+        return datetime.combine(entry.report_date, time.min, tzinfo=UTC)
+    return datetime.fromtimestamp(mtime, UTC)
 
 
 def _check_report_freshness(
@@ -887,7 +887,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     max_age_days = _resolve_max_report_age_days(args.max_report_age_days)
     strict_mode = args.strict or _get_env_bool(STRICT_ENV_VAR, False)
-    reference_time = datetime.now(timezone.utc)
+    reference_time = datetime.now(UTC)
     if max_age_days is not None:
         latest_entry = _find_latest_report_for_profile(daily_reports, profile)
         if latest_entry is not None:
@@ -974,23 +974,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     table_text = _format_table(evaluations, REPO_ROOT)
 
     if not args.json:
+        print(f"Readiness gate (profile={profile}, streak_days={streak_days})")
         print(
-            "Readiness gate (profile={profile}, streak_days={streak_days})".format(
-                profile=profile,
-                streak_days=streak_days,
-            )
-        )
-        print(
-            "Thresholds: stale_marks<={stale_marks}, ws_reconnects<={ws_reconnects}, "
-            "unfilled_orders<={unfilled}, api_errors<={api_errors}, guard_triggers<={guard}, "
-            "liveness_max_age_seconds<={liveness}".format(
-                stale_marks=thresholds.stale_marks_max,
-                ws_reconnects=thresholds.ws_reconnects_max,
-                unfilled=thresholds.unfilled_orders_max,
-                api_errors=thresholds.api_errors_max,
-                guard=thresholds.guard_triggers_max,
-                liveness=thresholds.liveness_max_age_seconds,
-            )
+            f"Thresholds: stale_marks<={thresholds.stale_marks_max}, ws_reconnects<={thresholds.ws_reconnects_max}, "
+            f"unfilled_orders<={thresholds.unfilled_orders_max}, api_errors<={thresholds.api_errors_max}, guard_triggers<={thresholds.guard_triggers_max}, "
+            f"liveness_max_age_seconds<={thresholds.liveness_max_age_seconds}"
         )
         print("\n" + table_text + "\n")
 

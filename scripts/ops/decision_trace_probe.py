@@ -8,7 +8,7 @@ import logging
 import re
 import sqlite3
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -95,7 +95,7 @@ def _normalize_timestamp(value: str | None) -> str | None:
     try:
         dt = datetime.fromisoformat(value.replace(" ", "T"))
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return dt.isoformat()
     except ValueError:
         return value

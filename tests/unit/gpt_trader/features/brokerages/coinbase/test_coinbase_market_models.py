@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -123,7 +123,7 @@ class TestCoinbaseMarketDataModels:
         assert product.market_type == MarketType.PERPETUAL
         assert product.contract_size == Decimal("1")
         assert product.funding_rate == Decimal("0.0001")
-        assert product.next_funding_time == datetime(2024, 1, 15, 16, 0, 0, tzinfo=timezone.utc)
+        assert product.next_funding_time == datetime(2024, 1, 15, 16, 0, 0, tzinfo=UTC)
         assert product.leverage_max == 20
 
     def test_to_product_perpetual_partial(self) -> None:
@@ -159,7 +159,7 @@ class TestCoinbaseMarketDataModels:
         product = to_product(payload)
         assert product.symbol == "BTC-USD-240331"
         assert product.market_type == MarketType.FUTURES
-        assert product.expiry == datetime(2024, 3, 31, 8, 0, 0, tzinfo=timezone.utc)
+        assert product.expiry == datetime(2024, 3, 31, 8, 0, 0, tzinfo=UTC)
         assert product.contract_size == Decimal("1")
 
     def test_to_product_invalid_funding_time(self) -> None:

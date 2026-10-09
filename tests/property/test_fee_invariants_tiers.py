@@ -100,9 +100,9 @@ def test_rate_percentage_conversion(
 
     expected_pct = rate_bps / Decimal("100")
 
-    assert (
-        rate_pct == expected_pct
-    ), f"Rate PCT {rate_pct} doesn't match expected {expected_pct} (rate_bps={rate_bps})"
+    assert rate_pct == expected_pct, (
+        f"Rate PCT {rate_pct} doesn't match expected {expected_pct} (rate_bps={rate_bps})"
+    )
 
 
 @pytest.mark.property
@@ -115,9 +115,9 @@ class TestFeeRatesConsistency:
             rates = FEE_TIER_RATES[tier]
 
             # Maker should be <= taker
-            assert (
-                rates.maker_bps <= rates.taker_bps
-            ), f"Tier {tier.value}: maker {rates.maker_bps} > taker {rates.taker_bps}"
+            assert rates.maker_bps <= rates.taker_bps, (
+                f"Tier {tier.value}: maker {rates.maker_bps} > taker {rates.taker_bps}"
+            )
 
             # Both should be non-negative
             assert rates.maker_bps >= Decimal("0")

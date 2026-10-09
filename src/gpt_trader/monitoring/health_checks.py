@@ -960,7 +960,9 @@ def check_market_data_staleness_signal(
     status = (
         HealthStatus.OK
         if attempt == 1
-        else HealthStatus.WARN if attempt == 2 else HealthStatus.CRIT
+        else HealthStatus.WARN
+        if attempt == 2
+        else HealthStatus.CRIT
     )
 
     return HealthSignal(

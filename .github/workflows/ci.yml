@@ -153,10 +153,11 @@ jobs:
         run: uv run ruff check .
 
       - name: Lint (Ruff - critical scripts)
-        run: uv run ruff check scripts/ops scripts/ci scripts/analysis/backtest_runner.py scripts/monitoring scripts/production_preflight.py
+        # Clear lint.exclude so the named scripts/ paths are linted (see pyproject).
+        run: uv run ruff check --config "lint.exclude = []" scripts/ops scripts/ci scripts/analysis/backtest_runner.py scripts/monitoring scripts/production_preflight.py
 
-      - name: Format (Black)
-        run: uv run black --check .
+      - name: Format (Ruff)
+        run: uv run ruff format --check .
 
       - name: Guard against orchestration imports (removed in v3.0)
         run: python scripts/ci/check_orchestration_imports.py

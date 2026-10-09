@@ -118,7 +118,6 @@ THIRD_PARTY_FLAG_PARENTS = (
     "docker",
     "pip-audit",
     "bandit",
-    "black",
     "ruff",
     "mypy",
 )
@@ -655,7 +654,7 @@ def verify_command(state: ScanState, item: str) -> VerificationResult:
         entry = rest.split()[0]
         if entry in state.project_scripts:
             return VerificationResult("ok", "pyproject.scripts", entry)
-        if entry in ("pytest", "ruff", "black", "mypy", "pre-commit", "pip-audit", "bandit"):
+        if entry in ("pytest", "ruff", "mypy", "pre-commit", "pip-audit", "bandit"):
             return VerificationResult("ok", "dev tool", entry)
         if (state.repo_root / entry).exists():
             return VerificationResult("ok", "path exists", entry)

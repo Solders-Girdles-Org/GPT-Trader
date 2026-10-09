@@ -76,9 +76,9 @@ class TestBacktestReporterGenerateCsvRow:
         row = reporter.generate_csv_row()
 
         for key, value in row.items():
-            assert isinstance(
-                value, (int, float)
-            ), f"Key {key} has non-numeric value: {type(value)}"
+            assert isinstance(value, (int, float)), (
+                f"Key {key} has non-numeric value: {type(value)}"
+            )
 
     def test_generate_csv_row_handles_none_sharpe(
         self,

@@ -10,9 +10,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Union
 
-Number = Union[float, Decimal]
+Number = float | Decimal
 
 
 @dataclass

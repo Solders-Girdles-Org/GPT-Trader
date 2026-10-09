@@ -277,7 +277,7 @@ def _parse_alpaca_bars(body: str, *, symbol: str) -> list[Candle]:
     bars = payload["bars"] or []
     if not bars:
         raise EquitiesCandleFeedError(
-            f"Alpaca returned no daily candles for '{symbol}': unknown symbol " "or empty range",
+            f"Alpaca returned no daily candles for '{symbol}': unknown symbol or empty range",
             field="candles",
         )
     candles = [_parse_alpaca_bar(bar, symbol=symbol) for bar in bars]

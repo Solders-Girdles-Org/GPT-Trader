@@ -75,9 +75,9 @@ def test_calculate_safe_position_size_invariants(
     # Size should be quantized to step size (unless zero)
     if safe_size > 0 and step_size > 0:
         steps = safe_size / step_size
-        assert (
-            steps == steps.to_integral_value()
-        ), f"Size {safe_size} not quantized to step {step_size}"
+        assert steps == steps.to_integral_value(), (
+            f"Size {safe_size} not quantized to step {step_size}"
+        )
 
     # Should not exceed max_size
     assert safe_size <= max_size, f"Safe size {safe_size} exceeds max_size {max_size}"
@@ -85,17 +85,17 @@ def test_calculate_safe_position_size_invariants(
     # Should meet minimum size requirements (with buffer consideration)
     if safe_size > 0:
         min_required = min_size * Decimal("1.1")  # 10% buffer
-        assert (
-            safe_size >= min_required
-        ), f"Safe size {safe_size} below buffered min_size {min_required}"
+        assert safe_size >= min_required, (
+            f"Safe size {safe_size} below buffered min_size {min_required}"
+        )
 
     # Notional should meet minimum requirements (with buffer consideration)
     if safe_size > 0:
         notional = safe_size * mark_price
         min_notional_required = min_notional * Decimal("1.1")  # 10% buffer
-        assert (
-            notional >= min_notional or safe_size == 0
-        ), f"Notional {notional} below required {min_notional_required}"
+        assert notional >= min_notional or safe_size == 0, (
+            f"Notional {notional} below required {min_notional_required}"
+        )
 
 
 __all__ = ["test_calculate_safe_position_size_invariants"]

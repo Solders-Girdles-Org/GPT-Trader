@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -312,7 +312,7 @@ class TestReportFormatting:
         checker = PreflightCheck(profile="prod")
         checker.context.successes.extend(["S1", "S2"])
         checker.context.warnings.append("W1")
-        timestamp = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        timestamp = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
 
         report_data = format_preflight_report(checker, timestamp=timestamp)
 
@@ -349,7 +349,7 @@ class TestReportFormatting:
         assert status == expected_status
 
     def test_report_path_for_timestamp_honors_output_dir(self) -> None:
-        timestamp = datetime(2026, 2, 11, 16, 2, 58, tzinfo=timezone.utc)
+        timestamp = datetime(2026, 2, 11, 16, 2, 58, tzinfo=UTC)
         report_path = report_path_for_timestamp(
             timestamp,
             output_dir=Path("var/reports/preflight"),
@@ -366,7 +366,7 @@ class TestReportHints:
         checker.context.set_current_check("check_python_version")
         checker.log_error("Python 3.11 is not supported")
         checker.context.set_current_check(None)
-        timestamp = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        timestamp = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
 
         report_data = format_preflight_report(checker, timestamp=timestamp)
         hints = report_data["details"]["error_hints"]
@@ -381,7 +381,7 @@ class TestReportHints:
         checker.context.set_current_check("unknown_check")
         checker.log_error("Something unexpected occurred")
         checker.context.set_current_check(None)
-        timestamp = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        timestamp = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
 
         report_data = format_preflight_report(checker, timestamp=timestamp)
         hints = report_data["details"]["error_hints"]

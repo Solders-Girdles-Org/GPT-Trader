@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -650,7 +650,7 @@ class TradingBot:
             payload.get("broker_status"),
             filled_quantity_known=filled_quantity is not None and filled_quantity > 0,
         )
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         metadata = {
             "source": "emergency_flatten",
             "flatten_operation_id": payload["flatten_operation_id"],

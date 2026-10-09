@@ -252,9 +252,7 @@ class StrategySignalToTradeIdeaAdapter:
         return TradeIdea(
             decision_id=self._decision_id(decision, context, as_of),
             autonomy_mode=AutonomyMode.HUMAN_APPROVED_EXECUTION,
-            thesis=(
-                f"{context.strategy_name} emitted a buy signal for {context.symbol}: " f"{reason}"
-            ),
+            thesis=(f"{context.strategy_name} emitted a buy signal for {context.symbol}: {reason}"),
             instrument=context.symbol,
             product_type=context.product_type,
             direction=TradeDirection.LONG,
@@ -294,10 +292,7 @@ class StrategySignalToTradeIdeaAdapter:
                 f"mark={_canonical_decimal(context.current_mark)}:"
                 f"as_of={as_of.isoformat()}"
             ),
-            (
-                f"strategy:{context.strategy_name}:action={action}:"
-                f"confidence={confidence_value:.4f}"
-            ),
+            (f"strategy:{context.strategy_name}:action={action}:confidence={confidence_value:.4f}"),
         )
 
     def _decision_id(
@@ -342,8 +337,7 @@ class StrategySignalToTradeIdeaAdapter:
         """
         if any(level <= 0 for level in (stop_level, entry_lower, entry_upper, target)):
             raise ValidationError(
-                "price_precision is too coarse for current_mark; "
-                "quantization erased a price level",
+                "price_precision is too coarse for current_mark; quantization erased a price level",
                 field="price_precision",
                 value=str(increment),
             )

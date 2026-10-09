@@ -74,7 +74,6 @@ where = ["src"]
 dev = [
     # Linting and formatting
     "ruff>=0.14.3,<0.15.0",
-    "black>=26.3.1,<26.4.0",
     "mypy>=1.10.0,<2.0.0",
     "pre-commit>=4.3.0,<5.0.0",
     # Type stubs
@@ -99,24 +98,23 @@ dev = [
     "filelock>=3.20.3,<4.0.0", # GHSA-w853-jp5j-5j7f
 ]
 
-[tool.black]
-line-length = 100
-target-version = ["py312"]
-
 [tool.ruff]
 line-length = 100
 target-version = "py312"
 src = ["src"]
-# scripts/ is globally excluded from `ruff check .` to allow intentional looseness
-# for experiments, one-offs, and analysis. Only "critical" production/ops/ci/maintenance
-# scripts are explicitly linted in local-ci and CI as a ratchet (see issue #962).
-# Policy: expand the explicit list over time for operationally important scripts;
-# document exclusions for the rest.
-extend-exclude = [
-    "scripts",
-]
 
 [tool.ruff.lint]
+# scripts/ is excluded from `ruff check .` (lint only; `ruff format` still covers it)
+# to allow intentional looseness for experiments, one-offs, and analysis. Only
+# "critical" production/ops/ci/maintenance scripts are explicitly linted in local-ci
+# and CI as a ratchet (see issue #962); those invocations pass
+# `--config "lint.exclude = []"`, because this glob also filters files found under
+# an explicitly named scripts/ directory.
+# Policy: expand the explicit list over time for operationally important scripts;
+# document exclusions for the rest.
+exclude = [
+    "**/scripts/**",
+]
 select = [
     "E",      # pycodestyle errors
     "F",      # pyflakes
@@ -124,15 +122,24 @@ select = [
     "W",      # pycodestyle warnings
     "ANN001", # Missing type annotation for function argument
     "ANN201", # Missing return type annotation for public function
+    "UP",     # pyupgrade
 ]
 ignore = [
     "S101",    # Use of assert (acceptable in tests)
-    "E501",    # Line too long (handled by black)
+    "E501",    # Line too long (handled by ruff format)
+    # PEP 695 rewrites go beyond pyupgrade and change runtime semantics
+    # (TypeAliasType, lazily evaluated type parameters); adopt them deliberately.
+    "UP040",   # non-pep695-type-alias
+    "UP046",   # non-pep695-generic-class
+    "UP047",   # non-pep695-generic-function
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["ANN001", "ANN201"]
 "tests/unit/conftest.py" = ["E402", "F403"]
+# Carried over from the retired pyupgrade hook: keep Generator[None, None, None],
+# whose shortening to Generator[None] broke mypy. Inert while target-version is py312.
+"src/gpt_trader/utilities/logging_patterns.py" = ["UP043"]
 
 [tool.mypy]
 python_version = "3.12"

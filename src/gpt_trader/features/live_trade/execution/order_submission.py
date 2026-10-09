@@ -11,7 +11,7 @@ import os
 import time
 import uuid
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, cast
 
@@ -280,9 +280,9 @@ class OrderSubmitter:
     @staticmethod
     def _normalize_timestamp(value: datetime | None) -> datetime:
         if value is None:
-            return datetime.now(timezone.utc)
+            return datetime.now(UTC)
         if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
+            return value.replace(tzinfo=UTC)
         return value
 
     @staticmethod

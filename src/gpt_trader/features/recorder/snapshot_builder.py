@@ -268,7 +268,4 @@ def _source_metadata(
     lookback: int,
     as_of: datetime,
 ) -> str:
-    return (
-        f"{source_label}:granularity={granularity}:lookback={lookback}"
-        f":as_of={as_of.isoformat()}"
-    )
+    return f"{source_label}:granularity={granularity}:lookback={lookback}:as_of={as_of.isoformat()}"

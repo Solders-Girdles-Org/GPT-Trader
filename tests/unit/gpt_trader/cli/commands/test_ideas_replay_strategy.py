@@ -30,7 +30,7 @@ MEAN_REVERSION_DIP_CLOSES = ["100"] * 28 + ["96", "100"]
 # confirms SIDEWAYS_QUIET at candle 54 (long-EMA 50 + min-regime-ticks 5 - 1)
 # and the window ending at the dip routes to the mean-reversion delegate.
 REGIME_SWITCHER_DIP_CLOSES = [
-    f"{100 + (1 if i % 2 == 0 else -1) * 0.05 * (0.995 ** i):.4f}" for i in range(58)
+    f"{100 + (1 if i % 2 == 0 else -1) * 0.05 * (0.995**i):.4f}" for i in range(58)
 ] + ["96", "100"]
 
 
@@ -176,8 +176,9 @@ def test_replay_strategy_rejects_min_history_below_regime_switcher_floor(
     assert exit_code == 1
     assert response["errors"][0]["code"] == CliErrorCode.INVALID_ARGUMENT.value
     assert response["errors"][0]["details"]["field"] == "min_history"
-    assert "--min-history must be at least 54 for regime-switcher" in (
-        response["errors"][0]["message"]
+    assert (
+        "--min-history must be at least 54 for regime-switcher"
+        in (response["errors"][0]["message"])
     )
 
 

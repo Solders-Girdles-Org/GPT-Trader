@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -31,7 +31,7 @@ def test_record_drift_events_logs_only_when_non_empty(
 ) -> None:
     detector = DriftDetector(BaselineSnapshot())
     event = DriftEvent(
-        timestamp=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        timestamp=datetime(2024, 1, 1, tzinfo=UTC),
         component="test",
         drift_type="critical_env_changed",
         severity="critical",
@@ -50,13 +50,13 @@ def test_record_drift_events_logs_only_when_non_empty(
 def test_drift_summary_counts_and_last_event_fields() -> None:
     detector = DriftDetector(BaselineSnapshot())
     first = DriftEvent(
-        timestamp=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        timestamp=datetime(2024, 1, 1, tzinfo=UTC),
         component="env",
         drift_type="critical_env_changed",
         severity="critical",
     )
     last = DriftEvent(
-        timestamp=datetime(2024, 1, 2, tzinfo=timezone.utc),
+        timestamp=datetime(2024, 1, 2, tzinfo=UTC),
         component="state",
         drift_type="risk_env_changed",
         severity="high",

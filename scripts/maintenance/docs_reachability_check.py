@@ -30,7 +30,7 @@ ALLOWED_STATUSES = {
 }
 ISO_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 DATE_KEYS = ("last-updated", "last-reviewed", "last-verified")
-METADATA_TEMPLATE = "---\n" "status: current\n" "---"
+METADATA_TEMPLATE = "---\nstatus: current\n---"
 
 SECTION_FALLBACKS = (
     "Quick Links",

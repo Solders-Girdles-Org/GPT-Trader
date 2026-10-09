@@ -218,6 +218,6 @@ class TestOrderFlowMetrics:
         if success_key:
             initial_value = initial_counters.get(success_key, 0)
             final_value = final_counters.get(success_key, 0)
-            assert (
-                final_value > initial_value
-            ), f"Expected counter to increment, was {initial_value} -> {final_value}"
+            assert final_value > initial_value, (
+                f"Expected counter to increment, was {initial_value} -> {final_value}"
+            )

@@ -52,9 +52,9 @@ def test_win_rate_calculation(
     expected_win_rate = len(wins) / total
     tolerance = 0.01
 
-    assert (
-        abs(metrics["win_rate"] - expected_win_rate) < tolerance
-    ), f"Win rate {metrics['win_rate']} != expected {expected_win_rate}"
+    assert abs(metrics["win_rate"] - expected_win_rate) < tolerance, (
+        f"Win rate {metrics['win_rate']} != expected {expected_win_rate}"
+    )
 
 
 @seed(4008)

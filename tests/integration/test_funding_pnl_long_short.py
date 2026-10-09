@@ -44,9 +44,9 @@ class TestFundingPnLLongShort(FundingPnLTestBase):
         self.run_funding_hours(broker, funding_processor, start_time, hours=12)
 
         funding_pnl = broker.get_statistics()["funding_pnl"]
-        assert funding_pnl > Decimal(
-            "0"
-        ), f"Expected positive funding PnL (paid), got {funding_pnl}"
+        assert funding_pnl > Decimal("0"), (
+            f"Expected positive funding PnL (paid), got {funding_pnl}"
+        )
 
     def test_short_position_receives_positive_funding(
         self,
@@ -73,6 +73,6 @@ class TestFundingPnLLongShort(FundingPnLTestBase):
         self.run_funding_hours(broker, funding_processor, start_time, hours=12)
 
         funding_pnl = broker.get_statistics()["funding_pnl"]
-        assert funding_pnl < Decimal(
-            "0"
-        ), f"Expected negative funding PnL (received), got {funding_pnl}"
+        assert funding_pnl < Decimal("0"), (
+            f"Expected negative funding PnL (received), got {funding_pnl}"
+        )

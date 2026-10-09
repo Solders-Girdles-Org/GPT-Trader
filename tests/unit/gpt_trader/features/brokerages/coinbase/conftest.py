@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import MagicMock, Mock
 
@@ -156,14 +156,14 @@ def sample_market_data():
             "ask": Decimal("50100.00"),
             "last": Decimal("50000.00"),
             "volume": Decimal("123.45"),
-            "timestamp": datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            "timestamp": datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
         },
         "ETH-USD": {
             "bid": Decimal("2990.00"),
             "ask": Decimal("3010.00"),
             "last": Decimal("3000.00"),
             "volume": Decimal("567.89"),
-            "timestamp": datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+            "timestamp": datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
         },
     }
 
@@ -176,18 +176,18 @@ def time_helpers():
     class TimeHelpers:
         @staticmethod
         def utc_now() -> datetime:
-            return datetime.now(timezone.utc)
+            return datetime.now(UTC)
 
         @staticmethod
         def seconds_ago(seconds: int) -> datetime:
-            return datetime.now(timezone.utc) - timedelta(seconds=seconds)
+            return datetime.now(UTC) - timedelta(seconds=seconds)
 
         @staticmethod
         def minutes_ago(minutes: int) -> datetime:
-            return datetime.now(timezone.utc) - timedelta(minutes=minutes)
+            return datetime.now(UTC) - timedelta(minutes=minutes)
 
         @staticmethod
         def is_stale(timestamp: datetime, staleness_seconds: int = 30) -> bool:
-            return (datetime.now(timezone.utc) - timestamp).total_seconds() > staleness_seconds
+            return (datetime.now(UTC) - timestamp).total_seconds() > staleness_seconds
 
     return TimeHelpers()

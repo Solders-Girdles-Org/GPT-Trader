@@ -26,9 +26,9 @@ class TestVolatilityTargeting:
         # Low volatility (1%) should increase position size
         low_vol_size = strategy.calculate_position_size(equity, current_volatility=0.01)
 
-        assert (
-            high_vol_size < low_vol_size
-        ), f"High vol size ({high_vol_size}) should be less than low vol size ({low_vol_size})"
+        assert high_vol_size < low_vol_size, (
+            f"High vol size ({high_vol_size}) should be less than low vol size ({low_vol_size})"
+        )
 
     def test_position_capped_at_max_pct(self):
         """Position size should never exceed max_position_pct of equity."""

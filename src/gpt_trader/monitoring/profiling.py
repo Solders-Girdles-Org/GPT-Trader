@@ -11,7 +11,7 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from gpt_trader.monitoring.metrics_collector import record_histogram
@@ -30,7 +30,7 @@ class ProfileSample:
 
     name: str
     duration_ms: float
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     labels: dict[str, str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -118,7 +118,7 @@ def profile_span(
         if sample is not None:
             # Update the yielded sample with actual duration
             sample.duration_ms = duration_ms
-            sample.timestamp = datetime.now(timezone.utc)
+            sample.timestamp = datetime.now(UTC)
 
         # Record to histogram
         record_profile(name, duration_ms, labels)

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
@@ -241,7 +241,7 @@ class OrdersAccounting:
                         if quantity == existing.quantity
                         else OrderStatus.PARTIALLY_FILLED
                     ),
-                    updated_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(UTC),
                 )
                 result = self.store.upsert_by_client_id(updated, raise_on_error=True)
                 if not result.success:
@@ -250,7 +250,7 @@ class OrdersAccounting:
 
     @staticmethod
     def _require_observed_time(value: str) -> None:
-        if aware_time(value) > datetime.now(timezone.utc):
+        if aware_time(value) > datetime.now(UTC):
             raise AccountingIntegrityError(
                 "Future accounting evidence cannot describe current inventory"
             )

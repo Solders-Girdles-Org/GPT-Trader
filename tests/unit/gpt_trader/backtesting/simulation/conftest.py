@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -22,7 +22,7 @@ def fill_model() -> OrderFillModel:
 def current_bar() -> Candle:
     """Standard candle for testing."""
     return Candle(
-        ts=datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+        ts=datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC),
         open=Decimal("50000"),
         high=Decimal("50500"),
         low=Decimal("49500"),
@@ -35,7 +35,7 @@ def current_bar() -> Candle:
 def next_bar() -> Candle:
     """Next bar for market order fills."""
     return Candle(
-        ts=datetime(2024, 1, 1, 10, 1, 0, tzinfo=timezone.utc),
+        ts=datetime(2024, 1, 1, 10, 1, 0, tzinfo=UTC),
         open=Decimal("50200"),
         high=Decimal("50700"),
         low=Decimal("50000"),

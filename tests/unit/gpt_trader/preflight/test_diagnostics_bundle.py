@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -73,7 +73,7 @@ def test_readiness_summary_warn_only_is_diagnostic_only() -> None:
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "diagnostics_bundle"
 PROFILE_NAME = "golden-profile"
-FIXED_TIMESTAMP = datetime(2025, 2, 5, 12, 34, 56, tzinfo=timezone.utc)
+FIXED_TIMESTAMP = datetime(2025, 2, 5, 12, 34, 56, tzinfo=UTC)
 FIXED_PYTHON_VERSION = "3.12.0"
 FIXED_PLATFORM = "TestOS 1.0"
 FIXED_CWD_PATH = Path("/tmp/diagnostics")
@@ -162,7 +162,7 @@ def _patch_stable_environment(monkeypatch: pytest.MonkeyPatch) -> None:
                 FIXED_TIMESTAMP.hour,
                 FIXED_TIMESTAMP.minute,
                 FIXED_TIMESTAMP.second,
-                tzinfo=timezone.utc,
+                tzinfo=UTC,
             )
 
     monkeypatch.setattr(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -58,7 +58,7 @@ class TestCheckMarketDataStalenessSignal:
                 bid=1.0,
                 ask=1.0,
                 last=1.0,
-                ts=datetime.fromtimestamp(clock.time() - 5.0, tz=timezone.utc),
+                ts=datetime.fromtimestamp(clock.time() - 5.0, tz=UTC),
             )
         )
         service = CoinbaseTickerService(symbols=["BTC-USD"], ticker_cache=cache)
@@ -107,7 +107,7 @@ class TestCheckMarketDataStalenessSignal:
                 bid=1.0,
                 ask=1.0,
                 last=1.0,
-                ts=datetime.fromtimestamp(clock.time() - age_seconds, tz=timezone.utc),
+                ts=datetime.fromtimestamp(clock.time() - age_seconds, tz=UTC),
             )
         )
         service = CoinbaseTickerService(symbols=["BTC-USD"], ticker_cache=cache)
@@ -155,7 +155,7 @@ class TestCheckMarketDataStalenessSignal:
                 bid=1.0,
                 ask=1.0,
                 last=1.0,
-                ts=datetime.fromtimestamp(clock.time() - age_seconds, tz=timezone.utc),
+                ts=datetime.fromtimestamp(clock.time() - age_seconds, tz=UTC),
             )
         )
         service = CoinbaseTickerService(symbols=["BTC-USD"], ticker_cache=cache)

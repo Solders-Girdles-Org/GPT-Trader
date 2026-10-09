@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock
 
@@ -63,7 +63,7 @@ def test_monitor_exception_logged_and_other_monitors_continue(
 ) -> None:
     baseline = BaselineSnapshot()
     good_event = DriftEvent(
-        timestamp=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        timestamp=datetime(2024, 1, 1, tzinfo=UTC),
         component="good",
         drift_type="ok",
         severity="low",
@@ -98,7 +98,7 @@ def test_check_records_events_only_when_present() -> None:
     assert detector.recorded == []
 
     event = DriftEvent(
-        timestamp=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        timestamp=datetime(2024, 1, 1, tzinfo=UTC),
         component="monitor",
         drift_type="drift",
         severity="high",
@@ -117,8 +117,8 @@ def test_check_records_events_only_when_present() -> None:
 def test_reset_baseline_updates_monitors_and_logs_user(
     guardian_logger_mock: MagicMock,
 ) -> None:
-    baseline = BaselineSnapshot(timestamp=datetime(2024, 1, 1, tzinfo=timezone.utc))
-    new_baseline = BaselineSnapshot(timestamp=datetime(2024, 1, 2, tzinfo=timezone.utc))
+    baseline = BaselineSnapshot(timestamp=datetime(2024, 1, 1, tzinfo=UTC))
+    new_baseline = BaselineSnapshot(timestamp=datetime(2024, 1, 2, tzinfo=UTC))
     detector = _DetectorStub()
     monitor_with_update = Mock()
     monitor_with_update.monitor_name = "with_update"
@@ -138,7 +138,7 @@ def test_reset_baseline_updates_monitors_and_logs_user(
 
 
 def test_get_state_includes_baseline_monitor_count_and_summary() -> None:
-    baseline = BaselineSnapshot(timestamp=datetime(2024, 1, 3, tzinfo=timezone.utc))
+    baseline = BaselineSnapshot(timestamp=datetime(2024, 1, 3, tzinfo=UTC))
     detector = _DetectorStub(summary={"total_events": 2, "critical": 1})
     guardian = ConfigurationGuardian(
         baseline,

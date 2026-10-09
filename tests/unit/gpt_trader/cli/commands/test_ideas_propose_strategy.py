@@ -41,7 +41,7 @@ MEAN_REVERSION_DIP = ["100"] * 29 + ["96"]
 # confirms at candle 54 (long-EMA 50 + min-regime-ticks 5 - 1) as
 # SIDEWAYS_QUIET, routing the final-bar dip to the mean-reversion delegate.
 REGIME_SWITCHER_DIP = [
-    f"{100 + (1 if i % 2 == 0 else -1) * 0.05 * (0.995 ** i):.4f}" for i in range(59)
+    f"{100 + (1 if i % 2 == 0 else -1) * 0.05 * (0.995**i):.4f}" for i in range(59)
 ] + ["96"]
 
 
