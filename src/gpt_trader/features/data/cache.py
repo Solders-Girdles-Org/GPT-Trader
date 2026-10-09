@@ -34,9 +34,9 @@ or a thread-safe wrapper.
 """
 
 from __future__ import annotations
-from typing import Any
+
 import datetime
-from datetime import timezone
+from typing import Any
 
 
 class DataCache:
@@ -61,7 +61,7 @@ class DataCache:
                     del self.expirations[first_key]
 
         self.cache[key] = data
-        self.expirations[key] = datetime.datetime.now(timezone.utc) + datetime.timedelta(
+        self.expirations[key] = datetime.datetime.now(datetime.UTC) + datetime.timedelta(
             seconds=ttl_seconds
         )
         return True
@@ -71,7 +71,7 @@ class DataCache:
             # Check expiration
             if key in self.expirations:
                 # Tests use freeze_time which patches datetime.datetime
-                if datetime.datetime.now(timezone.utc) > self.expirations[key]:
+                if datetime.datetime.now(datetime.UTC) > self.expirations[key]:
                     del self.cache[key]
                     del self.expirations[key]
                     self.stats["total_misses"] += 1
@@ -83,7 +83,7 @@ class DataCache:
 
     def clear_expired(self) -> int:
         # For test compatibility
-        now = datetime.datetime.now(timezone.utc)
+        now = datetime.datetime.now(datetime.UTC)
         expired = [k for k, v in self.expirations.items() if now > v]
         for k in expired:
             del self.cache[k]

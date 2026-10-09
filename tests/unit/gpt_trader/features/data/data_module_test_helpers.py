@@ -5,9 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 import pandas as pd
-import pytest
 
-from gpt_trader.features.data.data import DataService
 from gpt_trader.features.data.types import DataQuery, DataSource, DataType
 from gpt_trader.utilities.datetime_helpers import utc_now
 
@@ -110,15 +108,6 @@ class QualityStub:
     def check_quality(self, data: pd.DataFrame) -> _Result:
         self.calls.append(data)
         return self._Result(self.acceptable)
-
-
-@pytest.fixture
-def data_service():
-    storage = StorageStub()
-    cache = CacheStub()
-    quality = QualityStub()
-    service = DataService(storage=storage, cache=cache, quality_checker=quality)
-    return {"service": service, "storage": storage, "cache": cache, "quality": quality}
 
 
 def _make_frame(days: int = 3) -> pd.DataFrame:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -17,8 +17,8 @@ class StubManager:
         self, *, symbol: str, granularity: str, start: datetime, end: datetime
     ) -> list[Candle]:
         self.calls.append((symbol, granularity, start, end))
-        ts1 = datetime(2024, 1, 1, tzinfo=timezone.utc)
-        ts2 = datetime(2024, 1, 1, 1, tzinfo=timezone.utc)
+        ts1 = datetime(2024, 1, 1, tzinfo=UTC)
+        ts2 = datetime(2024, 1, 1, 1, tzinfo=UTC)
         return [
             Candle(
                 ts=ts1,
@@ -43,16 +43,16 @@ class StubManager:
 async def test_download_from_coinbase_running_loop() -> None:
     manager = StubManager()
     service = DataService(coinbase_manager=manager)
-    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
-    end = datetime(2024, 1, 2, tzinfo=timezone.utc)
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    end = datetime(2024, 1, 2, tzinfo=UTC)
 
     result = service.download_from_coinbase(["BTC-USD"], start, end, interval="1h")
 
     assert manager.calls == [("BTC-USD", "ONE_HOUR", start, end)]
     frame = result["BTC-USD"]
     assert list(frame.index) == [
-        datetime(2024, 1, 1, tzinfo=timezone.utc),
-        datetime(2024, 1, 1, 1, tzinfo=timezone.utc),
+        datetime(2024, 1, 1, tzinfo=UTC),
+        datetime(2024, 1, 1, 1, tzinfo=UTC),
     ]
     assert frame.loc[frame.index[0], "open"] == 100.0
     assert frame.loc[frame.index[1], "close"] == 108.0
@@ -61,8 +61,8 @@ async def test_download_from_coinbase_running_loop() -> None:
 def test_download_from_coinbase_uses_asyncio_run(monkeypatch) -> None:
     manager = StubManager()
     service = DataService(coinbase_manager=manager)
-    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
-    end = datetime(2024, 1, 2, tzinfo=timezone.utc)
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+    end = datetime(2024, 1, 2, tzinfo=UTC)
 
     def _no_loop() -> None:
         raise RuntimeError("no loop")
