@@ -9,28 +9,23 @@ repos:
     -   id: check-added-large-files
     -   id: mixed-line-ending
 
--   repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.0
-    hooks:
-    -   id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
-
--   repo: https://github.com/asottile/pyupgrade
-    rev: v3.21.0
-    hooks:
-    -   id: pyupgrade
-        args: [--py312-plus]
-        # Exclude files where pyupgrade incorrectly simplifies Generator[None, None, None]
-        # to Generator[None], which breaks mypy type checking
-        exclude: ^src/gpt_trader/utilities/logging_patterns\.py$
-
 -   repo: local
     hooks:
-    -   id: black
-        name: black
-        entry: uv run black
+    # Ruff is the single linter (incl. pyupgrade's UP rules) and formatter. It runs
+    # from uv.lock so hooks, local-ci and CI share one version; --force-exclude
+    # applies the pyproject exclusions to the filenames pre-commit passes.
+    -   id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --force-exclude --fix --exit-non-zero-on-fix
         language: system
-        types: [python]
+        types_or: [python, pyi]
+        require_serial: true
+    -   id: ruff-format
+        name: ruff format
+        entry: uv run ruff format --force-exclude
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
     -   id: test-hygiene
         name: test-hygiene
         entry: scripts/ci/check_test_hygiene.py

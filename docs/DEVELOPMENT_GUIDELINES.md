@@ -16,7 +16,7 @@ Python 3.12 and `uv`.
 ```bash
 uv sync --all-extras --dev
 cp config/environments/.env.template .env   # MOCK_BROKER=1 runs without credentials
-pre-commit install                          # ruff, black, pyupgrade, naming, test hygiene
+pre-commit install                          # ruff check + format, naming, test hygiene
 ```
 
 ## Verify before a PR
@@ -32,7 +32,7 @@ as local/live evidence beyond the PR surface.
 The individual commands:
 
 ```bash
-uv run ruff check . --fix && uv run black .
+uv run ruff check . --fix && uv run ruff format .
 uv run mypy src/gpt_trader
 uv run pytest tests/unit -n auto -q
 uv run agent-naming
@@ -102,7 +102,7 @@ File new work with the Task issue form.
 
 ## Conventions
 
-- Ruff and Black defaults, line length 100; `pathlib.Path` for files;
+- Ruff lint and format (Black-compatible style), line length 100; `pathlib.Path` for files;
   structured logging through `gpt_trader/logging` (`configure_logging`).
 - Type annotations on public interfaces; `typing.Protocol` for guard and
   strategy contracts. Names follow [naming.md](naming.md).

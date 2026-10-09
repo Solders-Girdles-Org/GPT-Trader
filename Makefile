@@ -40,20 +40,20 @@ dev-down:
 
 lint:
 	uv run ruff check .
-	uv run black --check .
+	uv run ruff format --check .
 
 lint-fix:
 	uv run ruff check . --fix
 
 lint-fmt-fix:
 	uv run ruff check . --fix
-	uv run black .
+	uv run ruff format .
 
 fmt:
-	uv run black .
+	uv run ruff format .
 
 fmt-check:
-	uv run black --check .
+	uv run ruff format --check .
 
 typecheck:
 	uv run mypy src
