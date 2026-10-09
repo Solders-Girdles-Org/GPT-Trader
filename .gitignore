@@ -77,8 +77,8 @@ review_artifacts/*.tmp
 review_artifacts/*.log
 
 # Data outputs (local caches / generated datasets)
-data/
-data_storage/
+/data/
+/data_storage/
 
 # Security - NEVER remove these entries
 .env

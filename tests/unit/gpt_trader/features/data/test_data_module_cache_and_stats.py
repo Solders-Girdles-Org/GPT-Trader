@@ -4,7 +4,6 @@ from tests.unit.gpt_trader.features.data.data_module_test_helpers import (
     CacheStub,
     StorageStub,
     _make_frame,
-    data_service,
 )
 
 

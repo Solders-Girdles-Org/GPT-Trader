@@ -2,15 +2,14 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
-
-from gpt_trader.features.data.types import DataQuery, DataSource, DataType
 from tests.unit.gpt_trader.features.data.data_module_test_helpers import (
     CacheStub,
     QualityStub,
     StorageStub,
     _make_frame,
-    data_service,
 )
+
+from gpt_trader.features.data.types import DataQuery, DataSource, DataType
 
 
 def test_store_data_updates_cache_with_warning(data_service) -> None:

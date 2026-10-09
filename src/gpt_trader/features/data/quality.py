@@ -259,7 +259,6 @@ class DataQualityChecker:
         for i in range(1, len(candles)):
             prev_close = candles[i - 1].close
             curr_open = candles[i].open
-            curr_close = candles[i].close
 
             if prev_close == 0:
                 continue

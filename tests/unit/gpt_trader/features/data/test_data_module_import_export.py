@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import pytest
+from tests.unit.gpt_trader.features.data.data_module_test_helpers import _make_frame
 
 from gpt_trader.features.data.types import DataQuery
-from tests.unit.gpt_trader.features.data.data_module_test_helpers import _make_frame, data_service
 
 
 def test_export_data_writes_csv(tmp_path, monkeypatch: pytest.MonkeyPatch, data_service) -> None:
