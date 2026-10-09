@@ -666,13 +666,33 @@ def detect_repo() -> str:
     return str(_gh_json(["repo", "view", "--json", "nameWithOwner"])["nameWithOwner"])
 
 
-def detect_pr_number(repo: str) -> int | None:
+def detect_current_branch() -> str | None:
+    """Current branch name, or None when detached or git is unavailable."""
+    result = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+    branch = result.stdout.strip()
+    if result.returncode != 0 or not branch or branch == "HEAD":
+        return None
+    return branch
+
+
+def detect_pr_number(repo: str, branch: str | None = None) -> int | None:
+    """Open PR number whose head is ``branch`` (default: the current branch).
+
+    ``gh pr view --repo`` requires an explicit selector, so the branch is
+    passed. A branch selector can resolve to a merged or closed PR; only an
+    open one counts.
+    """
+    branch = branch or detect_current_branch()
+    if branch is None:
+        return None
     try:
-        data = _gh_json(["pr", "view", "--repo", repo, "--json", "number"])
+        data = _gh_json(["pr", "view", branch, "--repo", repo, "--json", "number,state"])
     except RuntimeError as error:
         if _is_no_pull_request_error(error):
             return None
         raise
+    if str(data.get("state", "")).upper() != "OPEN":
+        return None
     return int(data["number"]) if data.get("number") else None
 
 
