@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -71,8 +71,8 @@ def _parse_timestamp(raw: str | None) -> datetime | None:
         except ValueError:
             return None
     if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 DEFAULT_LIVENESS_EVENT_TYPES = ("heartbeat", "price_tick")
@@ -107,7 +107,7 @@ def _fetch_last_liveness_event(
     if timestamp is None:
         return None, None
 
-    age_seconds = max(0.0, (datetime.now(timezone.utc) - timestamp).total_seconds())
+    age_seconds = max(0.0, (datetime.now(UTC) - timestamp).total_seconds())
     return (
         {
             "id": int(row["id"]),

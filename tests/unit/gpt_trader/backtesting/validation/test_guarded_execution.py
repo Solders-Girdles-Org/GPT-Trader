@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -42,7 +42,7 @@ def broker() -> SimulatedBroker:
     broker.update_bar(
         "BTC-USD",
         Candle(
-            ts=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            ts=datetime(2024, 1, 1, tzinfo=UTC),
             open=Decimal("1"),
             high=Decimal("1.2"),
             low=Decimal("0.8"),

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from gpt_trader.monitoring.daily_report.loaders import (
     load_events_since,
@@ -30,7 +30,7 @@ def test_load_metrics_invalid_json_returns_empty(tmp_path) -> None:
 
 def test_load_events_since_skips_invalid_entries(tmp_path) -> None:
     events_file = tmp_path / "events.jsonl"
-    cutoff = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    cutoff = datetime(2024, 1, 1, tzinfo=UTC)
     valid_event = {"timestamp": "2024-01-01T02:00:00Z", "id": "ok"}
     lines = [
         "",
@@ -50,7 +50,7 @@ def test_load_events_since_skips_invalid_entries(tmp_path) -> None:
 
 def test_load_events_since_filters_by_cutoff(tmp_path) -> None:
     events_file = tmp_path / "events.jsonl"
-    cutoff = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    cutoff = datetime(2024, 1, 1, tzinfo=UTC)
     before = {"timestamp": "2023-12-31T23:59:59Z", "id": "before"}
     at_cutoff = {"timestamp": "2024-01-01T00:00:00Z", "id": "cutoff"}
     after = {"timestamp": "2024-01-01T01:00:00Z", "id": "after"}
@@ -85,7 +85,7 @@ def test_load_events_since_falls_back_to_db(tmp_path) -> None:
     connection.commit()
     connection.close()
 
-    cutoff = datetime(2024, 1, 1, 1, 0, 0, tzinfo=timezone.utc)
+    cutoff = datetime(2024, 1, 1, 1, 0, 0, tzinfo=UTC)
     events = load_events_since(tmp_path / "events.jsonl", cutoff)
 
     assert len(events) == 1
@@ -102,7 +102,7 @@ def test_load_events_since_normalizes_timestamp(tmp_path) -> None:
             ]
         )
     )
-    cutoff = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    cutoff = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
 
     events = load_events_since(events_file, cutoff)
 
@@ -161,7 +161,7 @@ def test_load_unfilled_orders_count_uses_threshold(tmp_path) -> None:
     connection.commit()
     connection.close()
 
-    as_of = datetime(2024, 1, 1, 0, 10, 0, tzinfo=timezone.utc)
+    as_of = datetime(2024, 1, 1, 0, 10, 0, tzinfo=UTC)
     count = load_unfilled_orders_count(
         orders_db,
         as_of=as_of,

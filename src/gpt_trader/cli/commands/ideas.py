@@ -4129,15 +4129,7 @@ def _replay_tournament_text(report: ReplayTournamentReport) -> str:
             ranking.average_return_r.normalize() if ranking.average_return_r is not None else "n/a"
         )
         lines.append(
-            "{rank}  {proposer_id}  {ideas}  {resolved}  {target}  {stop}  {avg_r}".format(
-                rank=ranking.rank,
-                proposer_id=ranking.proposer_id,
-                ideas=ranking.ideas_proposed,
-                resolved=ranking.resolved_ideas,
-                target=_decimal_pct(ranking.target_hit_rate),
-                stop=_decimal_pct(ranking.stop_hit_rate),
-                avg_r=average_return_r,
-            )
+            f"{ranking.rank}  {ranking.proposer_id}  {ranking.ideas_proposed}  {ranking.resolved_ideas}  {_decimal_pct(ranking.target_hit_rate)}  {_decimal_pct(ranking.stop_hit_rate)}  {average_return_r}"
         )
     return "\n".join(lines)
 

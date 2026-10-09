@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -178,7 +178,7 @@ class TestCheckSystemTime:
         """Should pass with reasonable time when no credentials available."""
         checker = PreflightCheck(profile="dev")
 
-        mock_now = datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+        mock_now = datetime(2025, 6, 15, 12, 0, 0, tzinfo=UTC)
         mock_datetime.now.return_value = mock_now
         result = check_system_time(checker)
 
@@ -195,7 +195,7 @@ class TestCheckSystemTime:
         monkeypatch.setenv("COINBASE_PREFLIGHT_FORCE_REMOTE", "1")
         monkeypatch.setenv("COINBASE_CDP_API_KEY", "organizations/abc/apiKeys/xyz")
         monkeypatch.setenv("COINBASE_CDP_PRIVATE_KEY", FAKE_COINBASE_PRIVATE_KEY)
-        mock_now = datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+        mock_now = datetime(2025, 6, 15, 12, 0, 0, tzinfo=UTC)
         mock_datetime.now.return_value = mock_now
         client = MagicMock()
         client.get_time.return_value = {"iso": "2025-06-15T12:00:00Z"}
@@ -216,7 +216,7 @@ class TestCheckSystemTime:
         monkeypatch.setenv("COINBASE_PREFLIGHT_FORCE_REMOTE", "1")
         monkeypatch.setenv("COINBASE_CDP_API_KEY", "organizations/abc/apiKeys/xyz")
         monkeypatch.setenv("COINBASE_CDP_PRIVATE_KEY", FAKE_COINBASE_PRIVATE_KEY)
-        mock_datetime.now.return_value = datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+        mock_datetime.now.return_value = datetime(2025, 6, 15, 12, 0, 0, tzinfo=UTC)
 
         def raise_client_error(**_: str) -> object:
             raise RuntimeError("network unavailable")
@@ -239,7 +239,7 @@ class TestCheckSystemTime:
         monkeypatch.setenv("COINBASE_PREFLIGHT_FORCE_REMOTE", "1")
         monkeypatch.setenv("COINBASE_CDP_API_KEY", "organizations/abc/apiKeys/xyz")
         monkeypatch.setenv("COINBASE_CDP_PRIVATE_KEY", FAKE_COINBASE_PRIVATE_KEY)
-        mock_datetime.now.return_value = datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+        mock_datetime.now.return_value = datetime(2025, 6, 15, 12, 0, 0, tzinfo=UTC)
         client = MagicMock()
         client.get_time.return_value = {"epoch": 1_750_000_000}
         monkeypatch.setattr(system_checks, "_build_coinbase_time_client", lambda **_: client)
@@ -259,7 +259,7 @@ class TestCheckSystemTime:
         monkeypatch.setenv("COINBASE_PREFLIGHT_SKIP_REMOTE", "1")
         monkeypatch.setenv("COINBASE_CDP_API_KEY", "organizations/abc/apiKeys/xyz")
         monkeypatch.setenv("COINBASE_CDP_PRIVATE_KEY", FAKE_COINBASE_PRIVATE_KEY)
-        mock_datetime.now.return_value = datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+        mock_datetime.now.return_value = datetime(2025, 6, 15, 12, 0, 0, tzinfo=UTC)
         client_factory = MagicMock()
         monkeypatch.setattr(system_checks, "_build_coinbase_time_client", client_factory)
 
@@ -280,7 +280,7 @@ class TestCheckSystemTime:
         checker = PreflightCheck(profile="dev")
 
         # Mock datetime to return an unreasonable time (year 2015)
-        mock_now = datetime(2015, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+        mock_now = datetime(2015, 6, 15, 12, 0, 0, tzinfo=UTC)
         mock_datetime.now.return_value = mock_now
         result = check_system_time(checker)
 
@@ -308,7 +308,7 @@ class TestCheckSystemTime:
         """Should print section header."""
         checker = PreflightCheck(profile="dev")
 
-        mock_now = datetime(2025, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+        mock_now = datetime(2025, 6, 15, 12, 0, 0, tzinfo=UTC)
         mock_datetime.now.return_value = mock_now
         check_system_time(checker)
 

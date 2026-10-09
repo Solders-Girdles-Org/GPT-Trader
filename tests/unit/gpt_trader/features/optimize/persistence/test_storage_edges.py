@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -36,8 +36,8 @@ def _make_config() -> OptimizationConfig:
 
 
 def _make_run() -> OptimizationRun:
-    started_at = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
-    completed_at = datetime(2024, 1, 1, 13, 0, tzinfo=timezone.utc)
+    started_at = datetime(2024, 1, 1, 12, 0, tzinfo=UTC)
+    completed_at = datetime(2024, 1, 1, 13, 0, tzinfo=UTC)
     return OptimizationRun(
         run_id="run-1",
         study_name="study-1",
@@ -272,10 +272,10 @@ def test_storage_list_runs_includes_legacy_default_dir(
 
     current = _make_run()
     current.run_id = "run-current"
-    current.started_at = datetime(2024, 1, 2, 12, 0, tzinfo=timezone.utc)
+    current.started_at = datetime(2024, 1, 2, 12, 0, tzinfo=UTC)
     legacy = _make_run()
     legacy.run_id = "run-legacy"
-    legacy.started_at = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
+    legacy.started_at = datetime(2024, 1, 1, 12, 0, tzinfo=UTC)
 
     for base_dir, run in ((default_dir, current), (legacy_dir, legacy)):
         run_dir = base_dir / run.run_id

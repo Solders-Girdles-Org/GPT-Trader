@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -74,7 +74,7 @@ def test_readiness_liveness_passes_when_recent(
     _write_events_db(
         runtime_root / "events.db",
         events=[
-            ("heartbeat", datetime.now(timezone.utc) - timedelta(seconds=1)),
+            ("heartbeat", datetime.now(UTC) - timedelta(seconds=1)),
         ],
     )
 
@@ -97,7 +97,7 @@ def test_readiness_liveness_fails_when_stale(
     _write_events_db(
         runtime_root / "events.db",
         events=[
-            ("heartbeat", datetime.now(timezone.utc) - timedelta(seconds=120)),
+            ("heartbeat", datetime.now(UTC) - timedelta(seconds=120)),
         ],
     )
 
@@ -137,7 +137,7 @@ def test_readiness_liveness_warn_only_allows_stale(
     _write_events_db(
         runtime_root / "events.db",
         events=[
-            ("heartbeat", datetime.now(timezone.utc) - timedelta(seconds=120)),
+            ("heartbeat", datetime.now(UTC) - timedelta(seconds=120)),
         ],
     )
 
@@ -159,7 +159,7 @@ def test_readiness_liveness_ignores_decision_trace(
     report_dir = runtime_root / "reports"
     _write_report(report_dir, profile="dev")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     _write_events_db(
         runtime_root / "events.db",
         events=[
@@ -186,7 +186,7 @@ def test_readiness_liveness_passes_with_price_tick_only(
     report_dir = runtime_root / "reports"
     _write_report(report_dir, profile="dev")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     _write_events_db(
         runtime_root / "events.db",
         events=[

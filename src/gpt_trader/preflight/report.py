@@ -7,7 +7,7 @@ import tempfile
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypedDict
@@ -72,7 +72,7 @@ def format_preflight_report(
 ) -> dict[str, Any]:
     """Return report payload without IO side effects."""
     if timestamp is None:
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
     if diagnostic_only is None:
         diagnostic_only = _warn_only_mode_enabled()
 
@@ -282,7 +282,7 @@ def generate_report(
         print("3. Run tests: uv run pytest tests/unit/gpt_trader")
         print("4. Verify credentials and API connectivity")
 
-    report_timestamp = timestamp or datetime.now(timezone.utc)
+    report_timestamp = timestamp or datetime.now(UTC)
     report_payload = format_preflight_report(
         checker,
         timestamp=report_timestamp,

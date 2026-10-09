@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock
 
@@ -151,7 +151,7 @@ class TestTradingEngineRehydration:
     ) -> None:
         orders_store = OrdersStore(tmp_path)
         orders_store.initialize()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         orders_store.save_order(
             OrderRecord(
                 order_id="order-123",

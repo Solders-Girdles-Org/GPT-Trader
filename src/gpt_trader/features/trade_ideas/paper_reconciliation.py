@@ -8,10 +8,11 @@ paper/mock trade events and records lifecycle facts only through
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
-from typing import AbstractSet, Any
+from typing import Any
 
 from gpt_trader.errors import ValidationError
 from gpt_trader.features.trade_ideas.audit import ActorType, AuditAction

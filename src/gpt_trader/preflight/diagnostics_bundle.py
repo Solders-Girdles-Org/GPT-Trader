@@ -5,7 +5,7 @@ import os
 import platform
 from collections.abc import Mapping
 from contextlib import redirect_stdout
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -72,7 +72,7 @@ def build_diagnostics_bundle(
     readiness = _format_readiness_payload(context.results, diagnostic_only=diagnostic_only)
     bundle: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "profile": profile,
         "bundle": {
             "readiness": readiness,
@@ -160,7 +160,7 @@ def _build_config_summary(context: PreflightContext, warn_only: bool) -> dict[st
 
 def _build_environment_summary(context: PreflightContext) -> dict[str, Any]:
     credentials = context.resolve_cdp_credentials_info()
-    tzname = datetime.now(timezone.utc).astimezone().tzname() or "UTC"
+    tzname = datetime.now(UTC).astimezone().tzname() or "UTC"
 
     return {
         "python_version": platform.python_version(),

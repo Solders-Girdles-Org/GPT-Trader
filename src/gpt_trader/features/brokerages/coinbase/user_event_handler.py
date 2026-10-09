@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 import time
 from collections import deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
@@ -95,7 +95,7 @@ class CoinbaseUserEventHandler:
         if not order_id or not client_order_id:
             return
 
-        timestamp = event.timestamp or datetime.now(timezone.utc)
+        timestamp = event.timestamp or datetime.now(UTC)
         status = self._normalize_status(event.status)
 
         record = OrderRecord(
@@ -110,7 +110,7 @@ class CoinbaseUserEventHandler:
             filled_quantity=event.filled_size,
             average_fill_price=event.avg_price,
             created_at=timestamp,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
             bot_id=self._bot_id,
             time_in_force="GTC",
             metadata={"source": "ws_user_event", "event_type": "order_update"},
@@ -249,7 +249,7 @@ class CoinbaseUserEventHandler:
             order_type = "unknown"
             price = None
             time_in_force = "GTC"
-            created_at = event.timestamp or datetime.now(timezone.utc)
+            created_at = event.timestamp or datetime.now(UTC)
         else:
             quantity = existing.quantity
             previous_filled = existing.filled_quantity
@@ -262,7 +262,7 @@ class CoinbaseUserEventHandler:
                         existing,
                         filled_quantity=fill_size,
                         average_fill_price=fill_price,
-                        updated_at=datetime.now(timezone.utc),
+                        updated_at=datetime.now(UTC),
                     )
                     self._orders_store.accounting.record_observation(observed, source="websocket")
                     return Decimal("0")
@@ -303,7 +303,7 @@ class CoinbaseUserEventHandler:
             filled_quantity=filled_quantity,
             average_fill_price=avg_price,
             created_at=created_at,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
             bot_id=self._bot_id,
             time_in_force=time_in_force,
             metadata={"source": "ws_user_event", "event_type": "fill"},
@@ -556,7 +556,7 @@ class CoinbaseUserEventHandler:
         created_at = (
             getattr(order, "created_at", None)
             or getattr(order, "submitted_at", None)
-            or datetime.now(timezone.utc)
+            or datetime.now(UTC)
         )
         updated_at = getattr(order, "updated_at", None) or created_at
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import Mock
 
@@ -136,7 +136,7 @@ class TestUpdateMarkAndMetrics:
         coordinator = Mock()
         coordinator._market_monitor = None
         ctx = self._create_mock_context()
-        sentinel = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        sentinel = datetime(2024, 1, 1, tzinfo=UTC)
         risk_manager = Mock()
         risk_manager.record_mark_update.return_value = sentinel
         risk_manager.last_mark_update = {}
@@ -154,7 +154,7 @@ class TestUpdateMarkAndMetrics:
         coordinator = Mock()
         coordinator._market_monitor = None
         ctx = self._create_mock_context()
-        sentinel = datetime(2024, 1, 2, tzinfo=timezone.utc)
+        sentinel = datetime(2024, 1, 2, tzinfo=UTC)
         risk_manager = Mock()
         risk_manager.record_mark_update.side_effect = RuntimeError("boom")
         risk_manager.last_mark_update = {}

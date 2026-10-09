@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -143,7 +143,7 @@ def build_record_from_broker_order(
     status = normalize_persisted_status(status_value)
     created_value = get_order_field(order, "created_time", "created_at", "submitted_at", "created")
     created_ts = parse_timestamp(created_value)
-    created_at = datetime.fromtimestamp(created_ts, tz=timezone.utc)
+    created_at = datetime.fromtimestamp(created_ts, tz=UTC)
     tif_value = get_order_field(order, "tif", "time_in_force")
     time_in_force = str(tif_value) if tif_value is not None else "GTC"
     metadata = {

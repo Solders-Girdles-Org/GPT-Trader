@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock
 
@@ -38,8 +38,8 @@ async def test_audit_orders_normalizes_submit_id_to_broker_order_id(engine, monk
             status=PersistedOrderStatus.PENDING,
             filled_quantity=Decimal("0"),
             average_fill_price=None,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             bot_id="live",
         )
     ]
@@ -163,8 +163,8 @@ async def test_audit_orders_refreshes_missing_persisted_order(engine, monkeypatc
         status=PersistedOrderStatus.PENDING,
         filled_quantity=Decimal("0"),
         average_fill_price=None,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
         bot_id="live",
     )
     orders_store = MagicMock()
@@ -191,8 +191,8 @@ async def test_audit_orders_refreshes_missing_persisted_order(engine, monkeypatc
     refreshed_order.status = OrderStatus.FILLED
     refreshed_order.filled_quantity = Decimal("0.01")
     refreshed_order.avg_fill_price = Decimal("50000")
-    refreshed_order.submitted_at = datetime.now(timezone.utc)
-    refreshed_order.updated_at = datetime.now(timezone.utc)
+    refreshed_order.submitted_at = datetime.now(UTC)
+    refreshed_order.updated_at = datetime.now(UTC)
     engine.context.broker.get_order.return_value = refreshed_order
 
     await engine._audit_orders()
@@ -226,8 +226,8 @@ async def test_audit_orders_reports_refreshed_open_order_snapshot(engine, monkey
         status=PersistedOrderStatus.PENDING,
         filled_quantity=Decimal("0"),
         average_fill_price=None,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
         bot_id="live",
     )
     orders_store = MagicMock()

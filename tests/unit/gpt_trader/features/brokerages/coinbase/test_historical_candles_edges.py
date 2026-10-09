@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock, Mock
 
@@ -156,7 +156,7 @@ def test_create_chunks_uses_four_hour_duration() -> None:
 
 @pytest.mark.asyncio
 async def test_fetch_chunk_calls_client_get_candles_and_parses_timestamps() -> None:
-    start = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    start = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
     end = start + timedelta(minutes=2)
     epoch_start = int(start.timestamp())
 

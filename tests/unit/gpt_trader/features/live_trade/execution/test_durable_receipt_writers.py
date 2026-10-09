@@ -1,6 +1,6 @@
 """Existing WS/REST order writers preserve admitted intent and failure honesty."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import Mock
 
@@ -47,7 +47,7 @@ def fill():
         Decimal("0"),
         Decimal("0"),
         123,
-        datetime.now(timezone.utc),
+        datetime.now(UTC),
     )
 
 
@@ -66,7 +66,7 @@ def test_ws_order_update_retains_intent_and_blocks_changed_retry(tmp_path):
             Decimal("0"),
             None,
             None,
-            datetime.now(timezone.utc),
+            datetime.now(UTC),
         )
     )
     updated = worker.orders_store.get_order_by_client_order_id("stable-close")

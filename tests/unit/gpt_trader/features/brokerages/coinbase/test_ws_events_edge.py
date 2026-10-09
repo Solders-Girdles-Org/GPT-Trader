@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -112,7 +112,7 @@ def test_fill_event_created_from_avg_price_even_without_filled() -> None:
     assert event is not None
     assert event.sequence == 42
     assert event.fill_price == Decimal("50000")
-    assert event.timestamp == datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    assert event.timestamp == datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
 
 
 def test_order_update_defaults_without_order_configuration() -> None:

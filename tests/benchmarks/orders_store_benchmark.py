@@ -7,13 +7,13 @@ from tempfile import TemporaryDirectory
 # Add src to python path for imports
 sys.path.insert(0, os.path.abspath("src"))
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from gpt_trader.persistence.orders_store import OrderRecord, OrdersStore, OrderStatus
 
 
 def create_test_order(order_id):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return OrderRecord(
         order_id=order_id,
         client_order_id=f"client-{order_id}",

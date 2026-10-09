@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
-from functools import lru_cache
+from functools import cache
 from typing import TYPE_CHECKING, Protocol
 
 from gpt_trader.core.instruments import AssetClass, Instrument
@@ -219,7 +219,7 @@ class ExchangeBackedCalendar:
         return timestamp.to_pydatetime().astimezone(UTC)
 
 
-@lru_cache(maxsize=None)
+@cache
 def get_trading_calendar(session_id: str) -> TradingCalendar:
     """Return the calendar for ``session_id`` (one of ``SUPPORTED_SESSIONS``).
 

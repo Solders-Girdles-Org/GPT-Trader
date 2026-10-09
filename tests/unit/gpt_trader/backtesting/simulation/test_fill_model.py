@@ -1,6 +1,6 @@
 """Tests for FillResult, volume threshold, slippage, spread impact, and market fills."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -28,7 +28,7 @@ class TestFillResult:
             filled=True,
             fill_price=Decimal("50100"),
             fill_quantity=Decimal("1"),
-            fill_time=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            fill_time=datetime(2024, 1, 1, tzinfo=UTC),
             is_maker=False,
             slippage_bps=Decimal("2"),
         )
@@ -90,7 +90,7 @@ class TestSpreadImpact:
         """Test no spread impact when spread_impact_pct is 0."""
         model = OrderFillModel(spread_impact_pct=Decimal("0"))
         bar = Candle(
-            ts=datetime.now(timezone.utc),
+            ts=datetime.now(UTC),
             open=Decimal("100"),
             high=Decimal("105"),
             low=Decimal("95"),
@@ -114,7 +114,7 @@ class TestSpreadImpact:
         """Test full spread impact when spread_impact_pct is 1."""
         model = OrderFillModel(spread_impact_pct=Decimal("1.0"), slippage_bps={})
         bar = Candle(
-            ts=datetime.now(timezone.utc),
+            ts=datetime.now(UTC),
             open=Decimal("100"),
             high=Decimal("105"),
             low=Decimal("95"),

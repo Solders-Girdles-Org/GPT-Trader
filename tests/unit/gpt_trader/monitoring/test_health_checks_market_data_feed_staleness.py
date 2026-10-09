@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -47,7 +47,7 @@ class TestCheckMarketDataFeedStaleness:
 
         clock = FakeClock(start_time=1000.0)
         service = TimestampService(
-            datetime.fromtimestamp(clock.time() - age_seconds, tz=timezone.utc)
+            datetime.fromtimestamp(clock.time() - age_seconds, tz=UTC)
         )
         thresholds = HealthThresholds(
             market_data_staleness_seconds_warn=10.0,
@@ -80,7 +80,7 @@ class TestCheckMarketDataFeedStaleness:
             market_data_staleness_seconds_crit=30.0,
         )
 
-        service = TimestampService(datetime.fromtimestamp(clock.time() - 15.0, tz=timezone.utc))
+        service = TimestampService(datetime.fromtimestamp(clock.time() - 15.0, tz=UTC))
 
         healthy, details = check_market_data_feed_staleness(
             service,
@@ -94,7 +94,7 @@ class TestCheckMarketDataFeedStaleness:
         assert details["timeout_delay_seconds"] == pytest.approx(10.0)
         assert details["timeout_capped"] is False
 
-        service = TimestampService(datetime.fromtimestamp(clock.time() - 35.0, tz=timezone.utc))
+        service = TimestampService(datetime.fromtimestamp(clock.time() - 35.0, tz=UTC))
 
         healthy, details = check_market_data_feed_staleness(
             service,
@@ -124,7 +124,7 @@ class TestCheckMarketDataFeedStaleness:
             market_data_staleness_seconds_crit=30.0,
         )
 
-        service = TimestampService(datetime.fromtimestamp(clock.time() - 1.0, tz=timezone.utc))
+        service = TimestampService(datetime.fromtimestamp(clock.time() - 1.0, tz=UTC))
         healthy, details = check_market_data_feed_staleness(
             service,
             thresholds=thresholds,
@@ -137,7 +137,7 @@ class TestCheckMarketDataFeedStaleness:
         assert details["timeout_delay_seconds"] == pytest.approx(0.0)
         assert details["timeout_capped"] is False
 
-        service = TimestampService(datetime.fromtimestamp(clock.time() - 35.0, tz=timezone.utc))
+        service = TimestampService(datetime.fromtimestamp(clock.time() - 35.0, tz=UTC))
         healthy, details = check_market_data_feed_staleness(
             service,
             thresholds=thresholds,

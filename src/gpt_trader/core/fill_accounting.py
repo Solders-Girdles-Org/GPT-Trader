@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -78,7 +78,7 @@ class FillFact:
         )
         object.__setattr__(self, "price", decimal_text(decimal_value(self.price, positive=True)))
         object.__setattr__(
-            self, "executed_at", aware_time(self.executed_at).astimezone(timezone.utc).isoformat()
+            self, "executed_at", aware_time(self.executed_at).astimezone(UTC).isoformat()
         )
         if self.fee is not None:
             object.__setattr__(self, "fee", decimal_text(decimal_value(self.fee)))
@@ -109,7 +109,7 @@ class PositionBaseline:
         quantity = decimal_value(self.quantity)
         object.__setattr__(self, "quantity", decimal_text(quantity))
         object.__setattr__(
-            self, "effective_at", aware_time(self.effective_at).astimezone(timezone.utc).isoformat()
+            self, "effective_at", aware_time(self.effective_at).astimezone(UTC).isoformat()
         )
         object.__setattr__(self, "covered_order_ids", tuple(self.covered_order_ids))
         if any(not value for value in self.covered_order_ids) or len(

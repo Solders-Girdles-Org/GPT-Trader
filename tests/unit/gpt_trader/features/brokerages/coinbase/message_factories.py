@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -22,7 +22,7 @@ def ticker_message_factory():
             "price": price,
             "best_bid": bid,
             "best_ask": ask,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "sequence": 12345,
         }
 
@@ -42,7 +42,7 @@ def trade_message_factory():
             "price": price,
             "size": size,
             "side": side,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "trade_id": "123456",
             "sequence": 12346,
         }
@@ -64,7 +64,7 @@ def orderbook_message_factory():
             "type": "l2update",
             "product_id": symbol,
             "changes": changes,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "sequence": 12347,
         }
 
@@ -80,7 +80,7 @@ def heartbeat_message_factory():
             "type": "heartbeat",
             "status": status,
             "message": message,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     return create_heartbeat

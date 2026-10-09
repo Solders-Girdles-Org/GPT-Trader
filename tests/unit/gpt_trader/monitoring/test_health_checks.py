@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
@@ -199,7 +199,7 @@ class TestCheckTickerFreshness:
 
     def test_all_fresh(self) -> None:
         """Test healthy when all symbols are fresh."""
-        base_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        base_time = datetime(2024, 1, 1, tzinfo=UTC)
         clock = FakeClock(base_time)
         cache = TickerCache(ttl_seconds=10, clock=clock)
         for symbol in ("BTC-USD", "ETH-USD"):
@@ -222,7 +222,7 @@ class TestCheckTickerFreshness:
 
     def test_records_profile_and_outcome_metrics(self) -> None:
         """Test ticker freshness emits profile histogram and ok outcome counter."""
-        base_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        base_time = datetime(2024, 1, 1, tzinfo=UTC)
         clock = FakeClock(base_time)
         cache = TickerCache(ttl_seconds=10, clock=clock)
         for symbol in ("BTC-USD", "ETH-USD"):
@@ -277,7 +277,7 @@ class TestCheckTickerFreshness:
 
     def test_some_stale(self) -> None:
         """Test unhealthy when some symbols are stale."""
-        base_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        base_time = datetime(2024, 1, 1, tzinfo=UTC)
         clock = FakeClock(base_time)
         cache = TickerCache(ttl_seconds=5, clock=clock)
         cache.update(
@@ -308,7 +308,7 @@ class TestCheckTickerFreshness:
 
     def test_no_data_available(self) -> None:
         """Test unhealthy when no tickers are available."""
-        base_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        base_time = datetime(2024, 1, 1, tzinfo=UTC)
         clock = FakeClock(base_time)
         cache = TickerCache(ttl_seconds=5, clock=clock)
         market_data_service = FakeMarketDataService(["BTC-USD", "ETH-USD"], cache)
@@ -334,7 +334,7 @@ class TestCheckTickerFreshness:
 
     def test_stale_symbol_metrics_incremented(self) -> None:
         """Test stale ticker observations increment metrics counter by symbol count."""
-        base_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        base_time = datetime(2024, 1, 1, tzinfo=UTC)
         clock = FakeClock(base_time)
         cache = TickerCache(ttl_seconds=5, clock=clock)
         cache.update(
@@ -359,7 +359,7 @@ class TestCheckTickerFreshness:
 
     def test_partial_symbol_coverage(self) -> None:
         """Test missing symbols are marked stale."""
-        base_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        base_time = datetime(2024, 1, 1, tzinfo=UTC)
         clock = FakeClock(base_time)
         cache = TickerCache(ttl_seconds=5, clock=clock)
         cache.update(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -42,7 +42,7 @@ class TestProfileSample:
 
     def test_profile_sample_to_dict(self) -> None:
         """Test serialization to dictionary."""
-        timestamp = datetime(2024, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        timestamp = datetime(2024, 1, 15, 12, 0, 0, tzinfo=UTC)
         sample = ProfileSample(
             name="test",
             duration_ms=25.5,
@@ -138,11 +138,11 @@ class TestProfileSpan:
 
     def test_profile_span_updates_sample_timestamp(self, record_histogram_mock: MagicMock) -> None:
         """Test that sample timestamp is updated on exit."""
-        before = datetime.now(timezone.utc)
+        before = datetime.now(UTC)
         with profile_span("time_test") as sample:
             # Do trivial work
             _ = sum(range(100))
-        after = datetime.now(timezone.utc)
+        after = datetime.now(UTC)
 
         assert sample is not None
         assert before <= sample.timestamp <= after

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import Mock
 
@@ -36,7 +36,7 @@ def _make_handler(
 
 def test_order_update_upserts_orders_store(tmp_path) -> None:
     handler, store = _make_handler(tmp_path)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     event = OrderUpdateEvent(
         order_id="order-123",
         client_order_id="client-123",
@@ -62,7 +62,7 @@ def test_order_update_upserts_orders_store(tmp_path) -> None:
 
 def test_fill_event_idempotent(tmp_path) -> None:
     handler, store = _make_handler(tmp_path)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     order = OrderRecord(
         order_id="order-456",
         client_order_id="client-456",

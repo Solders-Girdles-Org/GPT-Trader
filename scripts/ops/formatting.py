@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +39,7 @@ def parse_timestamp(value: str | datetime | None) -> datetime | None:
                 return None
             parsed = datetime.fromisoformat(_prepare_timestamp_text(text))
         if parsed.tzinfo is None:
-            return parsed.replace(tzinfo=timezone.utc)
+            return parsed.replace(tzinfo=UTC)
         return parsed
     except Exception:
         return None
@@ -64,7 +64,7 @@ def format_timestamp(
                 return text
 
         if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
+            parsed = parsed.replace(tzinfo=UTC)
         return parsed.isoformat()
     except Exception:
         return placeholder

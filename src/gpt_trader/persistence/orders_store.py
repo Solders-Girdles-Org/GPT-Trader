@@ -19,7 +19,7 @@ import weakref
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -748,7 +748,7 @@ class OrdersStore:
                 updated = replace(
                     original,
                     status=status,
-                    updated_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(UTC),
                     filled_quantity=(
                         filled_quantity if filled_quantity is not None else original.filled_quantity
                     ),

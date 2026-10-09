@@ -6,8 +6,9 @@ import base64
 import hashlib
 import json
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 _SLUG_PATTERN = re.compile(r"[^a-z0-9]+")
 _SEED_REASON_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_:\\-]{0,63}$")

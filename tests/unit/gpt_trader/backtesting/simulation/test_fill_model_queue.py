@@ -1,6 +1,6 @@
 """Tests for OrderFillModel limit order queue priority and fill estimation."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from tests.unit.gpt_trader.backtesting.simulation.fill_model_test_utils import (  # naming: allow
@@ -18,7 +18,7 @@ class TestLimitOrderQueuePriority:
         """Test full fill when queue priority is disabled."""
         model = OrderFillModel(enable_queue_priority=False)
         bar = Candle(
-            ts=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            ts=datetime(2024, 1, 1, tzinfo=UTC),
             open=Decimal("100"),
             high=Decimal("105"),
             low=Decimal("95"),
@@ -46,7 +46,7 @@ class TestLimitOrderQueuePriority:
         """Test full fill with queue priority when volume >> order size."""
         model = OrderFillModel(enable_queue_priority=True)
         bar = Candle(
-            ts=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            ts=datetime(2024, 1, 1, tzinfo=UTC),
             open=Decimal("100"),
             high=Decimal("105"),
             low=Decimal("95"),
@@ -77,7 +77,7 @@ class TestLimitOrderQueuePriority:
             limit_volume_threshold=Decimal("1.0"),  # Low threshold
         )
         bar = Candle(
-            ts=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            ts=datetime(2024, 1, 1, tzinfo=UTC),
             open=Decimal("100"),
             high=Decimal("105"),
             low=Decimal("95"),
@@ -108,7 +108,7 @@ class TestLimitOrderQueuePriority:
             limit_volume_threshold=Decimal("1.0"),
         )
         bar = Candle(
-            ts=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            ts=datetime(2024, 1, 1, tzinfo=UTC),
             open=Decimal("100"),
             high=Decimal("105"),
             low=Decimal("95"),
@@ -140,7 +140,7 @@ class TestQueueFillEstimation:
         """Test 100% fill when volume ratio >= 10x."""
         model = OrderFillModel(enable_queue_priority=True)
         bar = Candle(
-            ts=datetime.now(timezone.utc),
+            ts=datetime.now(UTC),
             open=Decimal("100"),
             high=Decimal("105"),
             low=Decimal("95"),
@@ -161,7 +161,7 @@ class TestQueueFillEstimation:
         """Test 80% fill when volume ratio is 5-10x."""
         model = OrderFillModel(enable_queue_priority=True)
         bar = Candle(
-            ts=datetime.now(timezone.utc),
+            ts=datetime.now(UTC),
             open=Decimal("100"),
             high=Decimal("105"),
             low=Decimal("95"),
@@ -182,7 +182,7 @@ class TestQueueFillEstimation:
         """Test 50% fill when volume ratio is 2-5x."""
         model = OrderFillModel(enable_queue_priority=True)
         bar = Candle(
-            ts=datetime.now(timezone.utc),
+            ts=datetime.now(UTC),
             open=Decimal("100"),
             high=Decimal("105"),
             low=Decimal("95"),
@@ -203,7 +203,7 @@ class TestQueueFillEstimation:
         """Test 20% fill when volume ratio < 2x."""
         model = OrderFillModel(enable_queue_priority=True)
         bar = Candle(
-            ts=datetime.now(timezone.utc),
+            ts=datetime.now(UTC),
             open=Decimal("100"),
             high=Decimal("105"),
             low=Decimal("95"),

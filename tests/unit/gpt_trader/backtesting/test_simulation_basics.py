@@ -1,6 +1,6 @@
 """Basic tests for backtesting simulation components."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from gpt_trader.backtesting.simulation import FeeCalculator, FundingPnLTracker, SimulatedBroker
@@ -54,14 +54,14 @@ class TestFundingPnLTracker:
         position_size = Decimal("1")  # 1 BTC long
         mark_price = Decimal("50000")
         funding_rate_8h = Decimal("0.0001")  # 0.01% per 8 hours
-        current_time = datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc)
+        current_time = datetime(2024, 1, 1, 0, 0, tzinfo=UTC)
 
         # First accrual (initializes, returns 0)
         funding = tracker.accrue(symbol, position_size, mark_price, funding_rate_8h, current_time)
         assert funding == Decimal("0")
 
         # Second accrual after 1 hour
-        current_time = datetime(2024, 1, 1, 1, 0, tzinfo=timezone.utc)
+        current_time = datetime(2024, 1, 1, 1, 0, tzinfo=UTC)
         funding = tracker.accrue(symbol, position_size, mark_price, funding_rate_8h, current_time)
 
         # Expected: (1 BTC * 50000 * 0.0001) / 8 = 0.625
@@ -73,19 +73,19 @@ class TestFundingPnLTracker:
         tracker = FundingPnLTracker()
 
         symbol = "ETH-PERP-USDC"
-        current_time = datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc)
+        current_time = datetime(2024, 1, 1, 0, 0, tzinfo=UTC)
 
         # Accrue some funding
         tracker.accrue(symbol, Decimal("10"), Decimal("3000"), Decimal("0.0001"), current_time)
 
-        current_time = datetime(2024, 1, 1, 1, 0, tzinfo=timezone.utc)
+        current_time = datetime(2024, 1, 1, 1, 0, tzinfo=UTC)
         tracker.accrue(symbol, Decimal("10"), Decimal("3000"), Decimal("0.0001"), current_time)
 
         accrued = tracker.get_accrued(symbol)
         assert accrued > Decimal("0")
 
         # Settle
-        current_time = datetime(2024, 1, 1, 8, 0, tzinfo=timezone.utc)
+        current_time = datetime(2024, 1, 1, 8, 0, tzinfo=UTC)
         settled = tracker.settle(symbol, current_time)
 
         assert settled == accrued

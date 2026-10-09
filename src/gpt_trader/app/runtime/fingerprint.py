@@ -6,7 +6,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Tuple
+from typing import Any
 
 from gpt_trader.app.config.bot_config import BotConfig
 from gpt_trader.app.runtime.settings import (
@@ -38,7 +38,7 @@ def compute_startup_config_fingerprint(
 def compare_startup_config_fingerprints(
     expected: StartupConfigFingerprint | None,
     actual: StartupConfigFingerprint | None,
-) -> Tuple[bool, str]:
+) -> tuple[bool, str]:
     """Compare two fingerprints and return (match, reason)."""
 
     if expected is None:
