@@ -300,9 +300,7 @@ def make_events_panel(events: list[dict]) -> Panel:
 
         if etype == "order_success":
             style = "green"
-            details = (
-                f"{e.get('side','').upper()} {sym} {e.get('quantity','')} @ {e.get('price', 'MKT')}"
-            )
+            details = f"{e.get('side', '').upper()} {sym} {e.get('quantity', '')} @ {e.get('price', 'MKT')}"
         elif etype == "order_failed":
             style = "red"
             details = f"{sym} {e.get('reason', '')}"

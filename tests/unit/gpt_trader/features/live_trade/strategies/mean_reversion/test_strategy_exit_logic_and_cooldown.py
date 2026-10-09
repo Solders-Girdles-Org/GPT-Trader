@@ -93,9 +93,9 @@ class TestExitLogic:
             product=None,
         )
 
-        assert (
-            decision.action == Action.CLOSE
-        ), f"Expected CLOSE on stop loss, got {decision.action}"
+        assert decision.action == Action.CLOSE, (
+            f"Expected CLOSE on stop loss, got {decision.action}"
+        )
         assert "stop loss" in decision.reason.lower()
 
     def test_take_profit_triggered(self):
@@ -124,9 +124,9 @@ class TestExitLogic:
             product=None,
         )
 
-        assert (
-            decision.action == Action.CLOSE
-        ), f"Expected CLOSE on take profit, got {decision.action}"
+        assert decision.action == Action.CLOSE, (
+            f"Expected CLOSE on take profit, got {decision.action}"
+        )
         assert "take profit" in decision.reason.lower()
 
 

@@ -42,7 +42,7 @@ def _snapshot(symbol: str = "BTC-USD") -> MarketSnapshot:
     return MarketSnapshot(
         as_of=AS_OF,
         source=(
-            "coinbase:market-candles:granularity=ONE_DAY:lookback=53" f":as_of={AS_OF.isoformat()}"
+            f"coinbase:market-candles:granularity=ONE_DAY:lookback=53:as_of={AS_OF.isoformat()}"
         ),
         series=(SymbolSeries(symbol=symbol, granularity="ONE_DAY", candles=tuple(candles)),),
     )

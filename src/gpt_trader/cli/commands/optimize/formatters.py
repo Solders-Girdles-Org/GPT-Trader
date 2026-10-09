@@ -278,7 +278,7 @@ def format_comparison_text(comparison: dict[str, Any]) -> str:
 
     if best_run and best_run.get("objective_value") is not None:
         lines.append(
-            f"Best objective: {best_run['objective_value']:.4f} " f"(run {best_run['run_id']})"
+            f"Best objective: {best_run['objective_value']:.4f} (run {best_run['run_id']})"
         )
         lines.append("")
 

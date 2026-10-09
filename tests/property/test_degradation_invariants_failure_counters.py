@@ -85,9 +85,9 @@ def test_broker_failure_escalation(
             pauses_triggered += 1
 
     expected_triggers = failure_count // threshold
-    assert (
-        pauses_triggered == expected_triggers
-    ), f"Expected {expected_triggers} triggers for {failure_count} failures with threshold {threshold}"
+    assert pauses_triggered == expected_triggers, (
+        f"Expected {expected_triggers} triggers for {failure_count} failures with threshold {threshold}"
+    )
 
 
 @seed(3007)

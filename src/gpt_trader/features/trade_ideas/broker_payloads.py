@@ -222,8 +222,7 @@ def _require_exportable_state(
         return
     allowed = "approved, submitted, filled, cancelled, or expired after approval"
     raise InvalidTransitionError(
-        f"Trade idea '{decision_id}' must be {allowed} before ticket export; "
-        f"got '{state.value}'",
+        f"Trade idea '{decision_id}' must be {allowed} before ticket export; got '{state.value}'",
         field="after_state",
         value=state.value,
     )

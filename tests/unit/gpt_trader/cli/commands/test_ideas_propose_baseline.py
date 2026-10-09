@@ -115,7 +115,7 @@ def test_propose_baseline_persists_generated_proposal(
     # Sized proposals carry a notional, so on an unattested root the preview
     # surfaces the fail-closed equity gate instead of a missing-notional gap.
     assert proposal["approval_preview"]["violations"] == [
-        "account_equity_snapshot is required to verify " "max_open_notional_pct budget exposure"
+        "account_equity_snapshot is required to verify max_open_notional_pct budget exposure"
     ]
     assert proposal["approval_preview"]["warnings"] == [
         "would fail approval: account_equity_snapshot is required to verify "

@@ -32,8 +32,7 @@ def test_main_json_require_reports_emits_failure_payload_without_reports(
     output = capsys.readouterr()
     payload = json.loads(output.out)
     expected_message = (
-        f"Readiness gate skipped: no daily reports found for profile 'canary' "
-        f"under {daily_root}."
+        f"Readiness gate skipped: no daily reports found for profile 'canary' under {daily_root}."
     )
 
     assert result == 1
@@ -179,8 +178,7 @@ def test_main_json_output_skips_when_no_reports(tmp_path: Path, capsys) -> None:
     output = capsys.readouterr()
     payload = json.loads(output.out)
     expected_message = (
-        f"Readiness gate skipped: no daily reports found for profile 'canary' "
-        f"under {daily_root}."
+        f"Readiness gate skipped: no daily reports found for profile 'canary' under {daily_root}."
     )
     assert result == 0
     assert payload["status"] == "SKIPPED"

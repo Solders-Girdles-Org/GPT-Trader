@@ -9,9 +9,7 @@ from gpt_trader.utilities.logging_patterns import get_logger
 logger = get_logger(__name__, component="validation")
 
 
-def manual_backtest_example() -> (
-    dict[str, Any]
-):  # noqa: D401 - utility function retained for compatibility
+def manual_backtest_example() -> dict[str, Any]:  # noqa: D401 - utility function retained for compatibility
     """Run a manual MA crossover walkthrough for validation exercises."""
 
     logger.info("=" * 60)

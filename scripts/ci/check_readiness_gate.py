@@ -974,9 +974,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     table_text = _format_table(evaluations, REPO_ROOT)
 
     if not args.json:
-        print(
-            f"Readiness gate (profile={profile}, streak_days={streak_days})"
-        )
+        print(f"Readiness gate (profile={profile}, streak_days={streak_days})")
         print(
             f"Thresholds: stale_marks<={thresholds.stale_marks_max}, ws_reconnects<={thresholds.ws_reconnects_max}, "
             f"unfilled_orders<={thresholds.unfilled_orders_max}, api_errors<={thresholds.api_errors_max}, guard_triggers<={thresholds.guard_triggers_max}, "

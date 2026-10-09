@@ -20,7 +20,6 @@ def record_counter_mock(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
 
 
 class TestMetricsRecording:
-
     def test_mark_staleness_failure_records_metric(
         self,
         record_counter_mock: MagicMock,

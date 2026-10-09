@@ -91,9 +91,9 @@ class TestQuantizeBounds:
 
         result = quantize_price_side_aware(price, increment, "BUY")
 
-        assert (
-            result <= price
-        ), f"BUY should floor: quantize({price}, {increment}, BUY) = {result} > {price}"
+        assert result <= price, (
+            f"BUY should floor: quantize({price}, {increment}, BUY) = {result} > {price}"
+        )
 
     @given(price=reasonable_prices, increment=reasonable_increments)
     @settings(max_examples=200)
@@ -103,9 +103,9 @@ class TestQuantizeBounds:
 
         result = quantize_price_side_aware(price, increment, "SELL")
 
-        assert (
-            result >= price
-        ), f"SELL should ceil: quantize({price}, {increment}, SELL) = {result} < {price}"
+        assert result >= price, (
+            f"SELL should ceil: quantize({price}, {increment}, SELL) = {result} < {price}"
+        )
 
 
 class TestQuantizeEdgeCases:
@@ -156,9 +156,9 @@ class TestQuantizeEdgeCases:
         buy_price = quantize_price_side_aware(price, increment, "BUY")
         sell_price = quantize_price_side_aware(price, increment, "SELL")
 
-        assert (
-            buy_price <= sell_price
-        ), f"Spread consistency violated: BUY={buy_price} > SELL={sell_price} for input={price}"
+        assert buy_price <= sell_price, (
+            f"Spread consistency violated: BUY={buy_price} > SELL={sell_price} for input={price}"
+        )
 
 
 class TestQuantizeRealWorldScenarios:

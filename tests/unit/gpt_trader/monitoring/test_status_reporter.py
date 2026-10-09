@@ -16,7 +16,6 @@ from gpt_trader.monitoring.status_reporter import (
 
 
 class TestBotStatusDataclass:
-
     def test_default_values(self) -> None:
         status = BotStatus()
         assert status.bot_id == ""
@@ -44,7 +43,6 @@ class TestBotStatusDataclass:
 
 
 class TestStatusReporterInit:
-
     def test_default_values(self) -> None:
         reporter = StatusReporter()
         assert reporter.status_file == "status.json"
@@ -67,7 +65,6 @@ class TestStatusReporterInit:
 
 
 class TestStatusReporterMetrics:
-
     @pytest.fixture(autouse=True)
     def reset_metrics(self):
         from gpt_trader.monitoring.metrics_collector import reset_all
@@ -127,7 +124,6 @@ class TestStatusReporterMetrics:
 
 
 class TestStatusReporterStrategyPerformance:
-
     def test_update_strategy_performance_sets_performance(self) -> None:
         """update_strategy_performance sets strategy.performance."""
         reporter = StatusReporter()
@@ -177,7 +173,6 @@ class TestStatusReporterStrategyPerformance:
 
 
 class TestStatusReporterUpdates:
-
     def test_record_cycle(self) -> None:
         reporter = StatusReporter()
         assert reporter._cycle_count == 0
@@ -242,7 +237,6 @@ class TestStatusReporterUpdates:
 
 
 class TestStatusReporterStop:
-
     @pytest.mark.asyncio
     async def test_stop_when_not_running(self) -> None:
         reporter = StatusReporter()

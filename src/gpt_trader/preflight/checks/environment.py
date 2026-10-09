@@ -73,7 +73,7 @@ def check_environment_variables(checker: PreflightCheck) -> bool:
         api_key = creds.key_name
         private_key = creds.private_key
         masked_name = mask_key_name(creds.key_name)
-        checker.log_info("CDP credentials resolved from " f"{creds.source} ({masked_name})")
+        checker.log_info(f"CDP credentials resolved from {creds.source} ({masked_name})")
         for warning in creds.warnings:
             checker.log_warning(f"CDP credential warning: {warning}")
 

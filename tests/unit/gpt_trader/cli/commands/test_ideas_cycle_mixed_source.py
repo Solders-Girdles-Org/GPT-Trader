@@ -89,7 +89,7 @@ def _seed_busy_instrument(root: Path, instrument: str) -> None:
     TradeIdeaService(root).propose(
         build_trade_idea(
             decision_id=(
-                f"trade-{datetime.now(UTC):%Y%m%d}-" f"{instrument.replace('-', '').lower()}-busy"
+                f"trade-{datetime.now(UTC):%Y%m%d}-{instrument.replace('-', '').lower()}-busy"
             ),
             instrument=instrument,
             time_horizon=TimeHorizon(

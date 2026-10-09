@@ -107,8 +107,7 @@ def _format_readiness_payload(
         )
     if diagnostic_only:
         message = (
-            "DIAGNOSTIC-ONLY: warn-only results do not satisfy the live readiness gate. "
-            f"{message}"
+            f"DIAGNOSTIC-ONLY: warn-only results do not satisfy the live readiness gate. {message}"
         )
 
     checks = []

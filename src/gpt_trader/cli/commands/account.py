@@ -365,9 +365,7 @@ async def _handle_agentic_preview(
             errors = (
                 ()
                 if not evidence.errors
-                else (
-                    "provider order checks: " f"{data['provider_evidence']['order_checks_json']}",
-                )
+                else (f"provider order checks: {data['provider_evidence']['order_checks_json']}",)
             )
             warnings: tuple[str, ...] = ()
         else:

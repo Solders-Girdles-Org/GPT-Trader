@@ -49,7 +49,7 @@ def compare_startup_config_fingerprints(
         return True, "ok"
     return (
         False,
-        ("config fingerprint mismatch: " f"expected={expected.digest} actual={actual.digest}"),
+        (f"config fingerprint mismatch: expected={expected.digest} actual={actual.digest}"),
     )
 
 

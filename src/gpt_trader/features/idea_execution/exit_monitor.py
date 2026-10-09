@@ -171,8 +171,7 @@ def _closed_session_skip(
             "decision_id": decision_id,
             "instrument": instrument,
             "reason": (
-                f"session calendar {calendar.session_id} cannot evaluate "
-                f"{now.isoformat()}: {error}"
+                f"session calendar {calendar.session_id} cannot evaluate {now.isoformat()}: {error}"
             ),
         }
     detail = f"; next open {next_open.isoformat()}" if next_open is not None else ""

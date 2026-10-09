@@ -78,9 +78,9 @@ def test_volume_reset_clears_tracking(
     calculator.calculate(initial_volume, is_maker=False)
     calculator.reset_volume()
 
-    assert calculator.current_volume == Decimal(
-        "0"
-    ), f"After reset, volume should be 0, got {calculator.current_volume}"
+    assert calculator.current_volume == Decimal("0"), (
+        f"After reset, volume should be 0, got {calculator.current_volume}"
+    )
 
 
 def test_volume_tracking_disabled_no_tier_change() -> None:

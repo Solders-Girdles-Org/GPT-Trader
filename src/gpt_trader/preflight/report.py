@@ -263,7 +263,7 @@ def generate_report(
 
     print(f"\n{Colors.BOLD}Recommendations:{Colors.RESET}")
     if status == "READY":
-        print("1. Start with: uv run gpt-trader run --profile " f"{checker.profile} --dry-run")
+        print(f"1. Start with: uv run gpt-trader run --profile {checker.profile} --dry-run")
         print("2. Review dry-run evidence against the approved runbook and decision record")
         print(
             "3. Progress canary/prod live profiles with: uv run gpt-trader run --profile "

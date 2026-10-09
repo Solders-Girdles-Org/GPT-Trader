@@ -99,9 +99,9 @@ class TestValidationEscalationFlow:
         )
         for i in range(4):
             validator.ensure_mark_is_fresh("BTC-USD")
-            assert (
-                not real_risk_manager.is_reduce_only_mode()
-            ), f"Reduce-only triggered too early at failure {i + 1}"
+            assert not real_risk_manager.is_reduce_only_mode(), (
+                f"Reduce-only triggered too early at failure {i + 1}"
+            )
 
         validator.ensure_mark_is_fresh("BTC-USD")
 

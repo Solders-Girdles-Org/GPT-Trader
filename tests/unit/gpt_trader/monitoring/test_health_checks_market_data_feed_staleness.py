@@ -46,9 +46,7 @@ class TestCheckMarketDataFeedStaleness:
                 return self._last_update
 
         clock = FakeClock(start_time=1000.0)
-        service = TimestampService(
-            datetime.fromtimestamp(clock.time() - age_seconds, tz=UTC)
-        )
+        service = TimestampService(datetime.fromtimestamp(clock.time() - age_seconds, tz=UTC))
         thresholds = HealthThresholds(
             market_data_staleness_seconds_warn=10.0,
             market_data_staleness_seconds_crit=30.0,

@@ -86,7 +86,7 @@ async def test_builder_fetches_window_and_builds_auditable_snapshot_metadata() -
     assert snapshot.as_of == AS_OF
     assert snapshot.symbols() == ("BTC-USD", "ETH-USD")
     assert snapshot.source == (
-        "coinbase:market-candles:granularity=ONE_HOUR:lookback=3" f":as_of={AS_OF.isoformat()}"
+        f"coinbase:market-candles:granularity=ONE_HOUR:lookback=3:as_of={AS_OF.isoformat()}"
     )
     assert [call["symbol"] for call in source.calls] == ["BTC-USD", "ETH-USD"]
     assert source.calls[0]["start"] == AS_OF - timedelta(hours=3)
@@ -104,7 +104,7 @@ async def test_builder_normalizes_granularity_alias_before_fetching() -> None:
     assert series is not None
     assert series.granularity == "ONE_HOUR"
     assert snapshot.source == (
-        "coinbase:market-candles:granularity=ONE_HOUR:lookback=2" f":as_of={AS_OF.isoformat()}"
+        f"coinbase:market-candles:granularity=ONE_HOUR:lookback=2:as_of={AS_OF.isoformat()}"
     )
 
 

@@ -246,7 +246,7 @@ class RegimeAwareProposer:
         # over the same snapshot must never collide on decision_id.
         digest = hashlib.sha256(
             (
-                f"{self.proposer_id}|{symbol}|{as_of.isoformat()}|" f"{self._identity_fingerprint}"
+                f"{self.proposer_id}|{symbol}|{as_of.isoformat()}|{self._identity_fingerprint}"
             ).encode()
         ).hexdigest()[:8]
         symbol_slug = symbol.lower().replace("-", "")
@@ -287,7 +287,7 @@ def _regime_exit_levels(
         stop_level=close - multiplier * (close - levels.stop_level),
         reward_multiple=reward_multiple,
         stop_basis=(
-            f"the volatility-adjusted stop ({multiplier}x the distance to " f"{levels.stop_basis})"
+            f"the volatility-adjusted stop ({multiplier}x the distance to {levels.stop_basis})"
         ),
     )
 

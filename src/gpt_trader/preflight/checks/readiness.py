@@ -247,7 +247,7 @@ def check_readiness_report(checker: PreflightCheck) -> bool:
             checker.log_error(last_event_error)
             all_good = False
     if last_event is None:
-        message = "Readiness liveness: no heartbeat/price_tick events in " f"{event_store_path}"
+        message = f"Readiness liveness: no heartbeat/price_tick events in {event_store_path}"
         if warn_only:
             checker.log_warning(message)
         else:

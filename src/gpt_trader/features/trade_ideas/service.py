@@ -765,9 +765,8 @@ class TradeIdeaService:
                     evaluation_time,
                 )
             if closeout is not None and same_session:
-                if (
-                    event.after_state is TradeIdeaState.FILLED
-                    or _closeout_has_realized_profit_loss(closeout)
+                if event.after_state is TradeIdeaState.FILLED or _closeout_has_realized_profit_loss(
+                    closeout
                 ):
                     same_day_closeouts.append((idea, closeout))
                     daily_loss_session_dates.add(session_date)

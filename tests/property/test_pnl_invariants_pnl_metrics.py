@@ -37,9 +37,9 @@ def test_total_pnl_is_sum_of_components(
     expected_total = realized + unrealized
     tolerance = 0.01
 
-    assert (
-        abs(metrics["total_pnl"] - expected_total) < tolerance
-    ), f"Total PnL {metrics['total_pnl']} != realized {realized} + unrealized {unrealized}"
+    assert abs(metrics["total_pnl"] - expected_total) < tolerance, (
+        f"Total PnL {metrics['total_pnl']} != realized {realized} + unrealized {unrealized}"
+    )
 
 
 @seed(4002)
@@ -95,9 +95,9 @@ def test_equity_change_percentage(
         expected_pct = (total_pnl / prev_equity) * 100
         tolerance = 0.1
 
-        assert (
-            abs(metrics["equity_change_pct"] - expected_pct) < tolerance
-        ), f"Equity change % {metrics['equity_change_pct']} != expected {expected_pct}"
+        assert abs(metrics["equity_change_pct"] - expected_pct) < tolerance, (
+            f"Equity change % {metrics['equity_change_pct']} != expected {expected_pct}"
+        )
 
 
 @seed(4014)
@@ -123,9 +123,9 @@ def test_fees_accumulation(
     expected_fees = sum(fees)
     tolerance = 0.01
 
-    assert (
-        abs(metrics["fees_paid"] - expected_fees) < tolerance
-    ), f"Fees paid {metrics['fees_paid']} != expected {expected_fees}"
+    assert abs(metrics["fees_paid"] - expected_fees) < tolerance, (
+        f"Fees paid {metrics['fees_paid']} != expected {expected_fees}"
+    )
 
 
 @pytest.mark.property

@@ -41,13 +41,13 @@ def test_global_pause_is_active_during_duration(
 
     # Reduce-only should bypass if allowed
     if allow_reduce_only:
-        assert (
-            state.is_paused(is_reduce_only=True) is False
-        ), "Reduce-only should bypass when allowed"
+        assert state.is_paused(is_reduce_only=True) is False, (
+            "Reduce-only should bypass when allowed"
+        )
     else:
-        assert (
-            state.is_paused(is_reduce_only=True) is True
-        ), "Reduce-only should be blocked when not allowed"
+        assert state.is_paused(is_reduce_only=True) is True, (
+            "Reduce-only should be blocked when not allowed"
+        )
 
 
 @seed(3002)
@@ -113,9 +113,9 @@ def test_global_pause_takes_precedence(
     )
 
     # Global should take precedence - reduce-only should be blocked
-    assert (
-        state.is_paused(symbol=symbol, is_reduce_only=True) is True
-    ), "Global pause (allow_reduce_only=False) should block reduce-only"
+    assert state.is_paused(symbol=symbol, is_reduce_only=True) is True, (
+        "Global pause (allow_reduce_only=False) should block reduce-only"
+    )
 
 
 @seed(3004)

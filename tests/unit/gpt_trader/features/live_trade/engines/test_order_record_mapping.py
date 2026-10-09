@@ -183,8 +183,6 @@ class TestBuildRecordFromBrokerOrder:
 
     def test_missing_order_id_returns_none(self) -> None:
         assert (
-            build_record_from_broker_order(
-                {"status": "open"}, bot_id="b", now=datetime.now(UTC)
-            )
+            build_record_from_broker_order({"status": "open"}, bot_id="b", now=datetime.now(UTC))
             is None
         )

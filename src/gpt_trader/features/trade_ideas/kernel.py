@@ -45,8 +45,7 @@ def autonomy_resolution_violations(resolution: AutonomyResolution) -> list[str]:
     if resolution.source != AUTONOMY_SOURCE_FAIL_CLOSED:
         return []
     return [
-        "autonomy state resolution failed closed to "
-        f"'{resolution.mode.value}': {resolution.error}"
+        f"autonomy state resolution failed closed to '{resolution.mode.value}': {resolution.error}"
     ]
 
 
@@ -177,7 +176,7 @@ class KernelCheck:
         budget, _ = self._require_approval_inputs()
         return (
             self._autonomy_evidence(),
-            f"risk budget version {budget.version}: " f"approval_violations={len(self.violations)}",
+            f"risk budget version {budget.version}: approval_violations={len(self.violations)}",
             *(f"violation: {violation}" for violation in self.violations),
         )
 
@@ -342,7 +341,7 @@ class RiskKernel:
         """
         if check.admitted:
             raise PolicyViolationError(
-                f"Cannot record a denial for '{check.decision_id}': the kernel " "admitted it",
+                f"Cannot record a denial for '{check.decision_id}': the kernel admitted it",
                 [],
             )
         self._runtime.append_audit(
