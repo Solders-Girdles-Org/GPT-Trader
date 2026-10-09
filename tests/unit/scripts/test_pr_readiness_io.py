@@ -25,7 +25,7 @@ def test_detect_pr_number_returns_none_only_for_no_pr(monkeypatch) -> None:
 
     monkeypatch.setattr(pr_readiness, "_gh_json", fake_gh_json)
 
-    assert pr_readiness.detect_pr_number("owner/repo") is None
+    assert pr_readiness.detect_pr_number("owner/repo", branch="feature") is None
 
 
 def test_detect_pr_number_reraises_api_failures(monkeypatch) -> None:
@@ -35,11 +35,62 @@ def test_detect_pr_number_reraises_api_failures(monkeypatch) -> None:
     monkeypatch.setattr(pr_readiness, "_gh_json", fake_gh_json)
 
     try:
-        pr_readiness.detect_pr_number("owner/repo")
+        pr_readiness.detect_pr_number("owner/repo", branch="feature")
     except RuntimeError as error:
         assert "rate limit" in str(error)
     else:
         raise AssertionError("expected RuntimeError")
+
+
+def test_detect_pr_number_selects_current_branch_with_repo(monkeypatch) -> None:
+    # Regression for #1303: gh rejects `pr view --repo` without a selector.
+    calls: list[list[str]] = []
+
+    def fake_gh_json(args: list[str]) -> dict[str, Any]:
+        calls.append(args)
+        return {"number": 42, "state": "OPEN"}
+
+    monkeypatch.setattr(pr_readiness, "detect_current_branch", lambda: "feature/x")
+    monkeypatch.setattr(pr_readiness, "_gh_json", fake_gh_json)
+
+    assert pr_readiness.detect_pr_number("owner/repo") == 42
+    assert calls == [["pr", "view", "feature/x", "--repo", "owner/repo", "--json", "number,state"]]
+
+
+@pytest.mark.parametrize("state", ["MERGED", "CLOSED", ""])
+def test_detect_pr_number_ignores_pr_that_is_not_open(monkeypatch, state: str) -> None:
+    monkeypatch.setattr(pr_readiness, "_gh_json", lambda args: {"number": 7, "state": state})
+
+    assert pr_readiness.detect_pr_number("owner/repo", branch="feature") is None
+
+
+def test_detect_pr_number_returns_none_without_branch(monkeypatch) -> None:
+    def fail_gh_json(args: list[str]) -> dict[str, Any]:
+        raise AssertionError("gh must not be called without a branch")
+
+    monkeypatch.setattr(pr_readiness, "detect_current_branch", lambda: None)
+    monkeypatch.setattr(pr_readiness, "_gh_json", fail_gh_json)
+
+    assert pr_readiness.detect_pr_number("owner/repo") is None
+
+
+@pytest.mark.parametrize(
+    ("returncode", "stdout", "expected"),
+    [(0, "feature/x\n", "feature/x"), (0, "HEAD\n", None), (128, "", None), (0, "", None)],
+)
+def test_detect_current_branch(
+    monkeypatch, returncode: int, stdout: str, expected: str | None
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(args: list[str]) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        return subprocess.CompletedProcess(args, returncode, stdout, "")
+
+    monkeypatch.setattr(pr_readiness, "_run", fake_run)
+
+    assert pr_readiness.detect_current_branch() == expected
+    assert calls == [["git", "rev-parse", "--abbrev-ref", "HEAD"]]
 
 
 def test_fetch_review_threads_paginates(monkeypatch) -> None:
