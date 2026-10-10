@@ -31,7 +31,7 @@ inventory; inspect the source and `pyproject.toml` for exact entrypoints.
 | `features/idea_execution/` | Paper lane: `PaperIdeaExecutor` (live brokers structurally unreachable), the batch cycle turn, the in-process event lane, the exit monitor |
 | `features/live_trade/` | Retained bot: `TradingBot`, `TradingEngine`, strategies (`baseline`, `mean_reversion`, plus the TA families measured dead in [adopt-agentic-alpha-direction](decisions/adopt-agentic-alpha-direction.md)), `LiveRiskManager`, `GuardManager` and its guards, `DegradationState`, `OrderSubmitter`, `BrokerExecutor` |
 | `features/experiment/` | The recorded experiment: input binding, transition engine, atomic journal |
-| `features/strategy_tools/`, `features/intelligence/`, `features/data/`, `features/optimize/`, `features/strategy_dev/`, `backtesting/` | Strategy-to-idea adapter, regime features, data acquisition, parameter search, benchmark replay |
+| `features/strategy_tools/`, `features/intelligence/`, `features/data/`, `features/strategy_dev/`, `backtesting/` | Strategy-to-idea adapter, regime features, data acquisition, benchmark replay |
 | `app/` | `ApplicationContainer` composition root, `BotConfig` and `ProfileLoader`, runtime paths, risk-budget seeding |
 | `persistence/` | SQLite event and order stores with JSONL fallback |
 | `monitoring/`, `preflight/`, `security/` | Health checks, metrics, alerts, daily report; readiness preflight; secrets and input validation |

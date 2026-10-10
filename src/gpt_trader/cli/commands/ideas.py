@@ -151,10 +151,7 @@ EXPORT_TICKET_VENUE_CHOICES = (*VENUE_CHOICES, "robinhood")
 # --strategy flag values: live-trade strategies runnable as snapshot proposers.
 # The CLI is the composition root — it constructs the strategy so the
 # strategy_tools slice never imports live_trade (SnapshotDecider is structural).
-# "ensemble" is deliberately absent (#1164 stage 3 deferral): its combiner
-# mutates hysteresis state inside combine() and decide() swallows signal
-# failures with a bare print, so its decisions are not yet explainable from
-# recorded data alone; it joins this list once that surface is audited.
+# The retired ensemble strategy is not a proposer choice (removed 2026-10).
 STRATEGY_PROPOSER_CHOICES = ("baseline-spot", "baseline-perps", "mean-reversion", "regime-switcher")
 # cycle --proposer / replay tournament ids for the same strategies.
 STRATEGY_BACKED_PROPOSER_IDS = tuple(f"strategy-{name}" for name in STRATEGY_PROPOSER_CHOICES)
@@ -650,8 +647,9 @@ def register(subparsers: Any) -> None:
         "--from-optimize-study",
         type=Path,
         help=(
-            "Read optimize-sourced candidate parameters from a JSON study export "
-            "and rank them by replay metrics instead of replaying one config"
+            "Read candidate parameters from a JSON study file (best_parameters, "
+            "trials or parameters entries) and rank them by replay metrics "
+            "instead of replaying one config"
         ),
     )
     baseline.add_argument(

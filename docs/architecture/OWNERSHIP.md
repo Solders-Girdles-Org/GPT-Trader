@@ -52,11 +52,10 @@ It exists to make changes safer and to help agents route work to the right place
 - **When you touch this:** run backtesting unit tests
   - `uv run pytest tests/unit -q`
 
-### Optimization
+### Strategy tools
 - **Dirs:**
-  - `src/gpt_trader/features/optimize/`
   - `src/gpt_trader/features/strategy_tools/`
-- **What lives here:** optimization pipelines and shared strategy helpers
+- **What lives here:** shared strategy helpers
 - **When you touch this:** run unit tests
   - `uv run pytest tests/unit -q`
 

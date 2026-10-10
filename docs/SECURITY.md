@@ -105,7 +105,7 @@ event_type, and key path (no values). Tune scan scope with:
 
 - JSON logs redact keys like `api_key`, `private_key`, `token`, and `password`.
 - Runtime data persists to repo-local paths such as `runtime_data/<profile>/`
-  (SQLite `events.db`, `orders.db`) and `runtime_data/optimize/`. Avoid writing
+  (SQLite `events.db`, `orders.db`). Avoid writing
   secrets into repo-local runtime artifacts, events, or logs.
 
 ## Best Practices

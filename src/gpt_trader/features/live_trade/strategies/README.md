@@ -11,7 +11,6 @@ strategies/
 ├── baseline/           # Baseline MA/RSI strategy (spot-first)
 ├── mean_reversion/     # Mean reversion strategy
 ├── regime_switcher/    # Regime switching strategy
-├── ensemble.py         # Signal ensemble strategy
 └── base.py             # StrategyProtocol + MarketDataContext
 ```
 
@@ -39,7 +38,7 @@ class StrategyProtocol(Protocol):
 
 | Strategy | Market | Description |
 |----------|--------|-------------|
-| `perps_baseline` (module: `baseline/`) | Spot/CFM | Moving average crossover baseline |
+| `baseline` (module: `baseline/`) | Spot/CFM | Moving average crossover baseline |
 | `mean_reversion` | Spot/CFM | Z-score mean reversion |
 | `regime_switcher` | Spot/CFM | Regime-based strategy selection |
 

@@ -208,8 +208,6 @@ CROSS_SLICE_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset(
         # RegimeAwareProposer overlays regime state; PositionSizer bridge
         # enriches sizing on trade-idea proposal records.
         ("trade_ideas", "intelligence"),
-        # walk_forward/batch_runner reuse strategy protocol and baseline types.
-        ("optimize", "live_trade"),
         # Recorder owns market-data acquisition over the read-only Coinbase
         # candle transport (docs/decisions/adopt-five-role-composition.md).
         ("recorder", "brokerages"),

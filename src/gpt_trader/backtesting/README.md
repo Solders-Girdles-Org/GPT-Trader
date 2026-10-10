@@ -45,5 +45,4 @@ equity_curve = broker.get_equity_curve()
 
 ## Related Packages
 
-- `features/optimize/` - Parameter optimization
 - `features/data/` - Historical data loading

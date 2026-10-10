@@ -44,7 +44,6 @@ def test_cross_slice_allowlist_is_frozen_topology() -> None:
             # RegimeAwareProposer overlays regime state; PositionSizer bridge
             # enriches sizing on trade-idea proposal records.
             ("trade_ideas", "intelligence"),
-            ("optimize", "live_trade"),
             ("strategy_tools", "trade_ideas"),
         }
     )

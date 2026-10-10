@@ -2,7 +2,7 @@
 Simple Bot Configuration.
 Replaces the 550-line enterprise configuration system.
 
-Supports nested configuration structure for optimization framework compatibility:
+Supports a nested configuration structure:
 - strategy: Trading strategy parameters (uses PerpsStrategyConfig)
 - risk: Risk management parameters (uses RiskConfig)
 """
@@ -85,7 +85,6 @@ class BotRiskConfig:
     """Bot-level position sizing configuration.
 
     Holds position sizing and stop/target parameters.
-    Compatible with optimization framework 'risk' section output.
 
     Note: Distinct from risk.model.RiskConfig which is for the risk manager.
     Risk-appetite fields (daily loss limit, exposure cap, leverage
@@ -145,7 +144,7 @@ class MeanReversionConfig:
 
 
 # Strategy type literal for type safety
-StrategyType = Literal["baseline", "mean_reversion", "ensemble", "regime_switcher"]
+StrategyType = Literal["baseline", "mean_reversion", "regime_switcher"]
 
 
 def _get_default_strategy_config() -> "PerpsStrategyConfig":
@@ -172,14 +171,12 @@ class BotConfig:
     mean_reversion: MeanReversionConfig = field(default_factory=MeanReversionConfig)
     health_thresholds: HealthThresholdsConfig = field(default_factory=HealthThresholdsConfig)
 
-    # Intelligence feature configurations (optional, for ensemble strategy)
-    regime_config: Any = None  # RegimeConfig instance when using ensemble
-    ensemble_config: Any = None  # EnsembleConfig instance when using ensemble
+    # Intelligence feature configurations (optional, for regime_switcher)
+    regime_config: Any = None  # RegimeConfig instance when using regime_switcher
 
     # Strategy selection
     # - baseline = RSI+MA crossover
     # - mean_reversion = Z-Score
-    # - ensemble = multi-signal architecture
     # - regime_switcher = switch between trend and mean reversion by regime
     strategy_type: StrategyType = "baseline"
 
@@ -316,7 +313,7 @@ class BotConfig:
         """
         if self.strategy_type == "mean_reversion":
             return self.mean_reversion.enable_shorts
-        # baseline, ensemble, regime_switcher use strategy config
+        # baseline and regime_switcher use strategy config
         return getattr(self.strategy, "enable_shorts", False)
 
     def set_enable_shorts(self, enabled: bool) -> None:

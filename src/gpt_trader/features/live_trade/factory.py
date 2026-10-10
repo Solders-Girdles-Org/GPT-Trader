@@ -46,34 +46,6 @@ def create_strategy(config: "BotConfig") -> TradingStrategy:
         logger.info("Creating MeanReversionStrategy (Z-Score based)")
         return MeanReversionStrategy(config=config.mean_reversion)
 
-    elif strategy_type == "ensemble":
-        from gpt_trader.features.live_trade.strategies.ensemble import (
-            EnsembleStrategy,
-            EnsembleStrategyConfig,
-        )
-
-        logger.info("Creating EnsembleStrategy (Signal Ensemble Architecture)")
-
-        # Use provided ensemble_config or default
-        ensemble_config = config.ensemble_config
-        if ensemble_config is None or not isinstance(ensemble_config, EnsembleStrategyConfig):
-            # Try to parse from dict if it's a dict
-            if isinstance(ensemble_config, dict):
-                # This requires EnsembleStrategyConfig to be constructible from dict
-                # For now, we'll just use default if parsing fails or implement a helper
-                # But since we haven't implemented from_dict for EnsembleStrategyConfig,
-                # let's assume it's passed correctly or use default.
-                # Actually, let's try to unpack if it matches fields
-                try:
-                    ensemble_config = EnsembleStrategyConfig(**ensemble_config)
-                except (TypeError, ValueError) as e:
-                    logger.warning("Failed to parse ensemble_config dict: %s, using default", e)
-                    ensemble_config = EnsembleStrategyConfig()
-            else:
-                ensemble_config = EnsembleStrategyConfig()
-
-        return EnsembleStrategy(config=ensemble_config)
-
     elif strategy_type == "regime_switcher":
         from gpt_trader.features.intelligence.regime import MarketRegimeDetector, RegimeConfig
         from gpt_trader.features.live_trade.strategies.baseline import (
@@ -141,5 +113,5 @@ def create_strategy(config: "BotConfig") -> TradingStrategy:
     else:
         raise ValueError(
             f"Unknown strategy_type: {strategy_type!r}. "
-            f"Valid options: 'baseline', 'mean_reversion', 'ensemble', 'regime_switcher'"
+            f"Valid options: 'baseline', 'mean_reversion', 'regime_switcher'"
         )

@@ -59,8 +59,10 @@ class TestKillSwitchDerivation:
         risk_manager = container.risk_manager
         assert risk_manager.config.kill_switch_enabled is True
 
-    def test_ensemble_strategy_uses_strategy_config(self, mock_event_store: MagicMock) -> None:
-        """Ensemble strategy type falls back to strategy config."""
+    def test_regime_switcher_strategy_uses_strategy_config(
+        self, mock_event_store: MagicMock
+    ) -> None:
+        """Regime-switcher strategy type falls back to strategy config."""
         from gpt_trader.features.live_trade.strategies.baseline import (
             PerpsStrategyConfig,
         )
@@ -68,7 +70,7 @@ class TestKillSwitchDerivation:
         config = BotConfig(
             symbols=["BTC-USD"],
             strategy=PerpsStrategyConfig(kill_switch_enabled=True),
-            strategy_type="ensemble",
+            strategy_type="regime_switcher",
         )
 
         container = RiskValidationContainer(

@@ -30,7 +30,7 @@ logger = get_logger(__name__, component="cli_services")
 
 
 def load_config_from_yaml(path: str | Path) -> BotConfig:
-    """Load BotConfig from a nested YAML file (e.g., optimize apply output).
+    """Load BotConfig from a nested YAML file (e.g., a tuned strategy/risk export).
 
     Supports structure:
         strategy:

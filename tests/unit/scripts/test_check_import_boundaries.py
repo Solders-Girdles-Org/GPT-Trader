@@ -227,12 +227,12 @@ def _configure_cross_slice_rule(monkeypatch: object, repo_root: Path, slice_name
 
 
 def test_cross_slice_allowlisted_edge_passes(tmp_path, monkeypatch, capsys) -> None:
-    slice_root = _configure_cross_slice_rule(monkeypatch, tmp_path, "optimize")
+    slice_root = _configure_cross_slice_rule(monkeypatch, tmp_path, "strategy_tools")
     _write_file(
         tmp_path,
-        "src/gpt_trader/features/optimize/walk_forward.py",
-        "from gpt_trader.features.live_trade.strategies.base import StrategyProtocol\n"
-        "from gpt_trader.features.optimize.runner import batch_runner\n",
+        "src/gpt_trader/features/strategy_tools/snapshot_proposer.py",
+        "from gpt_trader.features.trade_ideas.baseline import BaselineProposer\n"
+        "from gpt_trader.features.strategy_tools.helpers import helper\n",
     )
 
     result = check_import_boundaries.scan([str(slice_root)])

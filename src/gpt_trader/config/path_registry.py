@@ -13,8 +13,6 @@ __all__ = [
     "RUNTIME_DATA_DIR",
     "COINBASE_TRADER_RUNTIME_DIR",
     "DEFAULT_EVENT_STORE_DIR",
-    "OPTIMIZATION_RUNS_DIR",
-    "LEGACY_OPTIMIZATION_RUNS_DIR",
     "USER_CONFIG_DIR",
     "USER_SECRETS_DIR",
     "ensure_directories",
@@ -32,12 +30,10 @@ RESULTS_DIR = VAR_DIR / "results"
 RUNTIME_DATA_DIR = PROJECT_ROOT / "runtime_data"
 COINBASE_TRADER_RUNTIME_DIR = RUNTIME_DATA_DIR
 DEFAULT_EVENT_STORE_DIR = COINBASE_TRADER_RUNTIME_DIR / "shared"
-OPTIMIZATION_RUNS_DIR = RUNTIME_DATA_DIR / "optimize"
 
 # User-global artifacts are explicit exceptions to repo-local runtime ownership.
 # Do not add them to ensure_directories(); callers create them only when needed.
 USER_CONFIG_DIR = Path.home() / ".gpt_trader"
-LEGACY_OPTIMIZATION_RUNS_DIR = USER_CONFIG_DIR / "optimize"
 USER_SECRETS_DIR = USER_CONFIG_DIR / "secrets"
 
 
