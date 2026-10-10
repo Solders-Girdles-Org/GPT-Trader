@@ -34,10 +34,13 @@ Their exact limitations live in the [paper contracts](paper_trading.md#durable-d
 
 Strategy scope follows the accepted
 [retirement record](decisions/retire-optimize-and-dead-ta-strategies.md): the
-optimizer, ensemble and `perps_baseline` shim are gone
+optimizer slice, ensemble and `perps_baseline` shim are gone
 ([#1311](https://github.com/Solders-Girdles-Org/GPT-Trader/pull/1311)), the
-regime switcher and overlay are frozen comparison rows, and baseline plus
-mean reversion are the benchmark pair the reasoning proposer must beat.
+replay [grid bridge](../src/gpt_trader/features/trade_ideas/optimize_bridge.py)
+stays, the regime switcher and overlay are frozen comparison rows, and
+[baseline](../src/gpt_trader/features/live_trade/strategies/baseline/) plus
+[mean reversion](../src/gpt_trader/features/live_trade/strategies/mean_reversion/)
+are the benchmark pair the reasoning proposer must beat.
 
 Continue by inspecting/running the local product, then evaluating the milestone
 in [Direction](DIRECTION.md#immediate-product-outcome). Do not start the old
