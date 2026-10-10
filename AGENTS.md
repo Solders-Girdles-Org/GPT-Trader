@@ -71,7 +71,7 @@ warning.
 
 ## Handoff between agents
 
-Codex and Claude exchange work through the shared [handoff contract](docs/HANDOFF-CONTRACT.md) (mirror of `Workspace Operations/HANDOFF-CONTRACT.md`): code handoffs are the pull request with a six-field packet, reviews are posted to GitHub, and this file's gates still govern. Manual paste between agents is not the handoff.
+Codex and Claude exchange work through the shared handoff contract (`/Users/rj/Projects/Workspace Operations/HANDOFF-CONTRACT.md`): code handoffs are the pull request with a six-field packet, reviews are posted to GitHub, and this file's gates still govern. Manual paste between agents is not the handoff.
 
 ## Hosted agents
 
