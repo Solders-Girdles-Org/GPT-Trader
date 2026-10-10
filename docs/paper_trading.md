@@ -90,8 +90,8 @@ external access and cutover. No human approval is fabricated for local steps.
 The remaining sections describe compatibility workflows, not the default local
 product. Their profiles may collect external market data even though fills are
 simulated; effective configuration must be inspected before selecting them.
-The [pending cutover](decisions/paper-runtime-cutover.md) records the observed
-failing hourly job and the consequential choice. Do not run these procedures
+The [accepted cutover](decisions/paper-runtime-cutover.md) quiesced the old
+hourly job and records where its evidence is retained. Do not run these procedures
 merely to test the recorded experiment or wording changes.
 
 ## Implementation
@@ -313,6 +313,13 @@ authority; a receipt is evidence of execution, never new permission to trade.
 
 ## Scheduled Stage 1 Turns (Unattended Operation)
 
+> **Retired job.** The installed hourly job (`com.gpt-trader.stage1-cycle`) was
+> quiesced and its evidence retained under the accepted
+> [paper-runtime cutover](decisions/paper-runtime-cutover.md). Scheduling turns
+> is not an onboarding step. The scheduler entries below are compatibility
+> reference only; installing one again follows that record's pinned
+> compatibility path and needs RJ's decision.
+
 `ideas cycle` runs exactly one turn of the paper loop — lock, receipt recovery, snapshot, expire
 sweep, proposers, paper-execute already-APPROVED ideas priced from the turn's
 own snapshot, report/queue artifacts, one manifest row. Recurrence comes from
@@ -452,8 +459,9 @@ the audited mode so both gates no-op regardless of the env vars.
 
 ### launchd (macOS)
 
-Save as `~/Library/LaunchAgents/com.gpt-trader.stage1-cycle.plist`, replacing
-the repository path, then `launchctl load` it:
+Reference only (see the retired-job note above). The historical entry was
+saved as `~/Library/LaunchAgents/com.gpt-trader.stage1-cycle.plist` with the
+repository path replaced and loaded with `launchctl load`:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
