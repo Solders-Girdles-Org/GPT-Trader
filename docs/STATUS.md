@@ -32,6 +32,16 @@ Latest retained-runtime source also includes [durable execution receipts](../src
 [targeted reductions](../src/gpt_trader/features/trade_ideas/position_operations.py).
 Their exact limitations live in the [paper contracts](paper_trading.md#durable-direct-fill-accounting).
 
+Strategy scope follows the accepted
+[retirement record](decisions/retire-optimize-and-dead-ta-strategies.md): the
+optimizer slice, ensemble and `perps_baseline` shim are gone
+([#1311](https://github.com/Solders-Girdles-Org/GPT-Trader/pull/1311)), the
+replay [grid bridge](../src/gpt_trader/features/trade_ideas/optimize_bridge.py)
+stays, the regime switcher and overlay are frozen comparison rows, and
+[baseline](../src/gpt_trader/features/live_trade/strategies/baseline/) plus
+[mean reversion](../src/gpt_trader/features/live_trade/strategies/mean_reversion/)
+are the benchmark pair the reasoning proposer must beat.
+
 Continue by inspecting/running the local product, then evaluating the milestone
 in [Direction](DIRECTION.md#immediate-product-outcome). Do not start the old
 runtime, use its approval grants for the new product, or infer a deployment from
