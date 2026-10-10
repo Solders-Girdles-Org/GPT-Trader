@@ -42,9 +42,9 @@ merely satisfy a process gate.
 
 Ordinary local simulations do not require per-trade human approval or create
 operational autonomy grants. Existing scheduled/live lanes retain their own
-recorded authority. The [paper-runtime cutover](decisions/paper-runtime-cutover.md)
-is a separate pending operator decision; this source redesign changes no job,
-account, service, live permission or operational store.
+recorded authority. The accepted [paper-runtime cutover](decisions/paper-runtime-cutover.md)
+quiesced the old hourly paper job and retained its evidence; this source
+redesign changes no job, account, service, live permission or operational store.
 
 ## Charter
 

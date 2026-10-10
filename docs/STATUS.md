@@ -23,9 +23,9 @@ owner entrypoint. Its [implementation](../src/gpt_trader/features/experiment/)
 and [failure tests](../tests/unit/gpt_trader/features/experiment/) demonstrate
 observation, rule-based decision, bounded fills, independent accounting and
 resume. The [product decision](decisions/recorded-experiment-product.md) owns
-component disposition and the [cutover proposal](decisions/paper-runtime-cutover.md)
-owns the unresolved operational choice. Source integration does not migrate the
-installed hourly paper job.
+component disposition and the accepted [cutover](decisions/paper-runtime-cutover.md)
+records the quiesced hourly paper job and its retained evidence. Source
+integration does not migrate or restart that job.
 
 Latest retained-runtime source also includes [durable execution receipts](../src/gpt_trader/features/idea_execution/executor.py),
 [identified fill accounting](../src/gpt_trader/core/fill_accounting.py), and

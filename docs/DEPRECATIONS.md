@@ -12,8 +12,8 @@ The default local entrypoint is now the [recorded experiment](paper_trading.md#r
 The mandatory five-role composition, container-for-every-offline-function rule,
 and manual approvals between local simulated steps are superseded by the
 [product decision](decisions/recorded-experiment-product.md). Existing runtime
-commands and historical stores are retained pending the explicit
-[cutover](decisions/paper-runtime-cutover.md); no interface silently redirects to
+commands and historical stores are retained; the accepted
+[cutover](decisions/paper-runtime-cutover.md) quiesced the hourly job; no interface silently redirects to
 the experiment and no operational authority is removed by source cleanup.
 
 
