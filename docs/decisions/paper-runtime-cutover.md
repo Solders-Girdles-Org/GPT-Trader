@@ -61,7 +61,8 @@ architecture for new product work.
 ## Boundary
 
 The redesign goal forbids changing live services/schedules or migrating active
-runtime. This proposal has not been executed. No new grant, broker call, order,
+runtime. Execution is recorded below and was limited to quiescing and
+retaining evidence. No new grant, broker call, order,
 credential use or schedule change accompanies source integration. A Git merge
 must not be followed by an automatic pull into the canonical scheduled checkout.
 
@@ -88,6 +89,9 @@ Steps 1–3 were executed read-only against the store; no file under
   `~/Library/LaunchAgents/com.gpt-trader.stage1-cycle.plist` (it invoked
   `scripts/ops/stage2_cycle_turn.sh` from the canonical checkout with both
   Stage-2 gates on), and a copy is in the snapshot for rollback reference.
+  Before quiescing, the job was loaded and ran hourly; its last invocation
+  was 2026-09-06 05:05 UTC. It was found disabled and not loaded on
+  2026-10-03. The repository and store do not record who unloaded it, or exactly when.
 - **Quiescence.** `cycle/manifest.jsonl` was last written 2026-09-05 22:05
   local; its newest row is a `StateMigrationRequired` failure at
   2026-09-06 05:05 UTC. No store file is newer than the manifest. 42 of 1,457
@@ -102,8 +106,9 @@ Steps 1–3 were executed read-only against the store; no file under
   archive matched every source hash, and the originals were re-hashed
   unchanged afterwards. The original store stays in place.
 - **Reconciliation of the seven open ideas.** The audit log holds 242 proposed
-  ideas, 221 filled, 21 expired before fill and 3 auto-approval skips; 235
-  have closeout attributions (101 invalidation, 78 expiry, 56 thesis target).
+  ideas, 221 filled, 21 expired before fill and 3 auto-approval skips. 235
+  have closeout attributions (101 invalidation, 78 expiry, 56 thesis target):
+  214 filled ideas plus the 21 that expired before fill.
   The seven filled ideas without a closeout are exactly the
   `open_filled_decision_ids` of the last completed report. Every one is a
   simulated `paper` venue fill against a `MOCK_*` order id, so there is no

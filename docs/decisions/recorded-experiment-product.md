@@ -84,9 +84,9 @@ not another live risk kernel.
 ## Migration and retirement
 
 This is the default local onboarding workflow, not a permanent parallel trader.
-The installed paper cycle remains a compatibility operation with unique history.
-Its source and stores are not migrated by this decision. See the concrete
-[operational cutover proposal](paper-runtime-cutover.md), which requires RJ.
+The installed paper cycle was a compatibility operation with unique history.
+Its source and stores are not migrated by this decision. The accepted
+[operational cutover](paper-runtime-cutover.md) quiesced it and retained its evidence.
 
 After source verification, the next product milestone is a held-out recorded
 market experiment with independently checked balances and declared cost/data
