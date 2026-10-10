@@ -205,9 +205,10 @@ def _raw_candidates(payload: Any) -> list[dict[str, Any]]:
             for item in payload["trials"]
             if isinstance(item, dict) and item.get("is_feasible", True)
         ]
-        # A normal `optimize export --include-trials` payload still carries
-        # top-level best_parameters; an empty/infeasible trials list must fall
-        # through to it rather than yielding zero candidates.
+        # A study file with trials may still carry top-level best_parameters
+        # (the shape the retired `optimize export --include-trials` wrote); an
+        # empty/infeasible trials list must fall through to it rather than
+        # yielding zero candidates.
         if trials:
             return trials
     if isinstance(payload.get("best_parameters"), dict):

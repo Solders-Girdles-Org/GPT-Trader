@@ -12,7 +12,7 @@ class TestEnvelopeContract:
 
     def test_success_envelope_has_required_fields(self):
         response = CliResponse.success_response(
-            command="optimize list",
+            command="ideas list",
             data={"runs": []},
         )
         envelope = response.to_dict()

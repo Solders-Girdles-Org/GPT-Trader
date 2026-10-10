@@ -152,9 +152,9 @@ adds Recently Removed rows only when the implementation PR lands.
   accrual, the idea-record evidence-bundle fields (W1), a data-plane model
   credential and cost telemetry (W2), the context pack (W3), and forward-only
   evaluation wiring (W4). W0 (mean-reversion adoption into the Stage-2 cycle
-  set) remains an operational act under the pending
-  [paper-runtime-cutover](paper-runtime-cutover.md); this record does not
-  perform it.
+  set) is not performed by this record. The old hourly paper job was
+  quiesced under the accepted [paper-runtime-cutover](paper-runtime-cutover.md),
+  so any W0 run follows that record's compatibility path.
 - **Follow-up implementation move (separate PR, now that the record is `accepted`):**
   one PR that deletes `features/optimize`, `cli/commands/optimize`, the
   `optimize` extra, the `--from-optimize-study` / `--optimize-objective`
@@ -172,8 +172,11 @@ adds Recently Removed rows only when the implementation PR lands.
   "What stays" keeps `trade_ideas/optimize_bridge.py` and its replay flags.
   Those flags are the bridge's only caller and it reads plain JSON without
   importing `features/optimize`, so the implementation PR kept the bridge,
-  both flags and their tests (the stricter "what stays" reading). Deleting
-  them later is a one-file follow-up. `BotConfig.regime_config` was kept
+  both flags and their tests, following the more specific "What stays" list
+  (keeping is also the easily reversed choice). The retired `optimize export`
+  was the only producer of the study files these flags read, so they now take
+  hand-written or archived JSON only. Deleting them later is a one-file
+  follow-up. `BotConfig.regime_config` was kept
   because `regime_switcher` uses it; `signals/`, `combiners/` and
   `config/intelligence/ensemble_strategies/` were ensemble-only and removed.
 

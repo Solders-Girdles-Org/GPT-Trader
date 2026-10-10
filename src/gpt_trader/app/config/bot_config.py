@@ -2,7 +2,7 @@
 Simple Bot Configuration.
 Replaces the 550-line enterprise configuration system.
 
-Supports nested configuration structure for optimization framework compatibility:
+Supports a nested configuration structure:
 - strategy: Trading strategy parameters (uses PerpsStrategyConfig)
 - risk: Risk management parameters (uses RiskConfig)
 """
@@ -85,7 +85,6 @@ class BotRiskConfig:
     """Bot-level position sizing configuration.
 
     Holds position sizing and stop/target parameters.
-    Compatible with optimization framework 'risk' section output.
 
     Note: Distinct from risk.model.RiskConfig which is for the risk manager.
     Risk-appetite fields (daily loss limit, exposure cap, leverage

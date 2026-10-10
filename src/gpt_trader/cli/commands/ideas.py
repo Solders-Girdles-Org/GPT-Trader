@@ -647,8 +647,9 @@ def register(subparsers: Any) -> None:
         "--from-optimize-study",
         type=Path,
         help=(
-            "Read optimize-sourced candidate parameters from a JSON study export "
-            "and rank them by replay metrics instead of replaying one config"
+            "Read candidate parameters from a JSON study file (best_parameters, "
+            "trials or parameters entries) and rank them by replay metrics "
+            "instead of replaying one config"
         ),
     )
     baseline.add_argument(

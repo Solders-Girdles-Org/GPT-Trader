@@ -12,12 +12,12 @@ class TestCliResponse:
 
     def test_success_response_basic(self):
         response = CliResponse.success_response(
-            command="optimize list",
+            command="ideas list",
             data={"runs": []},
         )
         assert response.success is True
         assert response.exit_code == 0
-        assert response.command == "optimize list"
+        assert response.command == "ideas list"
         assert response.data == {"runs": []}
         assert response.errors == []
         assert response.warnings == []
@@ -62,14 +62,14 @@ class TestCliResponse:
 
     def test_to_dict_success(self):
         response = CliResponse.success_response(
-            command="optimize list",
+            command="ideas list",
             data={"runs": [{"id": 1}]},
         )
         result = response.to_dict()
 
         assert result["success"] is True
         assert result["exit_code"] == 0
-        assert result["command"] == "optimize list"
+        assert result["command"] == "ideas list"
         assert result["data"] == {"runs": [{"id": 1}]}
         assert result["errors"] == []
         assert result["warnings"] == []
@@ -94,7 +94,7 @@ class TestCliResponse:
 
     def test_to_json_compact(self):
         response = CliResponse.success_response(
-            command="optimize list",
+            command="ideas list",
             data={"runs": []},
         )
         compact = response.to_json(compact=True)

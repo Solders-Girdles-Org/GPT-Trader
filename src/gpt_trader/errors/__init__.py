@@ -150,13 +150,6 @@ class BacktestError(TradingError):
         super().__init__(message, error_code="BACKTEST_ERROR", **kwargs)
 
 
-class OptimizationError(TradingError):
-    """Raised when optimization fails"""
-
-    def __init__(self, message: str, **kwargs: Any) -> None:
-        super().__init__(message, error_code="OPTIMIZATION_ERROR", **kwargs)
-
-
 class RiskLimitExceeded(TradingError):
     """Raised when risk limits are exceeded"""
 
@@ -252,7 +245,6 @@ __all__ = [
     "InsufficientFundsError",
     "StrategyError",
     "BacktestError",
-    "OptimizationError",
     "RiskLimitExceeded",
     "TimeoutError",
     "SliceIsolationError",
