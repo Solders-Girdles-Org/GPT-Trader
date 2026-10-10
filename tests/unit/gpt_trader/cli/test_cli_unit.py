@@ -26,7 +26,6 @@ def test_cli_root_help_shows_command_list(capsys):
         "orders",
         "report",
         "strategy",
-        "optimize",
         "preflight",
         "broker-check",
     ):

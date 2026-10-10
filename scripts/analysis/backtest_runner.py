@@ -230,15 +230,7 @@ def _build_position_state(position: Any) -> dict[str, Any] | None:
     }
 
 
-def _select_strategy(config: BotConfig, *, ensemble_profile: str | None = None) -> Any:
-    if config.strategy_type == "ensemble" and ensemble_profile:
-        from gpt_trader.features.live_trade.strategies.ensemble import EnsembleStrategy
-
-        profile_path = Path(ensemble_profile)
-        if profile_path.exists():
-            return EnsembleStrategy.from_yaml(profile_path)
-        return EnsembleStrategy.from_profile_name(ensemble_profile)
-
+def _select_strategy(config: BotConfig) -> Any:
     strategy = create_strategy(config)
 
     # Backtesting defaults to spot-safe behavior when shorts are disabled.
@@ -452,7 +444,6 @@ async def run_backtest(
     max_leverage: int,
     cache_dir: Path,
     strategy_type: str | None = None,
-    ensemble_profile: str | None = None,
     enable_shorts: bool | None = None,
     regime_trend_mode: str = "delegate",
     risk_free_rate: Decimal = Decimal("0"),
@@ -539,7 +530,7 @@ async def run_backtest(
     )
     broker.connect()
 
-    strategy = _select_strategy(config, ensemble_profile=ensemble_profile)
+    strategy = _select_strategy(config)
     leverage = max(1, min(max_leverage, int(getattr(config.risk, "target_leverage", 1))))
     lookback_bars = _lookback_bars(strategy)
     mark_history: deque[Decimal] = deque(maxlen=lookback_bars)
@@ -630,7 +621,6 @@ async def run_backtest(
         "volume_anomaly_std": volume_anomaly_std,
         "strategy_type": config.strategy_type,
         "strategy_class": strategy.__class__.__name__,
-        "ensemble_profile": ensemble_profile,
         "initial_equity_usd": str(initial_equity_usd),
         "fee_tier": fee_tier.value,
         "leverage": leverage,
@@ -673,8 +663,6 @@ async def run_backtest(
         f"Net Profit Factor: {stats.net_profit_factor}",
         f"Fee Drag/Trade: {stats.fee_drag_per_trade}",
     ]
-    if ensemble_profile:
-        summary_lines.insert(2, f"Ensemble Profile: {ensemble_profile}")
     summary = "\n".join(summary_lines) + "\n"
     return payload, summary
 
@@ -771,16 +759,10 @@ def _parse_args() -> argparse.Namespace:
         help="Output dir (default: runtime_data/<profile>/reports)",
     )
     parser.add_argument(
-        "--ensemble-profile",
-        type=str,
-        default=None,
-        help=("Ensemble profile name or path (use with strategy_type=ensemble)"),
-    )
-    parser.add_argument(
         "--strategy-type",
         type=str,
         default=None,
-        choices=["baseline", "mean_reversion", "ensemble", "regime_switcher"],
+        choices=["baseline", "mean_reversion", "regime_switcher"],
         help="Override strategy type for the run",
     )
     parser.add_argument(
@@ -993,7 +975,6 @@ def main() -> int:
 
         config_overrides = {
             "strategy_type": args.strategy_type,
-            "ensemble_profile": args.ensemble_profile,
             "enable_shorts": enable_shorts,
             "regime_trend_mode": args.regime_trend_mode,
             "risk_free_rate": Decimal(str(args.risk_free_rate)),
@@ -1026,7 +1007,6 @@ def main() -> int:
             "rows": [],
             "strategy": {
                 "strategy_type": args.strategy_type,
-                "ensemble_profile": args.ensemble_profile,
                 "regime_trend_mode": args.regime_trend_mode,
                 "mean_reversion_entry": args.mean_reversion_entry,
                 "mean_reversion_exit": args.mean_reversion_exit,
@@ -1184,7 +1164,6 @@ def main() -> int:
             cache_dir=cache_dir,
             validate_quality=not args.skip_quality,
             strategy_type=args.strategy_type,
-            ensemble_profile=args.ensemble_profile,
             enable_shorts=enable_shorts,
             regime_trend_mode=args.regime_trend_mode,
             risk_free_rate=Decimal(str(args.risk_free_rate)),

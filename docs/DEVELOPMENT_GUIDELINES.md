@@ -137,7 +137,7 @@ File new work with the Task issue form.
 | Add a slice | `scripts/maintenance/feature_slice_scaffold.py --name <slice>` (`--with-tests`, `--with-readme`, `--dry-run`) |
 
 `TradingBot.flatten_and_stop()` in `src/gpt_trader/features/live_trade/bot.py`
-and `src/gpt_trader/features/optimize/` intentionally bypass the guard stack.
+intentionally bypasses the guard stack.
 
 ## Retiring things
 

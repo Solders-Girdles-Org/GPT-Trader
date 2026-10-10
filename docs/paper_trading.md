@@ -141,7 +141,7 @@ bot = ApplicationContainer(config).create_bot()
 Paper mode uses the same strategies as live trading:
 1. `baseline` – MA + RSI baseline
 2. `mean_reversion` – Z-score mean reversion
-3. `ensemble` – signal ensemble architecture
+3. `regime_switcher` – regime-based switch between trend and mean reversion (frozen)
 
 ## Features
 

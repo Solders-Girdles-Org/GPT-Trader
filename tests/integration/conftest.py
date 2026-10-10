@@ -35,18 +35,6 @@ def _integration_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def optuna():
-    """Provide the optuna module, skipping only the tests that need a real import.
-
-    optuna is an optional extra (gpt-trader[optimize]). Optimization tests that
-    drive real optuna studies request this fixture so they skip cleanly when the
-    extra is absent instead of erroring inside OptimizationStudyManager.
-    Mirrors the fixture-scoped importorskip pattern from the optimize unit tests.
-    """
-    return pytest.importorskip("optuna")
-
-
-@pytest.fixture
 def integration_config() -> BotConfig:
     """Create BotConfig for integration tests with deterministic broker.
 

@@ -68,3 +68,12 @@ suppressions:
   - doc: docs/DEPRECATIONS.md
     item: "--only"
     reason: flag of the retired agent-regenerate CLI quoted in a Recently Removed migration path
+  - doc: docs/decisions/retire-optimize-and-dead-ta-strategies.md
+    item: config/intelligence/ensemble_strategies/
+    reason: removed ensemble profile directory cited as history in the implementing decision record
+  - doc: docs/decisions/retire-optimize-and-dead-ta-strategies.md
+    item: src/gpt_trader/cli/commands/optimize/
+    reason: removed optimize CLI cited as history in the implementing decision record
+  - doc: docs/decisions/retire-optimize-and-dead-ta-strategies.md
+    item: src/gpt_trader/features/optimize/
+    reason: removed optimize slice cited as history in the implementing decision record

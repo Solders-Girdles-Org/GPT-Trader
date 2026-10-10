@@ -68,7 +68,7 @@ class RiskValidationContainer:
             if self._config.strategy_type == "mean_reversion":
                 kill_switch = self._config.mean_reversion.kill_switch_enabled
             else:
-                # baseline, ensemble, or any other type uses strategy config
+                # baseline, regime_switcher, or any other type uses strategy config
                 kill_switch = getattr(self._config.strategy, "kill_switch_enabled", False)
 
             # Appetite fields (daily_loss_limit_pct, max_exposure_pct,

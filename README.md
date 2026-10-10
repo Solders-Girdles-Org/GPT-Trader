@@ -60,7 +60,6 @@ src/gpt_trader/
 │   ├── data/             # Market data acquisition
 │   ├── intelligence/     # Strategy intelligence, Kelly sizing
 │   ├── live_trade/       # Production trading engine & risk
-│   ├── optimize/         # Parameter optimization
 │   ├── strategy_tools/   # Shared strategy helpers
 │   └── trade_ideas/      # Broker-neutral trade-idea records + audit trail
 ├── monitoring/           # Runtime guards, metrics, telemetry

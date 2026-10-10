@@ -11,7 +11,7 @@ live_trade/
 ├── engines/          # Coordinator engines (telemetry, execution)
 ├── risk/             # Risk management (pre-trade, runtime guards)
 ├── risk_runtime/     # Runtime circuit breakers and position monitoring
-├── strategies/       # Trading strategies (perps_baseline, etc.)
+├── strategies/       # Trading strategies (baseline, mean_reversion, regime_switcher)
 ├── guard_errors.py   # Error hierarchy for risk guards
 └── primitives.py     # Core types (signals, orders)
 ```

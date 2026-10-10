@@ -32,7 +32,7 @@ def register(subparsers: Any) -> None:
         "--config",
         type=str,
         metavar="PATH",
-        help="Path to YAML config file (supports nested optimize output format)",
+        help="Path to YAML config file (supports nested strategy/risk sections)",
     )
     parser.add_argument("--dev-fast", action="store_true", help="Run single cycle and exit")
     parser.set_defaults(handler=execute)

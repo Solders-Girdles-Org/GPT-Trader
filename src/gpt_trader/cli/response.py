@@ -95,8 +95,8 @@ class CliResponse:
         {
             "success": true,
             "exit_code": 0,
-            "command": "optimize list",
-            "data": {"runs": [...]},
+            "command": "ideas list",
+            "data": {"ideas": [...]},
             "errors": [],
             "warnings": [],
             "metadata": {"timestamp": "...", "was_noop": false, "version": "1.0"}
@@ -106,9 +106,9 @@ class CliResponse:
         {
             "success": false,
             "exit_code": 1,
-            "command": "optimize view",
+            "command": "ideas view",
             "data": null,
-            "errors": [{"code": "RUN_NOT_FOUND", "message": "..."}],
+            "errors": [{"code": "IDEA_NOT_FOUND", "message": "..."}],
             "warnings": [],
             "metadata": {...}
         }
@@ -181,7 +181,7 @@ class CliResponse:
         """Create a success response.
 
         Args:
-            command: Command name (e.g., "optimize list")
+            command: Command name (e.g., "ideas list")
             data: Command result data
             warnings: Optional warning messages
             was_noop: Whether this was a no-op (e.g., dry-run)

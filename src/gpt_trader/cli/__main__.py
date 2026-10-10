@@ -17,7 +17,6 @@ Run ``gpt-trader --help`` for available commands including:
 
 - ``live``: Start live trading session
 - ``backtest``: Run strategy backtest
-- ``optimize``: Parameter optimization
 - ``preflight``: System health checks
 
 Exit Codes

@@ -36,7 +36,7 @@ Commands that support programmatic use accept `--output-format json` and emit th
 {
   "success": true,
   "exit_code": 0,
-  "command": "optimize list",
+  "command": "ideas list",
   "data": {},
   "errors": [],
   "warnings": [],
