@@ -71,8 +71,8 @@ Gaps that block a useful answer today:
 | Expected learning | Whether any fixed rule survives realistic costs on unseen data, and the bar a model must clear | Whether model decisions beat mean reversion, forward only, after weeks to months of accrual | Little: $34.56 of simulated notional and a store migration only a restored job would need |
 | Scope / effort | One PR plus one run; about one to two agent-days | Four or more PRs, a forward collection lane, ongoing model spend, months of wall-clock | One to three small PRs |
 | Dependencies | RJ's go for the run (public prices, no account or money) | RJ decisions on credential, spend, schedule; ideally option 1's result | Reversing the accepted cutover |
-| Stop criterion | The [predeclared reading](#held-out-protocol-and-predeclared-reading) below: one run, read once; an inconclusive rule gets at most one extension, never a changed rule or cost | Minimum-accrual gate (W4, undefined) with edge vs mean reversion ≤ 0, or spend ceiling reached | The seven open positions ($34.56 *(derived)*) are resolved from recorded post-fill prices under the cutover's compatibility path, or recorded as written off with outcome unknown; any other repair stops at one PR |
-| Next observable outcome | A reconciled per-symbol table: two rules × two cost cases beside cash and hold-the-coin | First model idea with a complete evidence bundle in a forward journal | A reconciled legacy ledger with no open positions |
+| Stop criterion | The [predeclared reading](#held-out-protocol-and-predeclared-reading) below: one run, read once; an inconclusive or cost-dependent rule gets at most one follow-up run, and rules and thresholds never change | Minimum-accrual gate (W4, undefined) with edge vs mean reversion ≤ 0, or spend ceiling reached | The seven open positions ($34.56 *(derived)*) are resolved from recorded post-fill prices under the cutover's compatibility path, or confirmed as retained "open in evidence with outcome unknown" per the [cutover record](paper-runtime-cutover.md#execution-record-2026-10-09); any other repair stops at one PR |
+| Next observable outcome | A reconciled per-symbol table: two rules × two cost cases beside cash and hold-the-coin | First model idea with a complete evidence bundle in a forward journal | A reconciled inventory of resolved and retained-unresolved legacy positions |
 
 ## Decision
 
@@ -113,61 +113,87 @@ Phase A of #1315 commits this protocol as a file before any data is fetched;
 it may add mechanics but must not loosen a threshold.
 
 **Window and data.** Symbols: BTC, ETH, LTC, SOL, XRP, LINK, AVAX, DOT (the
-old job's set, chosen before any return is seen). Scored bars: closed hourly
-bars from 2026-09-06T00:00Z up to the fixed cutoff 2026-10-11T00:00Z, 840 per
-symbol. Warm-up: the 72 bars from 2026-09-03T00:00Z serve only as indicator
-history (baseline needs 53, mean reversion 20); no entry is allowed before the
-first scored bar. Gaps are refused, never filled. A position open at the
-cutoff is marked at the last close and reported as open.
+old job's set, chosen before any return is seen). Each symbol's input is 912
+contiguous closed hourly bars: 72 warm-up bars from 2026-09-03T00:00Z, then 840
+scored bars from 2026-09-06T00:00Z up to the fixed cutoff 2026-10-11T00:00Z.
+Warm-up bars are indicator history only (baseline needs 53, mean reversion
+20). Decisions are taken only at the close of a scored bar, so the earliest
+possible entry fills at the open of the second scored bar. Gaps are refused,
+never filled. A symbol is **scored** when its complete 912-bar input is
+accepted by the parser and the run processes every bar, including runs that
+halt or never trade.
 
 **Rules and costs.** Baseline crossover and mean reversion, default settings,
 no tuning. Two cost assumptions, because RJ's fee tier is unknown: base 10 bps
 fee + 5 bps slippage per fill, stress 60 + 10. Each symbol × rule × cost case
 is its own $1,000 account with the retained settings (1% stop risk, 20%
-exposure cap, 10% drawdown halt); pooled results are sums over symbols.
+exposure cap, 10% drawdown halt); pooled results are sums over the scored
+symbols.
 
 **Comparators.** Cash: zero. Hold-the-coin: the same $1,000 account buys at
-the first scored bar's open with the 20% exposure cap and sells at the last
-scored close, paying the same costs; the full-size price move is shown for
-context only. Benchmark: mean reversion is the accepted standing benchmark
-under [adopt-agentic-alpha-direction](adopt-agentic-alpha-direction.md), with
+the first scored bar's open with the 20% exposure cap, paying the case's entry
+fee and slippage, and holds to the cutoff; the full-size price move is shown
+for context only. Pooled hold-the-coin covers exactly the rule's scored
+symbols. Benchmark: mean reversion is the accepted standing benchmark under
+[adopt-agentic-alpha-direction](adopt-agentic-alpha-direction.md), with
 baseline as the second member of the benchmark pair.
 
-**Per-rule outcome**, for each rule under each cost case, on pooled net P&L:
+**End valuation.** Anything still held at the cutoff, whether a rule's open
+position or hold-the-coin, is valued the same way: at liquidation value, the
+last scored close less that case's exit slippage and fee. Open positions are
+still reported as open; nothing is sold in the journal.
+
+**Audit and reporting.** Every balance is re-derived independently in Decimal
+from the journal fills, without the engine's own reconciliation. One case is
+paused and resumed and must equal its uninterrupted run. Every case is
+reported, including no-trade, loss, halt and open-at-cutoff, with fees and
+slippage as shares of the gain before costs. No case is dropped or re-run.
+
+**Outcome per rule and cost case**, on pooled net P&L at end valuation:
 
 | Outcome | Condition |
 | --- | --- |
-| Inconclusive | Fewer than 7 of 8 symbols scored, or fewer than 30 completed round trips pooled. No claim is made for that rule. |
-| Pass | Net above zero and above hold-the-coin |
-| Positive but trails hold-the-coin | Net above zero, at or below hold-the-coin: profit, but no value beyond passive exposure |
-| Loses less than hold-the-coin | Net at or below zero, above hold-the-coin: a smaller loss in a falling market, not a profit |
-| Fail | Net at or below zero and at or below hold-the-coin |
+| Inconclusive | Fewer than 7 of 8 symbols scored, or fewer than 30 completed round trips (entries closed by stop, target or expiry before the cutoff) pooled for that rule under that cost case. No claim is made. |
+| Pass | Conclusive; net above zero and above hold-the-coin |
+| Positive but trails hold-the-coin | Conclusive; net above zero, at or below hold-the-coin |
+| Loses less than hold-the-coin | Conclusive; net at or below zero, above hold-the-coin |
+| Fail | Conclusive; net at or below zero and at or below hold-the-coin |
 
-A rule **survives costs** only if it passes under both cost cases. A pass
-under base costs only is **cost-dependent**: the agent asks RJ for his actual
-fee tier, a fact rather than a choice, and reads the nearer case.
+**Verdict per rule**, combining its two cost cases, checked in this order:
+
+1. **Inconclusive** if it is inconclusive under either cost case.
+2. **Survives costs** if it passes under both cost cases.
+3. **Cost-dependent** if it passes under exactly one cost case. It never
+   counts as surviving. RJ's actual taker fee may be recorded beside it, but
+   only a new, separately approved run at that exact fee (5 bps slippage,
+   otherwise the same protocol) can change the verdict.
+4. **Does not survive** otherwise.
 
 **Combined reading.** Claims are limited to these two rules, these cost
-assumptions and this window.
+assumptions and this window. The first matching action applies:
 
-1. Mean reversion survives costs: the accepted benchmark has a positive bar,
-   and the agent proposes a funded forward reasoning test to RJ.
-2. Baseline survives but mean reversion does not: reported as such. The bar
-   becomes the better rule. Keeping mean reversion as the named benchmark
-   stays the default; replacing it is RJ's call.
-3. Both rules are conclusive and neither survives costs: "neither tested fixed
-   rule survives these cost assumptions on this window". The agent brings RJ
-   the choice between a funded forward reasoning test and stopping alpha
-   investment, with a recommendation.
-4. Any rule inconclusive: no conclusion for it. The agent proposes one
-   extension with the same protocol over a later window, which needs a fresh
-   RJ go.
+| Action | When | What the agent does |
+| --- | --- | --- |
+| A — Propose a forward test | Either rule survives costs | Propose a funded forward reasoning test to RJ. Its bar is every surviving rule plus cash and hold-the-coin. Mean reversion stays the named benchmark; if only baseline survives, renaming the benchmark is RJ's call. The other rule's verdict is reported and gets no extension. |
+| B — Exact-fee run | Neither survives; either is cost-dependent | Record RJ's fee tier and propose one separately approved run at it for each cost-dependent rule, plus the extension below for any inconclusive rule. Re-read with this table afterwards. |
+| C — Extension | Neither survives nor is cost-dependent; either is inconclusive | Each conclusive "does not survive" stands. Propose one extension for each inconclusive rule, using this protocol over the next five-week window, which needs a fresh RJ go. RJ's fund-or-stop choice waits for its result. |
+| D — Fund-or-stop choice | Both rules do not survive | Report "neither tested fixed rule survives these cost assumptions on this window". Bring RJ the choice between a funded forward reasoning test (bar: cash and hold-the-coin, benchmark pair run alongside) and stopping alpha investment, with a recommendation. |
+
+As a grid (mean reversion down the side, baseline across the top):
+
+| | Survives | Cost-dependent | Does not survive | Inconclusive |
+| --- | --- | --- | --- | --- |
+| **Survives** | A | A | A | A |
+| **Cost-dependent** | A | B | B | B |
+| **Does not survive** | A | B | D | C |
+| **Inconclusive** | A | B | C | C |
 
 Any forward reasoning test runs the benchmark pair beside cash and
 hold-the-coin. Its bar is to beat mean reversion, as accepted, and both
 passive comparators. The 30-trade floor is a coverage minimum, not a
 significance test: five weeks of hourly bars can show that an edge fails to
-survive costs, not prove that one exists.
+survive costs, not prove that one exists. An extension or exact-fee run is
+offered at most once per rule.
 
 ## Consequences
 
