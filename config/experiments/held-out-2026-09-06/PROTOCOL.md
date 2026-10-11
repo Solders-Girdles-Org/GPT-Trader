@@ -26,6 +26,10 @@ that file and applies the reading in
    filled or re-fetched to repair it.
 2. Run each of the 32 inputs once into its own new directory:
    `uv run gpt-trader experiment run --input <input> --root <run>`.
+   Before reading, rebuild each symbol's inputs and the inputs its runs are
+   bound to from that symbol's capture, and refuse any difference:
+   `uv run gpt-trader experiment verify-input --capture <evidence>/<SYMBOL>/capture.json --input <input> ... --root <run> ...`.
+   A refused input or run is reported, not repaired or re-fetched.
 3. Pause/resume check: run one case with `--max-bars` partway, resume it, and
    confirm its report equals the uninterrupted run of the same input.
 4. Re-derive every balance independently in Decimal from the journal fills,

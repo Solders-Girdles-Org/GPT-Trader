@@ -12,9 +12,9 @@ from gpt_trader.cli.options import add_output_options
 from gpt_trader.cli.response import CliResponse
 from gpt_trader.core.fill_accounting import aware_time
 from gpt_trader.features.experiment.engine import run_experiment
-from gpt_trader.features.experiment.held_out import build_input_payload
+from gpt_trader.features.experiment.held_out import build_input_payload, verify_input_payload
 from gpt_trader.features.experiment.inputs import BENCHMARKS, load_input
-from gpt_trader.features.experiment.ledger import inspect_run
+from gpt_trader.features.experiment.ledger import inspect_run, run_input
 from gpt_trader.features.experiment.reading import case_outcome, combined_action, rule_verdict
 
 
@@ -54,6 +54,23 @@ def register(subparsers: Any) -> None:
     fetch.add_argument("--out", type=Path, required=True, help="New, empty evidence directory")
     add_output_options(fetch)
     fetch.set_defaults(handler=handle_fetch)
+    verify = commands.add_parser(
+        "verify-input",
+        help="Rebuild inputs from their raw capture and refuse any difference",
+    )
+    verify.add_argument("--capture", type=Path, required=True, help="Retained capture.json")
+    verify.add_argument(
+        "--input", type=Path, action="append", default=[], help="Input file (repeatable)"
+    )
+    verify.add_argument(
+        "--root",
+        type=Path,
+        action="append",
+        default=[],
+        help="Experiment run whose bound input is checked (repeatable)",
+    )
+    add_output_options(verify)
+    verify.set_defaults(handler=handle_verify)
     read = commands.add_parser("read", help="Apply the predeclared protocol reading to runs")
     read.add_argument("--protocol", type=Path, required=True)
     read.add_argument(
@@ -133,6 +150,24 @@ def handle_fetch(args: Namespace) -> CliResponse:
     }
     return CliResponse.success_response(
         "experiment fetch-input",
+        data=result if args.output_format == "json" else json.dumps(result, indent=1),
+    )
+
+
+def handle_verify(args: Namespace) -> CliResponse:
+    if not args.input and not args.root:
+        raise ValueError("Name at least one --input or --root to verify")
+    capture = args.capture.read_bytes()
+    checked = []
+    for path in args.input:
+        verify_input_payload(capture, json.loads(path.read_text(encoding="utf-8")))
+        checked.append(str(path))
+    for root in args.root:
+        verify_input_payload(capture, run_input(root))
+        checked.append(str(root))
+    result = {"capture": str(args.capture), "verified": checked}
+    return CliResponse.success_response(
+        "experiment verify-input",
         data=result if args.output_format == "json" else json.dumps(result, indent=1),
     )
 

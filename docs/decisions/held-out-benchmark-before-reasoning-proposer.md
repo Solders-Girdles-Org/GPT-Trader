@@ -110,7 +110,10 @@ Rejected for now:
 ## Held-out protocol and predeclared reading
 
 Phase A of #1315 commits this protocol as a file before any data is fetched;
-it may add mechanics but must not loosen a threshold.
+it may add mechanics but must not loosen a threshold. That file is
+[config/experiments/held-out-2026-09-06/PROTOCOL.md](../../config/experiments/held-out-2026-09-06/PROTOCOL.md),
+with its parameters in
+[protocol.json](../../config/experiments/held-out-2026-09-06/protocol.json).
 
 **Window and data.** Symbols: BTC, ETH, LTC, SOL, XRP, LINK, AVAX, DOT (the
 old job's set, chosen before any return is seen). Each symbol's input is 912

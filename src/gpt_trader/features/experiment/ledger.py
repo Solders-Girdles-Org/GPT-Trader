@@ -225,6 +225,13 @@ def reconcile(source: ExperimentInput, events: list[dict[str, Any]]) -> dict[str
     }
 
 
+def run_input(root: Path) -> dict[str, Any]:
+    """Return the input payload a run is bound to, read-only."""
+    database = root / "experiment.sqlite3"
+    with closing(sqlite3.connect(f"{database.resolve().as_uri()}?mode=ro", uri=True)) as connection:
+        return read_source(connection).payload
+
+
 def inspect_run(root: Path) -> dict[str, Any]:
     """Read a consistent snapshot without creating files or advancing the run."""
     database = root / "experiment.sqlite3"
