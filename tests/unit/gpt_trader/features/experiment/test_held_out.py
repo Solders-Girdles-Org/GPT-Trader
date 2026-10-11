@@ -101,6 +101,8 @@ def test_verify_refuses_any_input_its_capture_does_not_rebuild():
     relabelled = {**payload, "source": payload["source"].replace("sha256=", "sha256=0")}
     with pytest.raises(ValueError, match="source"):
         verify_input_payload(data, relabelled)
+    with pytest.raises(ValueError, match="unexpected"):
+        verify_input_payload(data, {**payload, "unexpected": None})
     other_capture = data.replace(b"5.5", b"5.6")
     with pytest.raises(ValueError, match="candles, source"):
         verify_input_payload(other_capture, payload)

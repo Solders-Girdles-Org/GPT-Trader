@@ -88,7 +88,9 @@ def verify_input_payload(capture_bytes: bytes, payload: dict[str, Any]) -> None:
         settings=payload.get("settings", {}),
     )
     differing = sorted(
-        key for key in set(rebuilt) | set(payload) if rebuilt.get(key) != payload.get(key)
+        key
+        for key in set(rebuilt) | set(payload)
+        if key not in rebuilt or key not in payload or rebuilt[key] != payload[key]
     )
     if differing:
         raise ValueError(f"Input differs from its capture: {', '.join(differing)}")
