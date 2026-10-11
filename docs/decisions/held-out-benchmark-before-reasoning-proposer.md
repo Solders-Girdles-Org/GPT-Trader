@@ -169,15 +169,30 @@ slippage as shares of the gain before costs. No case is dropped or re-run.
    otherwise the same protocol) can change the verdict.
 4. **Does not survive** otherwise.
 
+**Follow-up runs.** An exact-fee run is read as a single case with the
+outcome table: Pass makes the rule's verdict Survives at RJ's fee, and any
+other conclusive outcome makes it Does not survive. An extension is read with
+both cost cases and the verdict order above. The original base/stress verdict
+is always reported beside the follow-up. A rule still inconclusive or
+cost-dependent after its one follow-up run is treated as Does not survive for
+the combined reading, and its coverage is reported. After follow-ups, the
+combined reading below is applied again.
+
+**Forward-test bar.** Any forward reasoning test must beat mean reversion,
+cash and hold-the-coin, and also baseline when baseline survives costs. This
+follows [adopt-agentic-alpha-direction](adopt-agentic-alpha-direction.md),
+which makes beating mean reversion the bar; dropping mean reversion from it
+is RJ's call. The benchmark pair always runs alongside.
+
 **Combined reading.** Claims are limited to these two rules, these cost
 assumptions and this window. The first matching action applies:
 
 | Action | When | What the agent does |
 | --- | --- | --- |
-| A — Propose a forward test | Either rule survives costs | Propose a funded forward reasoning test to RJ. Its bar is every surviving rule plus cash and hold-the-coin. Mean reversion stays the named benchmark; if only baseline survives, renaming the benchmark is RJ's call. The other rule's verdict is reported and gets no extension. |
-| B — Exact-fee run | Neither survives; either is cost-dependent | Record RJ's fee tier and propose one separately approved run at it for each cost-dependent rule, plus the extension below for any inconclusive rule. Re-read with this table afterwards. |
-| C — Extension | Neither survives nor is cost-dependent; either is inconclusive | Each conclusive "does not survive" stands. Propose one extension for each inconclusive rule, using this protocol over the next five-week window, which needs a fresh RJ go. RJ's fund-or-stop choice waits for its result. |
-| D — Fund-or-stop choice | Both rules do not survive | Report "neither tested fixed rule survives these cost assumptions on this window". Bring RJ the choice between a funded forward reasoning test (bar: cash and hold-the-coin, benchmark pair run alongside) and stopping alpha investment, with a recommendation. |
+| A — Propose a forward test | Either rule survives costs | Propose a funded forward reasoning test to RJ, judged against the forward-test bar. The other rule's verdict is reported and gets no follow-up. |
+| B — Exact-fee run | Neither survives; either is cost-dependent | Record RJ's fee tier and propose one separately approved run at it for each cost-dependent rule, plus the extension below for any inconclusive rule. Read them as stated under follow-up runs. |
+| C — Extension | Neither survives nor is cost-dependent; either is inconclusive | Each conclusive "does not survive" stands. Propose one extension for each inconclusive rule, using this protocol over the next five-week window, which needs a fresh RJ go, and read it as stated under follow-up runs. RJ's fund-or-stop choice waits for its result. |
+| D — Fund-or-stop choice | Both rules do not survive | Report "neither tested fixed rule survives these cost assumptions on this window". Bring RJ the choice between a funded forward reasoning test, judged against the forward-test bar, and stopping alpha investment, with a recommendation. |
 
 As a grid (mean reversion down the side, baseline across the top):
 
@@ -188,9 +203,8 @@ As a grid (mean reversion down the side, baseline across the top):
 | **Does not survive** | A | B | D | C |
 | **Inconclusive** | A | B | C | C |
 
-Any forward reasoning test runs the benchmark pair beside cash and
-hold-the-coin. Its bar is to beat mean reversion, as accepted, and both
-passive comparators. The 30-trade floor is a coverage minimum, not a
+Every forward reasoning test is judged against the forward-test bar defined
+above. The 30-trade floor is a coverage minimum, not a
 significance test: five weeks of hourly bars can show that an edge fails to
 survive costs, not prove that one exists. An extension or exact-fee run is
 offered at most once per rule.
@@ -206,9 +220,8 @@ Agent-owned orchestration, in order:
 4. After the go: fetch, run and audit exactly as the protocol states; post the
    table on #1315 and add the result to this record.
 5. Read the result against the predeclared criterion and bring RJ the single
-   product choice it implies: fund a forward reasoning test (benchmark pair,
-   cash and hold-the-coin run alongside), or stop alpha investment with the
-   evidence recorded.
+   product choice it implies: fund a forward reasoning test judged against
+   the forward-test bar, or stop alpha investment with the evidence recorded.
 
 Until step 5, no W1–W4 implementation, model credential or forward lane is
 started under #1252. The venue re-open trigger in
