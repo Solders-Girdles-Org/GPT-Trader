@@ -34,6 +34,11 @@ experiments/
 !config/experiments/
 config/experiments/*
 !config/experiments/ma-crossover-demo.json
+# Committed protocols (inputs, captures and runs stay out of git).
+!config/experiments/held-out-2026-09-06/
+config/experiments/held-out-2026-09-06/*
+!config/experiments/held-out-2026-09-06/PROTOCOL.md
+!config/experiments/held-out-2026-09-06/protocol.json
 
 # Ephemeral per-task planning/audit artifacts (see docs/INFORMATION_ARCHITECTURE.md)
 work/
