@@ -53,7 +53,9 @@ from a consistent snapshot and own no state. `--benchmark` selects the bound
 rule channel (`baseline` or `mean-reversion`), an optional `scored_from` makes
 earlier bars indicator history only, and reports value anything still held at
 liquidation beside cash and hold-the-coin. `experiment fetch-input` builds
-inputs from a retained raw public Coinbase capture; `experiment read` applies a
+inputs from a retained raw public Coinbase capture, `experiment verify-input`
+rebuilds inputs and run-bound inputs from that capture and refuses any
+difference, and `experiment read` applies a
 committed protocol's predeclared reading.
 
 **Paper and live spine.**

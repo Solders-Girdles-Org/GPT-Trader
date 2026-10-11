@@ -77,3 +77,20 @@ def build_input_payload(
     }
     parse_input(payload)
     return payload
+
+
+def verify_input_payload(capture_bytes: bytes, payload: dict[str, Any]) -> None:
+    """Refuse an input that its capture does not rebuild exactly."""
+    rebuilt = build_input_payload(
+        capture_bytes,
+        scored_from=str(payload.get("scored_from")),
+        benchmark=str(payload.get("benchmark")),
+        settings=payload.get("settings", {}),
+    )
+    differing = sorted(
+        key
+        for key in set(rebuilt) | set(payload)
+        if key not in rebuilt or key not in payload or rebuilt[key] != payload[key]
+    )
+    if differing:
+        raise ValueError(f"Input differs from its capture: {', '.join(differing)}")

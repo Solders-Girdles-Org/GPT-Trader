@@ -112,6 +112,24 @@ def test_cli_fetch_input_writes_capture_and_one_input_per_case(tmp_path, capsys,
     assert stress["benchmark"] == "mean-reversion"
     assert stress["settings"]["fee_bps"] == "60"
     assert stress["scored_from"] == protocol["scored_from"]
+    verify = ["experiment", "verify-input", "--capture", str(out / "capture.json")]
+    inputs = [
+        arg for name in names if name != "capture.json" for arg in ("--input", str(out / name))
+    ]
+    assert main([*verify, *inputs, "--format", "json"]) == 0
+    assert len(json.loads(capsys.readouterr().out)["data"]["verified"]) == 4
+    run = tmp_path / "run"
+    run_args = ["experiment", "run", "--input", str(out / "baseline-base.json"), "--root", str(run)]
+    assert main([*run_args, "--max-bars", "1", "--format", "json"]) == 0
+    capsys.readouterr()
+    assert main([*verify, "--root", str(run), "--format", "json"]) == 0
+    capsys.readouterr()
+    stress["candles"][100]["close"] = "2.5"
+    (out / "mean-reversion-stress.json").write_text(json.dumps(stress), encoding="utf-8")
+    assert main([*verify, *inputs, "--format", "json"]) == 1
+    assert "differs from its capture" in capsys.readouterr().out
+    assert main([*verify, "--format", "json"]) == 1
+    capsys.readouterr()
     assert main([*args, "--symbol", "ETH-USD", "--out", str(out), "--format", "json"]) == 1
     capsys.readouterr()
     assert (

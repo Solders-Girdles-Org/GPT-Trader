@@ -6,7 +6,11 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from gpt_trader.features.experiment.held_out import build_input_payload, capture_bars
+from gpt_trader.features.experiment.held_out import (
+    build_input_payload,
+    capture_bars,
+    verify_input_payload,
+)
 from gpt_trader.features.experiment.inputs import parse_input
 
 START = datetime(2026, 9, 3, tzinfo=UTC)
@@ -81,3 +85,24 @@ def test_gaps_and_conflicting_duplicates_are_refused():
         capture_bars(
             json.dumps({**json.loads(capture(range(6))), "granularity": "ONE_DAY"}).encode()
         )
+
+
+def test_verify_refuses_any_input_its_capture_does_not_rebuild():
+    data = capture(range(6))
+    scored_from = (START + timedelta(hours=3)).isoformat()
+    payload = build_input_payload(
+        data, scored_from=scored_from, benchmark="baseline", settings=SETTINGS
+    )
+    verify_input_payload(data, json.loads(json.dumps(payload)))
+    edited_bar = json.loads(json.dumps(payload))
+    edited_bar["candles"][4]["close"] = "101"
+    with pytest.raises(ValueError, match="differs from its capture: candles"):
+        verify_input_payload(data, edited_bar)
+    relabelled = {**payload, "source": payload["source"].replace("sha256=", "sha256=0")}
+    with pytest.raises(ValueError, match="source"):
+        verify_input_payload(data, relabelled)
+    with pytest.raises(ValueError, match="unexpected"):
+        verify_input_payload(data, {**payload, "unexpected": None})
+    other_capture = data.replace(b"5.5", b"5.6")
+    with pytest.raises(ValueError, match="candles, source"):
+        verify_input_payload(other_capture, payload)
