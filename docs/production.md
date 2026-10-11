@@ -201,10 +201,15 @@ pkill -f gpt-trader
 ```
 
 `RISK_KILL_SWITCH_ENABLED=1` engages the engine kill switch when the bot next
-starts: every order, entry or exit, is blocked with reason `kill_switch`. It
-stays engaged across restarts until the variable is unset or set to `0`. A
-profile's `emergency.kill_switch_enabled: true` (set in `canary.yaml`) engages
-it too; no source can clear another.
+starts: every order, entry or exit, is blocked with reason `kill_switch`. An
+`export` reaches only processes started from that shell; to keep the switch
+engaged across restarts from any shell or launcher, set
+`RISK_KILL_SWITCH_ENABLED=1` in `.env` and clear it there once the incident is
+closed. A profile's `emergency.kill_switch_enabled: true` engages it too (no
+shipped profile sets it); no source can clear another.
+
+While the kill switch is engaged the bot cannot close positions either, even
+with `RISK_REDUCE_ONLY_MODE=1`. Make exits through the broker UI.
 
 After emergency stop:
 

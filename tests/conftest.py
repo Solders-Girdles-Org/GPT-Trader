@@ -34,6 +34,18 @@ def isolated_ideas_root(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("GPT_TRADER_IDEAS_ROOT", str(tmp_path_factory.mktemp("isolated-ideas-root")))
 
 
+@pytest.fixture(autouse=True)
+def isolated_kill_switch_env(monkeypatch):
+    """Keep an operator's emergency stop out of the test run (#1300).
+
+    The live risk manager reads RISK_KILL_SWITCH_ENABLED directly, and
+    gpt_trader.cli loads .env on import, so a developer whose shell or .env
+    still carries the stop would see unrelated engine tests blocked with
+    ``kill_switch``. Tests that exercise the stop set the variable themselves.
+    """
+    monkeypatch.delenv("RISK_KILL_SWITCH_ENABLED", raising=False)
+
+
 @pytest.fixture
 def application_container(mock_config):
     """Provide an ApplicationContainer for tests that need it.

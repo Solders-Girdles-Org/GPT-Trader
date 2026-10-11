@@ -18,12 +18,6 @@ def mock_event_store() -> MagicMock:
     return MagicMock()
 
 
-@pytest.fixture(autouse=True)
-def _clear_kill_switch_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep an operator's shell setting from leaking into these tests."""
-    monkeypatch.delenv(KILL_SWITCH_ENV_VAR, raising=False)
-
-
 class TestKillSwitchDerivation:
     """Test kill_switch_enabled derivation from active strategy config."""
 

@@ -4,21 +4,23 @@ from __future__ import annotations
 
 from argparse import Namespace
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
 from gpt_trader.app.config import BotConfig
 from gpt_trader.app.config.profile_loader import ProfileLoader
 from gpt_trader.app.config.profile_schema import ProfileSchema, ProfileValidationError
+from gpt_trader.app.containers.risk_validation import RiskValidationContainer
 from gpt_trader.cli import services
 from gpt_trader.config.types import Profile
 
 KILL_SWITCH_ENV_VAR = "RISK_KILL_SWITCH_ENABLED"
 
 
-@pytest.fixture(autouse=True)
-def _clear_kill_switch_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(KILL_SWITCH_ENV_VAR, raising=False)
+def _live_risk_manager(config: BotConfig):
+    """Build the risk manager through the live construction path."""
+    return RiskValidationContainer(config=config, event_store_provider=MagicMock).risk_manager
 
 
 class TestEmergencySection:
@@ -45,17 +47,28 @@ class TestEmergencySection:
         assert loader.to_bot_config_kwargs(schema, Profile.DEV)["kill_switch_enabled"] is True
         assert loader.build_bot_config(schema, Profile.DEV).kill_switch_enabled is True
 
-    def test_repository_canary_profile_engages_kill_switch(self) -> None:
+    def test_profile_yaml_setting_true_halts_live_risk_manager(self, tmp_path: Path) -> None:
+        (tmp_path / "dev.yaml").write_text(
+            "profile_name: dev\nemergency:\n  kill_switch_enabled: true\n"
+        )
+        loader = ProfileLoader(profiles_dir=tmp_path)
+        config = loader.build_bot_config(loader.load(Profile.DEV), Profile.DEV)
+
+        assert config.kill_switch_enabled is True
+        assert _live_risk_manager(config).config.kill_switch_enabled is True
+
+    def test_repository_canary_profile_is_armed_not_engaged(self) -> None:
+        # canary is a live-operation asset (docs/decisions/prod-canary-profile-meaning.md).
         loader = ProfileLoader()
         schema = loader.load(Profile.CANARY)
 
-        assert schema.emergency.kill_switch_enabled is True
-        assert loader.build_bot_config(schema, Profile.CANARY).kill_switch_enabled is True
+        assert schema.emergency.kill_switch_enabled is False
+        assert loader.build_bot_config(schema, Profile.CANARY).kill_switch_enabled is False
 
-    def test_canary_fallback_defaults_keep_kill_switch(self, tmp_path: Path) -> None:
+    def test_canary_fallback_defaults_match_yaml(self, tmp_path: Path) -> None:
         # No YAML on disk: the hardcoded canary defaults must match canary.yaml.
         schema = ProfileLoader(profiles_dir=tmp_path).load(Profile.CANARY)
-        assert schema.emergency.kill_switch_enabled is True
+        assert schema.emergency.kill_switch_enabled is False
 
 
 class TestBotConfigEnv:
@@ -99,9 +112,19 @@ class TestCliPrecedence:
         config = services.build_config_from_args(self._args("dev"))
         assert config.kill_switch_enabled is True
 
-    def test_canary_profile_engages_kill_switch_via_cli(self) -> None:
+    def test_canary_profile_starts_disengaged_via_cli(self) -> None:
         config = services.build_config_from_args(self._args("canary"))
-        assert config.kill_switch_enabled is True
+
+        assert config.kill_switch_enabled is False
+        assert _live_risk_manager(config).config.kill_switch_enabled is False
+
+    def test_env_engages_kill_switch_under_canary_profile(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(KILL_SWITCH_ENV_VAR, "1")
+        config = services.build_config_from_args(self._args("canary"))
+
+        assert _live_risk_manager(config).config.kill_switch_enabled is True
 
     def test_dev_profile_without_env_leaves_kill_switch_off(self) -> None:
         config = services.build_config_from_args(self._args("dev"))

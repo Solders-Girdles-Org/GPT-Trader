@@ -247,8 +247,10 @@ _PROFILE_DEFAULTS: dict[Profile, ProfileSchema] = {
             end_time=time(15, 0),  # 3 PM UTC
         ),
         monitoring=MonitoringConfig(log_level="DEBUG", update_interval=5),
-        # Mirrors config/profiles/canary.yaml so a YAML fallback keeps the halt.
-        emergency=EmergencyConfig(kill_switch_enabled=True),
+        # Mirrors config/profiles/canary.yaml: canary is a live-operation asset
+        # (docs/decisions/prod-canary-profile-meaning.md), so it does not start
+        # halted. RISK_KILL_SWITCH_ENABLED remains the emergency stop.
+        emergency=EmergencyConfig(kill_switch_enabled=False),
     ),
     Profile.OBSERVE: ProfileSchema(
         profile_name="observe",
