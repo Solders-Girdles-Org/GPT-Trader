@@ -23,6 +23,10 @@ def test_cross_slice_allowlist_is_frozen_topology() -> None:
             ("idea_execution", "trade_ideas"),
             # Offline benchmark/snapshot reuse; broker imports remain forbidden.
             ("experiment", "trade_ideas"),
+            # Mean-reversion benchmark channel through the snapshot wrapper (#1315),
+            # narrowed to those two modules below.
+            ("experiment", "live_trade"),
+            ("experiment", "strategy_tools"),
             ("idea_execution", "brokerages"),
             # engines/strategy.py drives the in-process event-driven paper lane
             # per decision under the risk kernel
@@ -67,6 +71,18 @@ def test_cross_slice_narrow_import_prefixes_are_frozen() -> None:
                 "brokerages",
                 "gpt_trader.features.brokerages.coinbase",
             ),
+            (
+                "experiment",
+                "live_trade",
+                "gpt_trader.features.live_trade.strategies.mean_reversion.strategy",
+            ),
+            (
+                "experiment",
+                "strategy_tools",
+                "gpt_trader.features.strategy_tools.snapshot_proposer",
+            ),
+            ("experiment", "trade_ideas", "gpt_trader.features.trade_ideas.baseline"),
+            ("experiment", "trade_ideas", "gpt_trader.features.trade_ideas.snapshot"),
         }
     )
 
@@ -102,6 +118,12 @@ def test_experiment_reuses_benchmark_but_cannot_import_runtime(tmp_path, monkeyp
     monkeypatch.setattr(check_import_boundaries, "RULES", (replace(rule, source_root=root),))
     module.write_text("from gpt_trader.features.trade_ideas.baseline import BaselineProposer\n")
     assert check_import_boundaries.scan([str(root)]) == 0
-    for dependency in ("trade_ideas.service", "brokerages.mock", "live_trade.bot"):
+    for dependency in (
+        "trade_ideas.service",
+        "brokerages.mock",
+        "live_trade.bot",
+        "live_trade.strategies.baseline",
+        "strategy_tools.trade_idea_adapter",
+    ):
         module.write_text(f"import gpt_trader.features.{dependency}\n")
         assert check_import_boundaries.scan([str(root)]) == 1

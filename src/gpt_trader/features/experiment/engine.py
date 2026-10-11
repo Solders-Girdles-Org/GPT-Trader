@@ -14,8 +14,10 @@ from pathlib import Path
 from typing import Any
 
 from gpt_trader.core.fill_accounting import FillFact, aware_time, semantic_checksum
+from gpt_trader.features.experiment.benchmarks import HISTORY_BARS, propose
 from gpt_trader.features.experiment.inputs import ExperimentInput
 from gpt_trader.features.experiment.ledger import (
+    ExperimentIntegrityError,
     encode,
     initial_state,
     inspect_run,
@@ -24,7 +26,6 @@ from gpt_trader.features.experiment.ledger import (
     read_source,
     reconcile,
 )
-from gpt_trader.features.trade_ideas.baseline import BaselineProposer
 from gpt_trader.features.trade_ideas.snapshot import MarketSnapshot, SymbolSeries
 
 
@@ -158,6 +159,8 @@ def advance(
         decision = "new entries halted by drawdown limit"
     elif state["position"] is not None:
         decision = "hold existing position"
+    elif sequence < source.scored_index:
+        decision = "warm-up bar: indicator history only"
     else:
         cutoff = candle.ts + timedelta(hours=1)
         snapshot = MarketSnapshot(
@@ -165,11 +168,13 @@ def advance(
             source.payload["source"],
             (
                 SymbolSeries(
-                    source.symbol, "1h", source.candles[max(0, sequence - 52) : sequence + 1]
+                    source.symbol,
+                    "1h",
+                    source.candles[max(0, sequence - HISTORY_BARS + 1) : sequence + 1],
                 ),
             ),
         )
-        ideas = BaselineProposer().propose(snapshot)
+        ideas, refusal = propose(source.benchmark, snapshot)
         if ideas:
             idea = ideas[0]
             assert idea.exit_plan is not None
@@ -184,9 +189,13 @@ def advance(
                 "expires_at": idea.time_horizon.expires_at.isoformat(),
                 "thesis": idea.thesis,
             }
-            decision = "rule-based crossover: consider entry at next open"
+            decision = f"{source.benchmark} rule: consider entry at next open"
+        elif refusal is not None:
+            decision = f"{source.benchmark} {refusal}"
+        elif sequence < HISTORY_BARS - 1:
+            decision = "collecting benchmark history"
         else:
-            decision = "no crossover signal" if sequence >= 52 else "collecting benchmark history"
+            decision = f"no {source.benchmark} signal"
     return {
         "sequence": sequence,
         "bar": source.payload["candles"][sequence],
@@ -199,13 +208,21 @@ def advance(
 
 
 def run_experiment(
-    root: Path, source: ExperimentInput | None = None, *, max_bars: int | None = None
+    root: Path,
+    source: ExperimentInput | None = None,
+    *,
+    max_bars: int | None = None,
+    benchmark: str | None = None,
 ) -> dict[str, Any]:
     """Create/resume one bound run, committing no more than max_bars new observations."""
     if max_bars is not None and max_bars < 1:
         raise ValueError("max_bars must be positive")
     connection = open_run(root, source)
     try:
+        if benchmark is not None and read_source(connection).benchmark != benchmark:
+            raise ExperimentIntegrityError(
+                "Experiment is bound to a different benchmark; use a new experiment directory"
+            )
         processed = 0
         while max_bars is None or processed < max_bars:
             connection.execute("BEGIN IMMEDIATE")

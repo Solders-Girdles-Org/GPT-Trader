@@ -200,6 +200,11 @@ CROSS_SLICE_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset(
         # Recorded experiments reuse pure proposal/snapshot contracts, never
         # the scheduled runtime or broker adapters (recorded-experiment decision).
         ("experiment", "trade_ideas"),
+        # The mean-reversion benchmark channel (#1315) runs the existing
+        # strategy through the snapshot-strategy wrapper; narrowed below to
+        # those two modules, never the live engine or its services.
+        ("experiment", "live_trade"),
+        ("experiment", "strategy_tools"),
         ("idea_execution", "brokerages"),
         # engines/strategy.py drives the in-process event-driven paper lane
         # (EventDrivenIdeaLane) per decision under the risk kernel
@@ -239,6 +244,26 @@ CROSS_SLICE_NARROW_IMPORT_PREFIXES: frozenset[tuple[str, str, str]] = frozenset(
             "recorder",
             "brokerages",
             "gpt_trader.features.brokerages.coinbase",
+        ),
+        (
+            "experiment",
+            "live_trade",
+            "gpt_trader.features.live_trade.strategies.mean_reversion.strategy",
+        ),
+        (
+            "experiment",
+            "strategy_tools",
+            "gpt_trader.features.strategy_tools.snapshot_proposer",
+        ),
+        (
+            "experiment",
+            "trade_ideas",
+            "gpt_trader.features.trade_ideas.baseline",
+        ),
+        (
+            "experiment",
+            "trade_ideas",
+            "gpt_trader.features.trade_ideas.snapshot",
         ),
     }
 )
@@ -308,6 +333,11 @@ _EXPERIMENT_RULE = ImportRule(
         "gpt_trader.core",
         "gpt_trader.features.trade_ideas.baseline",
         "gpt_trader.features.trade_ideas.snapshot",
+        # Benchmark channels at default settings (#1315); see benchmarks.py.
+        "gpt_trader.app.config.bot_config",
+        "gpt_trader.errors",
+        "gpt_trader.features.live_trade.strategies.mean_reversion.strategy",
+        "gpt_trader.features.strategy_tools.snapshot_proposer",
     ),
 )
 

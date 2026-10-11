@@ -1,0 +1,22 @@
+{
+  "protocol": "held-out-benchmark-2026-09-06",
+  "authority": "docs/decisions/held-out-benchmark-before-reasoning-proposer.md",
+  "symbols": ["BTC-USD", "ETH-USD", "LTC-USD", "SOL-USD", "XRP-USD", "LINK-USD", "AVAX-USD", "DOT-USD"],
+  "warmup_start": "2026-09-03T00:00:00+00:00",
+  "scored_from": "2026-09-06T00:00:00+00:00",
+  "cutoff": "2026-10-11T00:00:00+00:00",
+  "bars_per_symbol": 912,
+  "benchmarks": ["baseline", "mean-reversion"],
+  "settings": {
+    "initial_cash": "1000",
+    "risk_fraction": "0.01",
+    "exposure_fraction": "0.20",
+    "drawdown_fraction": "0.10"
+  },
+  "cost_cases": {
+    "base": {"fee_bps": "10", "slippage_bps": "5"},
+    "stress": {"fee_bps": "60", "slippage_bps": "10"}
+  },
+  "min_scored_symbols": 7,
+  "min_round_trips": 30
+}

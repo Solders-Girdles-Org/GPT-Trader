@@ -49,7 +49,12 @@ atomic journal entry holding data, decision, fills, cash, fees, controls and
 the resume checkpoint. History is append-only; a resume advances only missing
 observations; a changed source or input is a new experiment. Cash and results
 are reconciled independently through `core/fill_accounting.py`; reports derive
-from a consistent snapshot and own no state.
+from a consistent snapshot and own no state. `--benchmark` selects the bound
+rule channel (`baseline` or `mean-reversion`), an optional `scored_from` makes
+earlier bars indicator history only, and reports value anything still held at
+liquidation beside cash and hold-the-coin. `experiment fetch-input` builds
+inputs from a retained raw public Coinbase capture; `experiment read` applies a
+committed protocol's predeclared reading.
 
 **Paper and live spine.**
 
@@ -96,7 +101,8 @@ explicit dependencies and never touches the container
 configure experiments. `scripts/ci/check_import_boundaries.py` enforces the
 edges: no slice imports the CLI, preflight or the container; `monitoring` does
 not import `features` at runtime; `trade_ideas` imports only `core` and
-`errors`; cross-slice edges are an allowlist that only shrinks; the web
+`errors`; cross-slice edges are an allowlist that grows only with a recorded
+rationale and narrow import prefixes; the web
 console reaches only its trade-idea adapter contract.
 
 The linked [dependency policy](DI_POLICY.md) owns wiring examples. Detailed
