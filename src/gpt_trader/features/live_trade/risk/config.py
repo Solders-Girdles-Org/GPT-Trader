@@ -15,6 +15,8 @@ from typing import Any
 
 import yaml
 
+from gpt_trader.config.config_utilities import kill_switch_env_engaged
+
 RISK_CONFIG_ENV_KEYS = [
     "RISK_MAX_LEVERAGE",
     "RISK_MAX_EXPOSURE_PCT",
@@ -153,7 +155,7 @@ class RiskConfig:
             max_position_pct_per_symbol=float(_get_env("MAX_POSITION_PCT_PER_SYMBOL", "0.2")),
             min_liquidation_buffer_pct=float(_get_env("MIN_LIQUIDATION_BUFFER_PCT", "0.1")),
             slippage_guard_bps=int(_get_env("SLIPPAGE_GUARD_BPS", "50")),
-            kill_switch_enabled=_get_env("KILL_SWITCH_ENABLED", "0") == "1",
+            kill_switch_enabled=kill_switch_env_engaged(),
             reduce_only_mode=_get_env("REDUCE_ONLY_MODE", "0") == "1",
             # CFM-specific parameters
             cfm_max_leverage=int(os.getenv("CFM_MAX_LEVERAGE", "5")),

@@ -94,3 +94,50 @@ def test_parse_float_env_with_invalid_value(clean_env: pytest.MonkeyPatch):
     with pytest.raises(ValidationError) as exc:
         parse_float_env("BAD_FLOAT")
     assert "Failed to parse BAD_FLOAT" in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (None, False),
+        ("", False),
+        ("   ", False),
+        ("0", False),
+        ("false", False),
+        ("No", False),
+        ("off", False),
+        (False, False),
+        (0, False),
+        ("1", True),
+        ("true", True),
+        ("YES", True),
+        (" on ", True),
+        (True, True),
+        (1, True),
+        # Fail closed: an unrecognised value engages the kill switch.
+        ("enabled", True),
+        ("2", True),
+    ],
+)
+def test_parse_kill_switch_flag_fails_closed(value: object, expected: bool) -> None:
+    from gpt_trader.config.config_utilities import parse_kill_switch_flag
+
+    assert parse_kill_switch_flag(value) is expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [(None, False), ("0", False), ("1", True), ("true", True), ("enabled", True)],
+)
+def test_kill_switch_env_engaged(
+    monkeypatch: pytest.MonkeyPatch, value: str | None, expected: bool
+) -> None:
+    from gpt_trader.config.config_utilities import KILL_SWITCH_ENV_VAR, kill_switch_env_engaged
+
+    assert KILL_SWITCH_ENV_VAR == "RISK_KILL_SWITCH_ENABLED"
+    if value is None:
+        monkeypatch.delenv(KILL_SWITCH_ENV_VAR, raising=False)
+    else:
+        monkeypatch.setenv(KILL_SWITCH_ENV_VAR, value)
+
+    assert kill_switch_env_engaged() is expected

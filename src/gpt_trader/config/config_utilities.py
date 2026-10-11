@@ -17,6 +17,7 @@ from gpt_trader.config.env_utils import (  # naming: allow
     parse_env_mapping,
 )
 from gpt_trader.errors import ValidationError
+from gpt_trader.utilities.parsing import interpret_tristate_bool
 
 T = TypeVar("T")
 
@@ -105,3 +106,34 @@ def validate_required_env(var_names: list[str]) -> None:
     missing = [name for name in var_names if not os.environ.get(name)]
     if missing:
         raise ValidationError(f"Missing required environment variables: {', '.join(missing)}")
+
+
+# Emergency stop: the documented operator control (docs/production.md,
+# config/environments/.env.template). Read wherever a risk manager is built so
+# the halt cannot be lost by a config path that skips BotConfig.from_env (#1300).
+KILL_SWITCH_ENV_VAR = "RISK_KILL_SWITCH_ENABLED"
+
+
+def parse_kill_switch_flag(value: object) -> bool:
+    """Interpret a kill-switch setting, failing closed.
+
+    Unset (None or blank) and recognised false tokens disengage the switch.
+    Every other value, including unrecognised strings such as ``"enabled"``,
+    engages it: an operator who meant to stop trading must not be overridden
+    by a parse error.
+    """
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    text = str(value).strip()
+    if not text:
+        return False
+    return interpret_tristate_bool(text) is not False
+
+
+def kill_switch_env_engaged() -> bool:
+    """Return True when ``RISK_KILL_SWITCH_ENABLED`` engages the kill switch."""
+    return parse_kill_switch_flag(os.environ.get(KILL_SWITCH_ENV_VAR))

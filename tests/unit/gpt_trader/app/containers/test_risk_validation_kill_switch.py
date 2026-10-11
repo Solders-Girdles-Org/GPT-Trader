@@ -9,11 +9,19 @@ import pytest
 from gpt_trader.app.config import BotConfig
 from gpt_trader.app.containers.risk_validation import RiskValidationContainer
 
+KILL_SWITCH_ENV_VAR = "RISK_KILL_SWITCH_ENABLED"
+
 
 @pytest.fixture
 def mock_event_store() -> MagicMock:
     """Create a mock EventStore."""
     return MagicMock()
+
+
+@pytest.fixture(autouse=True)
+def _clear_kill_switch_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep an operator's shell setting from leaking into these tests."""
+    monkeypatch.delenv(KILL_SWITCH_ENV_VAR, raising=False)
 
 
 class TestKillSwitchDerivation:
@@ -95,3 +103,70 @@ class TestKillSwitchDerivation:
 
         risk_manager = container.risk_manager
         assert risk_manager.config.reduce_only_mode is True
+
+
+class TestOperatorKillSwitch:
+    """RISK_KILL_SWITCH_ENABLED and BotConfig.kill_switch_enabled reach the live manager (#1300)."""
+
+    def _build(self, config: BotConfig, event_store: MagicMock):
+        container = RiskValidationContainer(
+            config=config,
+            event_store_provider=lambda: event_store,
+        )
+        return container.risk_manager
+
+    def test_disengaged_by_default(self, mock_event_store: MagicMock) -> None:
+        risk_manager = self._build(BotConfig(symbols=["BTC-USD"]), mock_event_store)
+        assert risk_manager.config.kill_switch_enabled is False
+
+    @pytest.mark.parametrize("strategy_type", ["baseline", "mean_reversion", "regime_switcher"])
+    def test_env_var_engages_kill_switch_for_every_strategy_type(
+        self,
+        mock_event_store: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+        strategy_type: str,
+    ) -> None:
+        monkeypatch.setenv(KILL_SWITCH_ENV_VAR, "1")
+        # Built directly, not via from_env: the env must still be honoured.
+        config = BotConfig(symbols=["BTC-USD"], strategy_type=strategy_type)  # type: ignore[arg-type]
+
+        risk_manager = self._build(config, mock_event_store)
+
+        assert risk_manager.config.kill_switch_enabled is True
+
+    def test_env_var_zero_leaves_kill_switch_disengaged(
+        self, mock_event_store: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(KILL_SWITCH_ENV_VAR, "0")
+        risk_manager = self._build(BotConfig(symbols=["BTC-USD"]), mock_event_store)
+        assert risk_manager.config.kill_switch_enabled is False
+
+    def test_unrecognised_env_value_fails_closed(
+        self, mock_event_store: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(KILL_SWITCH_ENV_VAR, "enabled")
+        risk_manager = self._build(BotConfig(symbols=["BTC-USD"]), mock_event_store)
+        assert risk_manager.config.kill_switch_enabled is True
+
+    def test_bot_config_flag_engages_kill_switch(self, mock_event_store: MagicMock) -> None:
+        config = BotConfig(symbols=["BTC-USD"], kill_switch_enabled=True)
+        risk_manager = self._build(config, mock_event_store)
+        assert risk_manager.config.kill_switch_enabled is True
+
+    def test_strategy_flag_off_does_not_clear_env_kill_switch(
+        self, mock_event_store: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from gpt_trader.features.live_trade.strategies.baseline import (
+            PerpsStrategyConfig,
+        )
+
+        monkeypatch.setenv(KILL_SWITCH_ENV_VAR, "true")
+        config = BotConfig(
+            symbols=["BTC-USD"],
+            strategy=PerpsStrategyConfig(kill_switch_enabled=False),
+            kill_switch_enabled=False,
+        )
+
+        risk_manager = self._build(config, mock_event_store)
+
+        assert risk_manager.config.kill_switch_enabled is True

@@ -44,6 +44,7 @@ from gpt_trader.app.config.profile_error_payloads import (
     profile_yaml_parse_error_payload,
 )
 from gpt_trader.app.config.profile_schema import (
+    EmergencyConfig,
     ExecutionConfig,
     MonitoringConfig,
     ProfileSchema,
@@ -246,6 +247,8 @@ _PROFILE_DEFAULTS: dict[Profile, ProfileSchema] = {
             end_time=time(15, 0),  # 3 PM UTC
         ),
         monitoring=MonitoringConfig(log_level="DEBUG", update_interval=5),
+        # Mirrors config/profiles/canary.yaml so a YAML fallback keeps the halt.
+        emergency=EmergencyConfig(kill_switch_enabled=True),
     ),
     Profile.OBSERVE: ProfileSchema(
         profile_name="observe",
@@ -545,6 +548,8 @@ class ProfileLoader:
         # Mode mapping
         if schema.trading.mode == "reduce_only":
             kwargs["reduce_only_mode"] = True
+        if schema.emergency.kill_switch_enabled:
+            kwargs["kill_switch_enabled"] = True
 
         # Note: Session time fields (trading_window_start, trading_window_end, trading_days)
         # are not currently in BotConfig. If needed, add them to BotConfig first.
@@ -651,6 +656,8 @@ def _schema_to_bot_config(
     # Mode mapping
     if schema.trading.mode == "reduce_only":
         kwargs["reduce_only_mode"] = True
+    if schema.emergency.kill_switch_enabled:
+        kwargs["kill_switch_enabled"] = True
 
     # Optional session settings
     if schema.session.start_time is not None:

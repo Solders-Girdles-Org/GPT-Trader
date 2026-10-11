@@ -197,6 +197,9 @@ def _apply_profile_kwargs(config: BotConfig, profile_kwargs: dict[str, Any]) -> 
         config.set_enable_shorts(profile_kwargs["enable_shorts"])
     if "reduce_only_mode" in profile_kwargs:
         config.reduce_only_mode = profile_kwargs["reduce_only_mode"]
+    if profile_kwargs.get("kill_switch_enabled"):
+        # Engage only: a profile never clears a halt set by the environment.
+        config.kill_switch_enabled = True
     if "strategy_type" in profile_kwargs:
         config.strategy_type = profile_kwargs["strategy_type"]
     if "log_level" in profile_kwargs:

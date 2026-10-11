@@ -231,6 +231,11 @@ reporting:
     - "error_count"
 
 # Emergency Controls
+# Only emergency.kill_switch_enabled is read (#1300). When true the engine's
+# kill switch is engaged at startup and blocks every order, entries and exits
+# alike, so this profile submits nothing until it is set to false. The
+# environment (RISK_KILL_SWITCH_ENABLED=1) can also engage it; neither source
+# can clear the other. The remaining keys in this section are not read.
 emergency:
   # Kill Switch
   kill_switch_enabled: true
