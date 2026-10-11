@@ -13,9 +13,11 @@ timestamp convention.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any
 
 from gpt_trader.features.recorder.equities_candles import (
     DEFAULT_ALPACA_DATA_BASE_URL,
@@ -79,6 +81,46 @@ async def build_coinbase_market_snapshot(
                 )
             series.append(updated)
         return replace(snapshot, series=tuple(series))
+    finally:
+        try:
+            client.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+async def fetch_coinbase_hourly_responses(
+    symbol: str,
+    start: datetime,
+    end: datetime,
+    *,
+    base_url: str = DEFAULT_COINBASE_BASE_URL,
+    clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    rate_limit_rps: int = 10,
+) -> list[dict[str, Any]]:
+    """Read public hourly candles and keep every decoded response body.
+
+    Returns ``{"request", "fetched_at", "body"}`` per chunk, the evidence a
+    held-out experiment input is built from. Unauthenticated, read-only, and
+    the client is closed afterwards. Callers decide whether a fetch is
+    authorized; this function only performs the one it is asked for.
+    """
+    from gpt_trader.features.brokerages.coinbase.client import CoinbaseClient
+    from gpt_trader.features.brokerages.coinbase.historical_candles import (
+        CoinbaseHistoricalFetcher,
+    )
+
+    captured: list[dict[str, Any]] = []
+
+    def _retain(request: dict[str, Any], body: Any) -> None:
+        captured.append({"request": request, "fetched_at": clock().isoformat(), "body": body})
+
+    client = CoinbaseClient(base_url=base_url, auth=None, api_mode="advanced")
+    try:
+        fetcher = CoinbaseHistoricalFetcher(
+            client=client, rate_limit_rps=rate_limit_rps, response_observer=_retain
+        )
+        await fetcher.fetch_candles(symbol, "ONE_HOUR", start, end)
+        return captured
     finally:
         try:
             client.close()

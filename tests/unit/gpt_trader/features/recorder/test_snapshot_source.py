@@ -245,3 +245,84 @@ async def test_build_alpaca_equities_snapshot_rejects_intraday_granularity(
                 as_of=AS_OF,
             )
         )
+
+
+class _PublicCandlesClient(FakeClient):
+    """Unauthenticated fake serving complete hourly bodies; never touches the network."""
+
+    def get_candles(self, product_id, granularity, limit, *, start, end):
+        hours = int((end - start) / timedelta(hours=1))
+        return {
+            "candles": [
+                {
+                    "start": str(int((start + timedelta(hours=hour)).timestamp())),
+                    "low": "99",
+                    "high": "101",
+                    "open": "100",
+                    "close": "100.5",
+                    "volume": "3",
+                }
+                for hour in reversed(range(hours))
+            ]
+        }
+
+
+@pytest.mark.asyncio
+async def test_hourly_evidence_fetch_retains_raw_bodies_and_fetch_times(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from gpt_trader.features.experiment.inputs import parse_input
+    from gpt_trader.features.experiment.provenance import build_held_out_input
+    from gpt_trader.features.recorder.snapshot_source import fetch_coinbase_hourly_responses
+
+    clients: list[FakeClient] = []
+
+    def _make_client(**kwargs: object) -> FakeClient:
+        client = _PublicCandlesClient(**kwargs)  # type: ignore[arg-type]
+        clients.append(client)
+        return client
+
+    monkeypatch.setattr(
+        "gpt_trader.features.brokerages.coinbase.client.CoinbaseClient", _make_client
+    )
+    start = datetime(2026, 9, 3, tzinfo=UTC)
+    cutoff = start + timedelta(hours=400)
+    fetched = cutoff + timedelta(minutes=3)
+
+    responses = await fetch_coinbase_hourly_responses(
+        "SOL-USD", start, cutoff, clock=lambda: fetched, rate_limit_rps=1000
+    )
+
+    assert clients[0].auth is None and clients[0].closed is True
+    assert [item["request"]["start"] for item in responses] == [
+        start.isoformat(),
+        (start + timedelta(hours=300)).isoformat(),
+    ]
+    assert {item["fetched_at"] for item in responses} == {fetched.isoformat()}
+    payload = build_held_out_input(
+        symbol="SOL-USD",
+        responses=responses,
+        window_start=start,
+        scored_from=start + timedelta(hours=72),
+        cutoff=cutoff,
+        fetched_at=fetched,
+    )
+    assert len(parse_input(payload).candles) == 400
+
+
+@pytest.mark.asyncio
+async def test_hourly_evidence_fetch_closes_client_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from gpt_trader.features.recorder.snapshot_source import fetch_coinbase_hourly_responses
+
+    class _FailingObservedFetcher(FailingFetcher):
+        def __init__(self, *, client: FakeClient, **_options: object) -> None:
+            super().__init__(client=client)
+
+    clients = _patch_transport(monkeypatch, _FailingObservedFetcher)
+    with pytest.raises(RuntimeError, match="candle fetch failed"):
+        await fetch_coinbase_hourly_responses(
+            "SOL-USD", AS_OF - timedelta(hours=2), AS_OF, clock=lambda: AS_OF
+        )
+    assert clients[0].closed is True

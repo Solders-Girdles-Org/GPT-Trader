@@ -7,14 +7,15 @@ bar; committed bars are never submitted again.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from datetime import timedelta
 from decimal import ROUND_DOWN, Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from gpt_trader.core.fill_accounting import FillFact, aware_time, semantic_checksum
-from gpt_trader.features.experiment.inputs import ExperimentInput
+from gpt_trader.features.experiment.inputs import BENCHMARK_HISTORY_BARS, ExperimentInput
 from gpt_trader.features.experiment.ledger import (
     encode,
     initial_state,
@@ -26,6 +27,35 @@ from gpt_trader.features.experiment.ledger import (
 )
 from gpt_trader.features.trade_ideas.baseline import BaselineProposer
 from gpt_trader.features.trade_ideas.snapshot import MarketSnapshot, SymbolSeries
+
+
+class BenchmarkProposer(Protocol):
+    """A deterministic rule over a point-in-time snapshot (``Proposer`` contract)."""
+
+    def propose(self, snapshot: MarketSnapshot) -> Sequence[Any]: ...
+
+
+# Rule name -> fresh proposer. The slice composes only the baseline it owns;
+# rules from other slices (mean reversion through the snapshot-strategy
+# wrapper) are injected by the composition root, so this slice never imports
+# runtime strategy code. A run whose bound rule is not composed fails closed.
+BenchmarkCatalog = Mapping[str, Callable[[], BenchmarkProposer]]
+DEFAULT_BENCHMARKS: BenchmarkCatalog = {"baseline": BaselineProposer}
+WARM_UP_DECISION = "warm-up: indicator history only"
+_DECISION_LABELS = {
+    "baseline": ("rule-based crossover: consider entry at next open", "no crossover signal"),
+    "mean-reversion": ("mean reversion: consider entry at next open", "no mean-reversion signal"),
+}
+
+
+def _proposer(source: ExperimentInput, proposers: BenchmarkCatalog | None) -> BenchmarkProposer:
+    factory = (proposers or DEFAULT_BENCHMARKS).get(source.benchmark)
+    if factory is None:
+        raise ValueError(
+            f"Benchmark {source.benchmark} is not composed here; "
+            "run it through `gpt-trader experiment`"
+        )
+    return factory()
 
 
 def _fill(
@@ -72,11 +102,25 @@ def _fill(
 
 
 def advance(
-    source: ExperimentInput, sequence: int, previous_state: dict[str, Any]
+    source: ExperimentInput,
+    sequence: int,
+    previous_state: dict[str, Any],
+    proposers: BenchmarkCatalog | None = None,
 ) -> dict[str, Any]:
     """Pure observation transition. Strategy sees only bars closed at this cutoff."""
     state = deepcopy(previous_state)
     candle = source.candles[sequence]
+    if sequence < source.scored_index:
+        # Warm-up bars are indicator history only: no decision, fill or mark.
+        return {
+            "sequence": sequence,
+            "bar": source.payload["candles"][sequence],
+            "decision": WARM_UP_DECISION,
+            "proposal": None,
+            "actions": [],
+            "fills": [],
+            "state": state,
+        }
     settings = source.settings
     slip = settings.slippage_bps / 10000
     fee = settings.fee_bps / 10000
@@ -160,16 +204,20 @@ def advance(
         decision = "hold existing position"
     else:
         cutoff = candle.ts + timedelta(hours=1)
+        history = BENCHMARK_HISTORY_BARS[source.benchmark]
         snapshot = MarketSnapshot(
             cutoff,
             source.payload["source"],
             (
                 SymbolSeries(
-                    source.symbol, "1h", source.candles[max(0, sequence - 52) : sequence + 1]
+                    source.symbol,
+                    "1h",
+                    source.candles[max(0, sequence - history + 1) : sequence + 1],
                 ),
             ),
         )
-        ideas = BaselineProposer().propose(snapshot)
+        ideas = _proposer(source, proposers).propose(snapshot)
+        entry_label, idle_label = _DECISION_LABELS[source.benchmark]
         if ideas:
             idea = ideas[0]
             assert idea.exit_plan is not None
@@ -184,9 +232,9 @@ def advance(
                 "expires_at": idea.time_horizon.expires_at.isoformat(),
                 "thesis": idea.thesis,
             }
-            decision = "rule-based crossover: consider entry at next open"
+            decision = entry_label
         else:
-            decision = "no crossover signal" if sequence >= 52 else "collecting benchmark history"
+            decision = idle_label if sequence >= history - 1 else "collecting benchmark history"
     return {
         "sequence": sequence,
         "bar": source.payload["candles"][sequence],
@@ -199,7 +247,11 @@ def advance(
 
 
 def run_experiment(
-    root: Path, source: ExperimentInput | None = None, *, max_bars: int | None = None
+    root: Path,
+    source: ExperimentInput | None = None,
+    *,
+    max_bars: int | None = None,
+    proposers: BenchmarkCatalog | None = None,
 ) -> dict[str, Any]:
     """Create/resume one bound run, committing no more than max_bars new observations."""
     if max_bars is not None and max_bars < 1:
@@ -211,14 +263,14 @@ def run_experiment(
             connection.execute("BEGIN IMMEDIATE")
             try:
                 saved = read_source(connection)
-                events = read_events(connection, saved)
+                events = read_events(connection, saved, proposers)
                 reconcile(saved, events)
                 sequence = len(events)
                 if sequence == len(saved.candles):
                     connection.commit()
                     break
                 state = events[-1]["state"] if events else initial_state(saved)
-                event = advance(saved, sequence, state)
+                event = advance(saved, sequence, state, proposers)
                 event["previous"] = semantic_checksum(events[-1]) if events else saved.identity
                 reconcile(saved, [*events, event])
                 connection.execute(
@@ -232,4 +284,4 @@ def run_experiment(
             processed += 1
     finally:
         connection.close()
-    return inspect_run(root)
+    return inspect_run(root, proposers)

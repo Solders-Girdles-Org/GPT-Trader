@@ -201,3 +201,42 @@ async def test_fetch_chunk_calls_client_get_candles_and_parses_timestamps() -> N
         start.isoformat(),
         (start + timedelta(minutes=1)).isoformat(),
     ]
+
+
+class _RecordedResponsesClient:
+    """Returns one decoded body per request, like the public candles endpoint."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[datetime, datetime]] = []
+
+    def get_candles(self, product_id, granularity, limit, *, start, end):
+        self.calls.append((start, end))
+        return {"candles": [{"start": str(int(start.timestamp())), "open": "1"}]}
+
+
+@pytest.mark.asyncio
+async def test_response_observer_sees_each_raw_chunk_before_parsing_discards_it() -> None:
+    client = _RecordedResponsesClient()
+    seen: list[tuple[dict, dict]] = []
+    fetcher = CoinbaseHistoricalFetcher(
+        client=client,
+        rate_limit_rps=1000,
+        response_observer=lambda request, body: seen.append((request, body)),
+    )
+    start = datetime(2026, 9, 3, tzinfo=UTC)
+    with pytest.raises(KeyError):
+        # The fixture bodies are deliberately incomplete; the observer still
+        # receives the raw body before the parser rejects it.
+        await fetcher.fetch_candles("ETH-USD", "ONE_HOUR", start, start + timedelta(hours=2))
+    assert seen == [
+        (
+            {
+                "product_id": "ETH-USD",
+                "granularity": "ONE_HOUR",
+                "limit": 300,
+                "start": start.isoformat(),
+                "end": (start + timedelta(hours=2)).isoformat(),
+            },
+            {"candles": [{"start": str(int(start.timestamp())), "open": "1"}]},
+        )
+    ]

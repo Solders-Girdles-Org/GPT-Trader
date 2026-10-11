@@ -8,14 +8,22 @@ import re
 from dataclasses import asdict, dataclass
 from datetime import timedelta
 from decimal import Decimal
-from functools import lru_cache
+from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import Any
 
 from gpt_trader.core import Candle
 from gpt_trader.core.fill_accounting import aware_time, decimal_value, semantic_checksum
+from gpt_trader.features.experiment.provenance import verify_provenance
 
-ENGINE_VERSION = "recorded-spot-v1"
+ENGINE_VERSION = "recorded-spot-v2"
+
+# Selectable deterministic rules and the closed bars each decision reads,
+# including the decision bar. Baseline is the 10/50 crossover with a 3-bar
+# crossover lookback; mean reversion is its default 20-bar z-score window.
+# The selected rule is bound into the input identity.
+BENCHMARK_HISTORY_BARS: dict[str, int] = {"baseline": 53, "mean-reversion": 20}
+DEFAULT_BENCHMARK = "baseline"
 
 
 @lru_cache(maxsize=1)
@@ -76,11 +84,22 @@ class ExperimentInput:
     def symbol(self) -> str:
         return str(self.payload["symbol"])
 
+    @property
+    def benchmark(self) -> str:
+        return str(self.payload["benchmark"])
+
+    @cached_property
+    def scored_index(self) -> int:
+        """First bar whose close may decide; earlier bars are history only."""
+        scored_from = aware_time(self.payload["scored_from"])
+        return next(index for index, bar in enumerate(self.candles) if bar.ts == scored_from)
+
 
 def parse_input(payload: dict[str, Any]) -> ExperimentInput:
     """Reject ambiguous provenance, unfinished/stale bars and malformed money."""
     required = {"schema_version", "source", "symbol", "recorded_at", "candles"}
-    if set(payload) - required - {"settings"} or not required <= set(payload):
+    optional = {"settings", "benchmark", "scored_from", "provenance"}
+    if set(payload) - required - optional or not required <= set(payload):
         raise ValueError("Experiment requires schema_version, source, symbol, recorded_at, candles")
     if payload["schema_version"] != 1:
         raise ValueError("Unsupported experiment input version")
@@ -133,11 +152,25 @@ def parse_input(payload: dict[str, Any]) -> ExperimentInput:
         candles.append(candle)
     if recorded_at - (candles[-1].ts + timedelta(hours=1)) >= timedelta(hours=1):
         raise ValueError("Last bar is stale at recorded_at")
+    benchmark = payload.get("benchmark", DEFAULT_BENCHMARK)
+    if not isinstance(benchmark, str) or benchmark not in BENCHMARK_HISTORY_BARS:
+        raise ValueError(f"Unknown benchmark; choose one of {sorted(BENCHMARK_HISTORY_BARS)}")
+    scored_from = payload.get("scored_from", rows[0]["ts"])
+    scored_at = aware_time(scored_from)
+    scored_index = next(
+        (index for index, candle in enumerate(candles) if candle.ts == scored_at), None
+    )
+    if scored_index is None:
+        raise ValueError("scored_from must name the start of a supplied bar")
+    if 0 < scored_index < BENCHMARK_HISTORY_BARS[benchmark] - 1:
+        raise ValueError(
+            f"{benchmark} needs {BENCHMARK_HISTORY_BARS[benchmark] - 1} warm-up bars before scored_from"
+        )
+    if "provenance" in payload:
+        verify_provenance(payload)
     # Store a detached copy: later caller mutation must not change the experiment identity.
     normalized = json.loads(json.dumps(payload))
     normalized["settings"] = settings.to_dict()
+    normalized["benchmark"] = benchmark
+    normalized["scored_from"] = scored_from
     return ExperimentInput(normalized, tuple(candles), settings)
-
-
-def load_input(path: Path) -> ExperimentInput:
-    return parse_input(json.loads(path.read_text(encoding="utf-8")))

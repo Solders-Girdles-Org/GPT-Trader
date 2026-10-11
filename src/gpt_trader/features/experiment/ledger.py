@@ -9,7 +9,7 @@ from contextlib import closing
 from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from gpt_trader.core.fill_accounting import (
     FillFact,
@@ -23,6 +23,10 @@ from gpt_trader.features.experiment.inputs import (
     implementation_digest,
     parse_input,
 )
+from gpt_trader.features.experiment.valuation import end_valuation, hold_the_coin, window
+
+if TYPE_CHECKING:
+    from gpt_trader.features.experiment.engine import BenchmarkCatalog
 
 
 class ExperimentIntegrityError(ValueError):
@@ -105,7 +109,11 @@ def read_source(connection: sqlite3.Connection) -> ExperimentInput:
     return source
 
 
-def read_events(connection: sqlite3.Connection, source: ExperimentInput) -> list[dict[str, Any]]:
+def read_events(
+    connection: sqlite3.Connection,
+    source: ExperimentInput,
+    proposers: BenchmarkCatalog | None = None,
+) -> list[dict[str, Any]]:
     from gpt_trader.features.experiment.engine import advance
 
     previous = source.identity
@@ -126,7 +134,10 @@ def read_events(connection: sqlite3.Connection, source: ExperimentInput) -> list
         ):
             raise ExperimentIntegrityError("Experiment observation checksum mismatch")
         expected = advance(
-            source, sequence, events[-1]["state"] if events else initial_state(source)
+            source,
+            sequence,
+            events[-1]["state"] if events else initial_state(source),
+            proposers,
         )
         expected["previous"] = previous
         if event != expected:
@@ -224,21 +235,23 @@ def reconcile(source: ExperimentInput, events: list[dict[str, Any]]) -> dict[str
     }
 
 
-def inspect_run(root: Path) -> dict[str, Any]:
+def inspect_run(root: Path, proposers: BenchmarkCatalog | None = None) -> dict[str, Any]:
     """Read a consistent snapshot without creating files or advancing the run."""
     database = root / "experiment.sqlite3"
     with closing(sqlite3.connect(f"{database.resolve().as_uri()}?mode=ro", uri=True)) as connection:
         connection.execute("BEGIN")
         source = read_source(connection)
-        events = read_events(connection, source)
+        events = read_events(connection, source, proposers)
         report = reconcile(source, events)
         state = events[-1]["state"] if events else initial_state(source)
+        processed = len(events)
         return {
             "engine": ENGINE_VERSION,
             "implementation_sha256": implementation_digest(),
             "identity": source.identity,
             "source": source.payload["source"],
             "symbol": source.symbol,
+            "benchmark": source.benchmark,
             "settings": source.settings.to_dict(),
             "processed_bars": len(events),
             "total_bars": len(source.candles),
@@ -252,6 +265,25 @@ def inspect_run(root: Path) -> dict[str, Any]:
                 for reason in sorted({event["decision"] for event in events})
             },
             "account": report,
+            "window": window(source),
+            "provenance": (
+                {
+                    "fetched_at": source.payload["provenance"]["fetched_at"],
+                    "response_sha256": [
+                        item["sha256"] for item in source.payload["provenance"]["responses"]
+                    ],
+                }
+                if "provenance" in source.payload
+                else None
+            ),
+            "round_trips": sum(
+                fill["side"] == "sell" for event in events for fill in event["fills"]
+            ),
+            "end_valuation": end_valuation(source, processed, report),
+            "comparators": {
+                "cash": {"net_pnl": "0"},
+                "hold_the_coin": hold_the_coin(source, processed),
+            },
             "activity": [
                 {
                     "sequence": event["sequence"],

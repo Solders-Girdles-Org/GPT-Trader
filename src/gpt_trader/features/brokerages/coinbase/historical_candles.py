@@ -5,11 +5,17 @@ manager and the recorder's snapshot production.
 """
 
 import asyncio
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from typing import Any
 
 from gpt_trader.core import Candle
 from gpt_trader.features.brokerages.coinbase.client.client import CoinbaseClient
+
+# Receives (request description, decoded response body) for every chunk, before
+# parsing, so callers can retain the exact public evidence a result came from.
+ResponseObserver = Callable[[dict[str, Any], Any], None]
 
 # Granularities accepted by the Coinbase Advanced Trade candles endpoint,
 # mapped to their candle duration in seconds.
@@ -41,6 +47,7 @@ class CoinbaseHistoricalFetcher:
         self,
         client: CoinbaseClient,
         rate_limit_rps: int = 10,
+        response_observer: ResponseObserver | None = None,
     ):
         """
         Initialize fetcher.
@@ -48,8 +55,10 @@ class CoinbaseHistoricalFetcher:
         Args:
             client: Coinbase API client
             rate_limit_rps: Rate limit (requests per second)
+            response_observer: Optional hook that sees each raw response body
         """
         self.client = client
+        self._response_observer = response_observer
         self.rate_limit_rps = rate_limit_rps
         self._rate_limit_delay = 1.0 / rate_limit_rps
         self._last_request_time = 0.0
@@ -130,6 +139,17 @@ class CoinbaseHistoricalFetcher:
             start=start,
             end=end,
         )
+        if self._response_observer is not None:
+            self._response_observer(
+                {
+                    "product_id": symbol,
+                    "granularity": granularity,
+                    "limit": 300,
+                    "start": start.isoformat(),
+                    "end": end.isoformat(),
+                },
+                response,
+            )
 
         # Parse response
         candles = []

@@ -110,7 +110,11 @@ Rejected for now:
 ## Held-out protocol and predeclared reading
 
 Phase A of #1315 commits this protocol as a file before any data is fetched;
-it may add mechanics but must not loosen a threshold.
+it may add mechanics but must not loosen a threshold. The committed file is
+[`protocol.py`](../../src/gpt_trader/features/experiment/protocol.py): the
+window, rules, costs, outcome table, verdict order and combined reading as
+code, bound into every run's identity. If it and this section differ, this
+section wins.
 
 **Window and data.** Symbols: BTC, ETH, LTC, SOL, XRP, LINK, AVAX, DOT (the
 old job's set, chosen before any return is seen). Each symbol's input is 912
@@ -176,7 +180,15 @@ both cost cases and the verdict order above. The original base/stress verdict
 is always reported beside the follow-up. A rule still inconclusive or
 cost-dependent after its one follow-up run is treated as Does not survive for
 the combined reading, and its coverage is reported. After follow-ups, the
-combined reading below is applied again.
+combined reading below is applied again. Settled when phase A committed the
+protocol ([#1315 comment](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1315#issuecomment-6108547675)):
+
+- "Survives at RJ's fee" counts as **Survives** for action A and for the
+  forward-test bar.
+- A rule treated as Does not survive because it stayed inconclusive is
+  reported as "was not shown to survive", with its coverage limits, never as
+  "does not survive".
+- A follow-up run that RJ declines counts as that rule's one follow-up.
 
 **Forward-test bar.** Any forward reasoning test must beat mean reversion,
 cash and hold-the-coin, and also baseline when baseline survives costs. This
@@ -192,7 +204,7 @@ assumptions and this window. The first matching action applies:
 | A — Propose a forward test | Either rule survives costs | Propose a funded forward reasoning test to RJ, judged against the forward-test bar. The other rule's verdict is reported and gets no follow-up. |
 | B — Exact-fee run | Neither survives; either is cost-dependent | Record RJ's fee tier and propose one separately approved run at it for each cost-dependent rule, plus the extension below for any inconclusive rule. Read them as stated under follow-up runs. |
 | C — Extension | Neither survives nor is cost-dependent; either is inconclusive | Each conclusive "does not survive" stands. Propose one extension for each inconclusive rule, using this protocol over the next five-week window, which needs a fresh RJ go, and read it as stated under follow-up runs. RJ's fund-or-stop choice waits for its result. |
-| D — Fund-or-stop choice | Both rules do not survive | Report "neither tested fixed rule survives these cost assumptions on this window". Bring RJ the choice between a funded forward reasoning test, judged against the forward-test bar, and stopping alpha investment, with a recommendation. |
+| D — Fund-or-stop choice | Both rules do not survive | Report "neither tested fixed rule survives these cost assumptions on this window" (a rule that stayed inconclusive "was not shown to survive", with its coverage). Bring RJ the choice between a funded forward reasoning test, judged against the forward-test bar, and stopping alpha investment, with a recommendation. |
 
 As a grid (mean reversion down the side, baseline across the top):
 

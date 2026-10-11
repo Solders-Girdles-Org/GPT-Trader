@@ -12,9 +12,13 @@ consolidates:
 ## Recorded experiment
 
 Start here to understand what GPT-Trader does. The recorded experiment runs a
-single hourly USD spot series through the existing deterministic crossover
-benchmark, bounded next-bar simulated execution, full cash/position settlement,
-and independently reconciled reporting. It needs no API key or service.
+single hourly USD spot series through one deterministic benchmark rule,
+bounded next-bar simulated execution, full cash/position settlement, and
+independently reconciled reporting. It needs no API key or service.
+`--benchmark` selects the rule for a new run: `baseline` (the moving-average
+crossover, default) or `mean-reversion` (the existing mean-reversion strategy,
+default config, through the snapshot-strategy wrapper). The rule is bound into
+the run's identity, so a resume cannot switch it.
 
 ```bash
 uv run gpt-trader experiment run --input config/experiments/ma-crossover-demo.json --root runtime_data/experiments/demo --max-bars 55
@@ -28,11 +32,16 @@ fills. Ctrl-C rolls back any unfinished observation. `--max-bars` processes at
 most that many *additional* bars, making pause/resume deliberate. Nothing stays
 running after the foreground command returns. There is no schedule to disable.
 
-The JSON report includes data/settings identity, progress, pending plan, open
-position, decision counts, cash, marked equity, fees, realized/unrealized net
-P&L and independent reconciliation. An open position at input end stays open
-and marked; completion means the supplied data was processed, not that every
-position was liquidated. No signal, denied entry and drawdown halt are valid
+The JSON report includes data/settings identity, benchmark, window, progress,
+pending plan, open position, decision counts, cash, marked equity, fees,
+realized/unrealized net P&L, completed round trips and independent
+reconciliation. An open position at input end stays open and marked;
+completion means the supplied data was processed, not that every position was
+liquidated. `end_valuation` also values the account as if anything held were
+sold at the last processed close less exit slippage and fee, and
+`comparators` shows cash (zero) and hold-the-coin: the same account buying at
+the first scored bar's open under the exposure cap, paying entry costs, valued
+the same way ([valuation](../src/gpt_trader/features/experiment/valuation.py)). No signal, denied entry and drawdown halt are valid
 outcomes. The SQLite journal retains the full proposal, each bar, fills and
 state; it is the evidence source, not a second report database.
 
@@ -42,7 +51,13 @@ Use [the fixture](../config/experiments/ma-crossover-demo.json) as the format
 example. It is artificial data, clearly labelled. For recorded market data,
 retain the original dataset and source provenance; create a separate input
 copy. Each input has `schema_version: 1`, `source`, `symbol`, `recorded_at`,
-`candles`, and optional `settings`. Hourly bars contain `ts`, `open`, `high`,
+`candles`, and optional `settings`, `benchmark`, `scored_from` and
+`provenance`. Bars before `scored_from` are warm-up: indicator history only,
+with no decision, fill or mark, so the earliest entry fills at the second
+scored open; the warm-up must cover the rule's history. A `provenance` block
+retains the public candle responses an input was built from, each with its
+SHA-256 and fetch time, and the parser refuses bars that differ from them
+([builder](../src/gpt_trader/features/experiment/provenance.py)). Hourly bars contain `ts`, `open`, `high`,
 `low`, `close`, `volume`; timestamps require timezones. Supply 1–2000 ordered,
 contiguous, finite valid bars. All must have closed by `recorded_at`, with the
 last bar less than one hour old at that recorded cutoff. This is historical
