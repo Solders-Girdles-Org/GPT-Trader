@@ -335,6 +335,7 @@ _EXPERIMENT_RULE = ImportRule(
         "gpt_trader.features.trade_ideas.snapshot",
         # Benchmark channels at default settings (#1315); see benchmarks.py.
         "gpt_trader.app.config.bot_config",
+        "gpt_trader.errors",
         "gpt_trader.features.live_trade.strategies.mean_reversion.strategy",
         "gpt_trader.features.strategy_tools.snapshot_proposer",
     ),

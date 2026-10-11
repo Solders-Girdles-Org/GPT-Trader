@@ -43,6 +43,10 @@ that file and applies the reading in
   the 53 bars ending at the decision bar. Exits follow each rule's structured
   plan (stop, target, expiry). Mean reversion's live z-score exit is not part
   of the snapshot contract, so it does not apply here.
+- **Price precision.** Both rules quantize plan levels to the proposers'
+  default $0.01 precision, a modelling assumption. A signal whose levels
+  collapse at that precision is not traded. Baseline drops it; mean reversion
+  records it as "signal refused" in the journal. Either way the run continues.
 - **Scored window.** Inputs start at 2026-09-03T00:00Z with
   `scored_from` 2026-09-06T00:00Z. Before that bar, every decision is
   "warm-up bar: indicator history only". The first decision is taken at the

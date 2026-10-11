@@ -1,6 +1,7 @@
 """Benchmark channel selection, identity binding and the scored window."""
 
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 import pytest
 
@@ -90,3 +91,15 @@ def test_warm_up_bars_are_history_only(dip_payload):
     assert not any(event["fills"] for event in events[:62])
     with pytest.raises(ValueError, match="scored_from"):
         parse_input({**dip_payload, "scored_from": "2026-01-01T00:30:00+00:00"})
+
+
+def test_unrepresentable_mean_reversion_signal_is_refused_not_fatal(dip_payload, tmp_path):
+    # Scale the dip to a sub-dollar coin: 0.01 precision collapses the plan levels.
+    for bar in dip_payload["candles"]:
+        for name in ("open", "high", "low", "close"):
+            bar[name] = str(Decimal(bar[name]) / 1000)
+    dip_payload.update(symbol="DOGE-USD", benchmark="mean-reversion")
+    report = run_experiment(tmp_path / "doge", parse_input(dip_payload))
+    assert report["complete"]
+    refused = [key for key in report["decision_counts"] if "signal refused" in key]
+    assert refused and report["account"]["fill_count"] == 0

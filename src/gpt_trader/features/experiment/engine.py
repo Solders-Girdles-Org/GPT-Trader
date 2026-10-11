@@ -174,7 +174,7 @@ def advance(
                 ),
             ),
         )
-        ideas = propose(source.benchmark, snapshot)
+        ideas, refusal = propose(source.benchmark, snapshot)
         if ideas:
             idea = ideas[0]
             assert idea.exit_plan is not None
@@ -190,6 +190,8 @@ def advance(
                 "thesis": idea.thesis,
             }
             decision = f"{source.benchmark} rule: consider entry at next open"
+        elif refusal is not None:
+            decision = f"{source.benchmark} {refusal}"
         elif sequence < HISTORY_BARS - 1:
             decision = "collecting benchmark history"
         else:

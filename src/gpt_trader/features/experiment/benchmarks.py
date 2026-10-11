@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 from gpt_trader.app.config.bot_config import MeanReversionConfig
+from gpt_trader.errors import ValidationError
 from gpt_trader.features.live_trade.strategies.mean_reversion.strategy import (
     CooldownState,
     MeanReversionStrategy,
@@ -31,12 +32,25 @@ def _mean_reversion() -> MeanReversionStrategy:
     return MeanReversionStrategy(MeanReversionConfig(), CooldownState())
 
 
-def propose(benchmark: str, snapshot: MarketSnapshot) -> list[Any]:
+# Both channels quantize plan levels to the proposers' default 0.01 precision
+# (a modelling assumption). Baseline drops a signal whose levels collapse; the
+# mean-reversion adapter raises instead, which is recorded as a refused signal
+# rather than aborting the run.
+PRECISION_REFUSAL = "signal refused: plan levels not representable at the modelled price precision"
+
+
+def propose(benchmark: str, snapshot: MarketSnapshot) -> tuple[list[Any], str | None]:
+    """Return the channel's ideas, or none plus the reason a signal was refused."""
     if benchmark == "baseline":
-        return list(BaselineProposer().propose(snapshot))
+        return list(BaselineProposer().propose(snapshot)), None
     if benchmark == "mean-reversion":
         proposer = SnapshotStrategyProposer(
             _mean_reversion, strategy_name="mean-reversion", drive="final-bar"
         )
-        return proposer.propose(snapshot)
+        try:
+            return proposer.propose(snapshot), None
+        except ValidationError as error:
+            if error.context.get("field") != "price_precision":
+                raise
+            return [], PRECISION_REFUSAL
     raise ValueError(f"Unknown benchmark: {benchmark}")
