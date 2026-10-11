@@ -5,8 +5,10 @@ manager and the recorder's snapshot production.
 """
 
 import asyncio
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from typing import Any
 
 from gpt_trader.core import Candle
 from gpt_trader.features.brokerages.coinbase.client.client import CoinbaseClient
@@ -41,6 +43,7 @@ class CoinbaseHistoricalFetcher:
         self,
         client: CoinbaseClient,
         rate_limit_rps: int = 10,
+        response_sink: Callable[[dict[str, Any]], None] | None = None,
     ):
         """
         Initialize fetcher.
@@ -48,8 +51,11 @@ class CoinbaseHistoricalFetcher:
         Args:
             client: Coinbase API client
             rate_limit_rps: Rate limit (requests per second)
+            response_sink: Optional callback receiving each chunk's request and
+                raw response, for callers that must retain source provenance
         """
         self.client = client
+        self._response_sink = response_sink
         self.rate_limit_rps = rate_limit_rps
         self._rate_limit_delay = 1.0 / rate_limit_rps
         self._last_request_time = 0.0
@@ -130,6 +136,16 @@ class CoinbaseHistoricalFetcher:
             start=start,
             end=end,
         )
+        if self._response_sink is not None:
+            self._response_sink(
+                {
+                    "symbol": symbol,
+                    "granularity": granularity,
+                    "start": start.isoformat(),
+                    "end": end.isoformat(),
+                    "response": response,
+                }
+            )
 
         # Parse response
         candles = []

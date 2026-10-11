@@ -71,7 +71,7 @@ class MeanReversionStrategy:
     def __init__(self, config: MeanReversionConfig, cooldown: CooldownState | None = None) -> None:
         self.config = config
         self._cooldown = cooldown if cooldown is not None else CooldownState()
-        logger.info(
+        logger.debug(
             f"MeanReversionStrategy initialized: "
             f"z_entry={config.z_score_entry_threshold}, "
             f"z_exit={config.z_score_exit_threshold}, "

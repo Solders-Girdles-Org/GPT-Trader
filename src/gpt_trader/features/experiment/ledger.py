@@ -23,6 +23,7 @@ from gpt_trader.features.experiment.inputs import (
     implementation_digest,
     parse_input,
 )
+from gpt_trader.features.experiment.valuation import end_valuation
 
 
 class ExperimentIntegrityError(ValueError):
@@ -239,6 +240,8 @@ def inspect_run(root: Path) -> dict[str, Any]:
             "identity": source.identity,
             "source": source.payload["source"],
             "symbol": source.symbol,
+            "benchmark": source.benchmark,
+            "scored_from": source.payload["scored_from"],
             "settings": source.settings.to_dict(),
             "processed_bars": len(events),
             "total_bars": len(source.candles),
@@ -252,6 +255,7 @@ def inspect_run(root: Path) -> dict[str, Any]:
                 for reason in sorted({event["decision"] for event in events})
             },
             "account": report,
+            "end_valuation": end_valuation(source, events, report),
             "activity": [
                 {
                     "sequence": event["sequence"],

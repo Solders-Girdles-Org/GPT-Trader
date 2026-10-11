@@ -12,8 +12,8 @@ consolidates:
 ## Recorded experiment
 
 Start here to understand what GPT-Trader does. The recorded experiment runs a
-single hourly USD spot series through the existing deterministic crossover
-benchmark, bounded next-bar simulated execution, full cash/position settlement,
+single hourly USD spot series through a selected deterministic rule benchmark
+(crossover or mean reversion), bounded next-bar simulated execution, full cash/position settlement,
 and independently reconciled reporting. It needs no API key or service.
 
 ```bash
@@ -32,7 +32,11 @@ The JSON report includes data/settings identity, progress, pending plan, open
 position, decision counts, cash, marked equity, fees, realized/unrealized net
 P&L and independent reconciliation. An open position at input end stays open
 and marked; completion means the supplied data was processed, not that every
-position was liquidated. No signal, denied entry and drawdown halt are valid
+position was liquidated. `end_valuation` values anything held at liquidation
+(last close less exit slippage and fee), counts round trips, shows fees and
+slippage as shares of the gain before costs, and sets the result beside cash
+(zero) and hold-the-coin (buy at the first scored open under the exposure cap,
+with the same costs). No signal, denied entry and drawdown halt are valid
 outcomes. The SQLite journal retains the full proposal, each bar, fills and
 state; it is the evidence source, not a second report database.
 
@@ -42,7 +46,10 @@ Use [the fixture](../config/experiments/ma-crossover-demo.json) as the format
 example. It is artificial data, clearly labelled. For recorded market data,
 retain the original dataset and source provenance; create a separate input
 copy. Each input has `schema_version: 1`, `source`, `symbol`, `recorded_at`,
-`candles`, and optional `settings`. Hourly bars contain `ts`, `open`, `high`,
+`candles`, and optional `settings`, `benchmark` (`baseline`, the default, or
+`mean-reversion`) and `scored_from` (the start time of the first bar on which
+a decision may be taken; earlier bars are indicator history only). `run
+--benchmark` sets the channel for a new run and must match on resume. Hourly bars contain `ts`, `open`, `high`,
 `low`, `close`, `volume`; timestamps require timezones. Supply 1–2000 ordered,
 contiguous, finite valid bars. All must have closed by `recorded_at`, with the
 last bar less than one hour old at that recorded cutoff. This is historical
@@ -72,6 +79,11 @@ Proposer price precision is a modelling assumption, not evidence of historical
 venue rules. Costs/assumptions, manufactured fixtures and surviving open positions
 must accompany any comparison. Neither the demo nor green tests establish alpha,
 model skill, profitable trading or operational readiness.
+
+The held-out benchmark protocol and its fetch and reading commands live in
+[the protocol directory](../config/experiments/held-out-2026-09-06/PROTOCOL.md).
+`experiment fetch-input` is the only experiment command that uses the network
+(public candles, no credentials).
 
 ### Verification and next use
 
