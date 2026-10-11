@@ -11,14 +11,15 @@ def _profile_kill_switch_engaged(profile_name: str) -> bool:
     """Return the selected profile's emergency.kill_switch_enabled (#1300).
 
     The live risk manager ORs this with RISK_KILL_SWITCH_ENABLED, so preflight
-    reports both. An unknown profile name has no profile source to report; the
-    profile check (section 8) covers that case.
+    reports both. The name is matched case-insensitively, as the live command
+    does. An unknown profile name has no profile source to report; the profile
+    check (section 8) covers that case.
     """
     from gpt_trader.app.config.profile_loader import ProfileLoader
     from gpt_trader.config.types import Profile
 
     try:
-        profile = Profile(profile_name)
+        profile = Profile(profile_name.strip().lower())
     except ValueError:
         return False
     return ProfileLoader().load(profile).emergency.kill_switch_enabled
