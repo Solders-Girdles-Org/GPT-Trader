@@ -109,6 +109,50 @@ class TestCheckRiskConfiguration:
         assert result is True
         assert any("Kill switch" in w for w in checker.warnings)
 
+    @pytest.mark.parametrize("profile_name", ["prod", "PROD", " Prod "])
+    def test_warns_when_profile_engages_kill_switch(
+        self,
+        risk_config_stub: RiskConfigStub,
+        monkeypatch: pytest.MonkeyPatch,
+        profile_name: str,
+    ) -> None:
+        """Should report a halt engaged by the profile, not only by the env (#1300).
+
+        The profile name is matched case-insensitively, as the live command does.
+        """
+        from gpt_trader.app.config.profile_loader import ProfileLoader
+        from gpt_trader.app.config.profile_schema import EmergencyConfig, ProfileSchema
+        from gpt_trader.config.types import Profile
+
+        halted = ProfileSchema(
+            profile_name="prod", emergency=EmergencyConfig(kill_switch_enabled=True)
+        )
+        loaded: list[Profile] = []
+
+        def fake_load(self: ProfileLoader, profile: Profile) -> ProfileSchema:
+            loaded.append(profile)
+            return halted
+
+        monkeypatch.setattr(ProfileLoader, "load", fake_load)
+        checker = PreflightCheck(profile=profile_name)
+        risk_config_stub.set(kill_switch_enabled=False)
+
+        assert check_risk_configuration(checker) is True
+        assert loaded == [Profile.PROD]
+        assert any(
+            "Kill switch" in w and "emergency.kill_switch_enabled" in w for w in checker.warnings
+        )
+
+    def test_shipped_canary_profile_does_not_report_kill_switch(
+        self, risk_config_stub: RiskConfigStub
+    ) -> None:
+        """The repository canary profile is armed-not-engaged (#1300)."""
+        checker = PreflightCheck(profile="canary")
+        risk_config_stub.set(kill_switch_enabled=False)
+
+        assert check_risk_configuration(checker) is True
+        assert not any("Kill switch" in w for w in checker.warnings)
+
     def test_warns_when_reduce_only_mode(self, risk_config_stub: RiskConfigStub) -> None:
         """Should warn when reduce-only mode is enabled."""
         checker = PreflightCheck(profile="prod")

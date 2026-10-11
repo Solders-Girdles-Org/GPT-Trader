@@ -7,6 +7,24 @@ if TYPE_CHECKING:
     from gpt_trader.preflight.core import PreflightCheck
 
 
+def _profile_kill_switch_engaged(profile_name: str) -> bool:
+    """Return the selected profile's emergency.kill_switch_enabled (#1300).
+
+    The live risk manager ORs this with RISK_KILL_SWITCH_ENABLED, so preflight
+    reports both. The name is matched case-insensitively, as the live command
+    does. An unknown profile name has no profile source to report; the profile
+    check (section 8) covers that case.
+    """
+    from gpt_trader.app.config.profile_loader import ProfileLoader
+    from gpt_trader.config.types import Profile
+
+    try:
+        profile = Profile(profile_name.strip().lower())
+    except ValueError:
+        return False
+    return ProfileLoader().load(profile).emergency.kill_switch_enabled
+
+
 def check_risk_configuration(checker: PreflightCheck) -> bool:
     """Validate risk management configuration."""
     checker.section_header("6. RISK MANAGEMENT VALIDATION")
@@ -47,8 +65,15 @@ def check_risk_configuration(checker: PreflightCheck) -> bool:
                 checker.log_error(f"{name}: {value} - UNSAFE VALUE")
                 all_good = False
 
+        kill_switch_sources: list[str] = []
         if config.kill_switch_enabled:
-            checker.log_warning("Kill switch is ENABLED - all trading blocked")
+            kill_switch_sources.append("RISK_KILL_SWITCH_ENABLED")
+        if _profile_kill_switch_engaged(checker.profile):
+            kill_switch_sources.append(f"profile '{checker.profile}' emergency.kill_switch_enabled")
+        if kill_switch_sources:
+            checker.log_warning(
+                f"Kill switch is ENABLED ({', '.join(kill_switch_sources)}) - all trading blocked"
+            )
 
         if config.reduce_only_mode:
             checker.log_warning("Reduce-only mode ENABLED - can only close positions")

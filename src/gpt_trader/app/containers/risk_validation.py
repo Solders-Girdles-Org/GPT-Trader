@@ -58,6 +58,7 @@ class RiskValidationContainer:
         exposure caps, and other risk controls.
         """
         if self._risk_manager is None:
+            from gpt_trader.config.config_utilities import kill_switch_env_engaged
             from gpt_trader.features.live_trade.risk.config import RiskConfig
             from gpt_trader.features.live_trade.risk.manager import LiveRiskManager
 
@@ -66,10 +67,22 @@ class RiskValidationContainer:
 
             # Derive kill_switch_enabled from active strategy config
             if self._config.strategy_type == "mean_reversion":
-                kill_switch = self._config.mean_reversion.kill_switch_enabled
+                strategy_kill_switch = self._config.mean_reversion.kill_switch_enabled
             else:
                 # baseline, regime_switcher, or any other type uses strategy config
-                kill_switch = getattr(self._config.strategy, "kill_switch_enabled", False)
+                strategy_kill_switch = getattr(self._config.strategy, "kill_switch_enabled", False)
+
+            # Every source can engage the halt and none can clear another
+            # (#1300): the strategy flag, the operator flag on BotConfig
+            # (RISK_KILL_SWITCH_ENABLED via from_env, or a profile's
+            # emergency.kill_switch_enabled), and the environment read here so
+            # config paths that skip from_env (YAML --config, tests, embedders)
+            # still honour the documented emergency stop.
+            kill_switch = (
+                strategy_kill_switch is True
+                or getattr(self._config, "kill_switch_enabled", False) is True
+                or kill_switch_env_engaged()
+            )
 
             # Appetite fields (daily_loss_limit_pct, max_exposure_pct,
             # leverage caps) are not adapted from BotRiskConfig: the seam

@@ -17,6 +17,8 @@ from datetime import time
 from decimal import Decimal
 from typing import Any
 
+from gpt_trader.config.config_utilities import parse_kill_switch_flag
+
 _SESSION_TIME_PATTERN = re.compile(r"\d{2}:\d{2}(?::\d{2})?\Z")
 
 
@@ -131,6 +133,19 @@ class MonitoringConfig:
 
 
 @dataclass
+class EmergencyConfig:
+    """Emergency section of profile configuration.
+
+    Only ``kill_switch_enabled`` is read. When true the profile starts with
+    the engine's kill switch engaged, which blocks every order (entries and
+    exits) until the setting is cleared (#1300). Other keys in the section
+    (contacts, liquidation settings, ``kill_switch_key``) are not read.
+    """
+
+    kill_switch_enabled: bool = False
+
+
+@dataclass
 class ProfileSchema:
     """Complete profile schema with all configuration sections.
 
@@ -150,6 +165,7 @@ class ProfileSchema:
     execution: ExecutionConfig = field(default_factory=ExecutionConfig)
     session: SessionConfig = field(default_factory=SessionConfig)
     monitoring: MonitoringConfig = field(default_factory=MonitoringConfig)
+    emergency: EmergencyConfig = field(default_factory=EmergencyConfig)
 
     @classmethod
     def from_yaml(cls, data: dict[str, Any], profile_name: str) -> ProfileSchema:
@@ -162,6 +178,11 @@ class ProfileSchema:
             execution_data = trading_data.get("execution", {})
         session_data = data.get("session", {})
         monitoring_data = data.get("monitoring", {})
+        emergency_data = data.get("emergency") or {}
+        if not isinstance(emergency_data, Mapping):
+            raise ProfileValidationError(
+                f"emergency for profile '{profile_name}' must be a mapping; got {emergency_data!r}"
+            )
 
         # Parse trading config
         trading = TradingConfig(
@@ -234,4 +255,11 @@ class ProfileSchema:
             execution=execution,
             session=session,
             monitoring=monitoring,
+            # Fail closed: any value other than unset or a recognised false
+            # token engages the kill switch (#1300).
+            emergency=EmergencyConfig(
+                kill_switch_enabled=parse_kill_switch_flag(
+                    emergency_data.get("kill_switch_enabled")
+                ),
+            ),
         )

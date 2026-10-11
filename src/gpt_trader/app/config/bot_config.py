@@ -188,6 +188,12 @@ class BotConfig:
     max_cycles: int | None = None
     derivatives_enabled: bool = False
     reduce_only_mode: bool = False
+    # Operator emergency halt: blocks every order at the engine's kill-switch
+    # gate. Set from RISK_KILL_SWITCH_ENABLED or a profile's
+    # emergency.kill_switch_enabled; OR'd with the strategy flags and the
+    # environment when the live risk manager is built (#1300). Sources only
+    # ever engage it; none can clear another.
+    kill_switch_enabled: bool = False
     time_in_force: str = "GTC"
     enable_order_preview: bool = False
     use_limit_orders: bool = False
@@ -341,6 +347,7 @@ class BotConfig:
         Creates nested strategy and risk configs from env vars.
         """
         from gpt_trader.config.config_utilities import (
+            kill_switch_env_engaged,
             parse_bool_env,
             parse_decimal_env,
             parse_int_env,
@@ -496,6 +503,7 @@ class BotConfig:
             ),
             # Risk modes from env (CLI/profile override these)
             reduce_only_mode=parse_bool_env("RISK_REDUCE_ONLY_MODE", default=False),
+            kill_switch_enabled=kill_switch_env_engaged(),
             mock_broker=parse_bool_env("MOCK_BROKER", default=False),
             paper_fills=parse_bool_env(
                 "PAPER_FILLS", default=parse_bool_env("PAPER_MODE", default=False)
@@ -587,6 +595,8 @@ class BotConfig:
 
             if schema.trading.mode == "reduce_only":
                 config_data["reduce_only_mode"] = True
+            if schema.emergency.kill_switch_enabled:
+                config_data["kill_switch_enabled"] = True
 
             config = cls(**config_data)
             config.set_enable_shorts(schema.risk.enable_shorts)
@@ -608,6 +618,12 @@ class BotConfig:
         valid_bot_fields = {f.name for f in dataclass_fields(cls)}
         config_data = {k: v for k, v in data.items() if k in valid_bot_fields}
         config_data.update({"strategy": strategy, "risk": risk})
+        if "kill_switch_enabled" in config_data:
+            from gpt_trader.config.config_utilities import parse_kill_switch_flag
+
+            config_data["kill_switch_enabled"] = parse_kill_switch_flag(
+                config_data["kill_switch_enabled"]
+            )
 
         return cls(**config_data)
 

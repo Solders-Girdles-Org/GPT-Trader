@@ -231,9 +231,15 @@ reporting:
     - "error_count"
 
 # Emergency Controls
+# Only emergency.kill_switch_enabled is read (#1300). It means "engaged", not
+# "armed": true would start this profile halted, blocking every order,
+# entries and exits alike, so it stays false. The operator's emergency stop is
+# RISK_KILL_SWITCH_ENABLED=1 (docs/production.md), which engages the switch
+# regardless of this value; neither source can clear the other. The remaining
+# keys in this section are not read.
 emergency:
   # Kill Switch
-  kill_switch_enabled: true
+  kill_switch_enabled: false
   kill_switch_key: "${KILL_SWITCH_KEY}"
 
   # Emergency Contacts
