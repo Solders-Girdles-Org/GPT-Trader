@@ -184,8 +184,12 @@ def _write_raw_output(content: str, output_file: Path | None) -> None:
 def _get_command_name(args: argparse.Namespace) -> str:
     """Extract full command name from parsed args."""
     parts = [args.command] if hasattr(args, "command") and args.command else []
-    if hasattr(args, "subcommand") and args.subcommand:
-        parts.append(args.subcommand)
+    # Subcommands are stored as `subcommand` or, by convention, `<command>_command`.
+    subcommand = getattr(args, "subcommand", None)
+    if not subcommand and parts:
+        subcommand = getattr(args, f"{parts[0]}_command", None)
+    if subcommand:
+        parts.append(subcommand)
     return " ".join(parts) if parts else "unknown"
 
 
