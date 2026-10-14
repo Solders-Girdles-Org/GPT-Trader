@@ -382,3 +382,13 @@ def test_cli_verify_capture_of_wrong_shape_is_config_invalid(tmp_path, capsys):
     error = _failure(capsys, argv)
     assert error["code"] == "CONFIG_INVALID"
     assert str(capture) in error["message"]
+
+
+def test_cli_help_describes_run_and_inspect(capsys):
+    import pytest
+
+    with pytest.raises(SystemExit):
+        main(["experiment", "--help"])
+    help_text = capsys.readouterr().out
+    assert "Create or resume a recorded experiment" in help_text
+    assert "Show a recorded experiment's state without changing it" in help_text

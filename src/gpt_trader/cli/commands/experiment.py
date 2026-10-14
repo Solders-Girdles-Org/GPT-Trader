@@ -240,8 +240,11 @@ def register(subparsers: Any) -> None:
         "experiment", help="Run or inspect a broker-free recorded-data simulation"
     )
     commands = parser.add_subparsers(dest="experiment_command", required=True)
-    for name in ("run", "inspect"):
-        command = commands.add_parser(name)
+    for name, summary in (
+        ("run", "Create or resume a recorded experiment"),
+        ("inspect", "Show a recorded experiment's state without changing it"),
+    ):
+        command = commands.add_parser(name, help=summary)
         command.add_argument(
             "--root", type=Path, required=True, help="Isolated experiment directory"
         )
