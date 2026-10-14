@@ -23,7 +23,12 @@ from gpt_trader.features.experiment.inputs import (
     parse_input,
     with_benchmark,
 )
-from gpt_trader.features.experiment.ledger import DATABASE, inspect_run, run_input
+from gpt_trader.features.experiment.ledger import (
+    DATABASE,
+    ExperimentIntegrityError,
+    inspect_run,
+    run_input,
+)
 from gpt_trader.features.experiment.reading import case_outcome, combined_action, rule_verdict
 
 T = TypeVar("T")
@@ -50,6 +55,13 @@ READ_PROTOCOL_KEYS = (
     "min_scored_symbols",
     "min_round_trips",
 )
+PROTOCOL_SHAPES: dict[str, type] = {
+    "symbols": list,
+    "benchmarks": list,
+    "settings": dict,
+    "cost_cases": dict,
+}
+CAPTURE_KEYS = ("schema", "granularity", "start", "end", "requests")
 
 
 class ExperimentCliError(Exception):
@@ -141,7 +153,36 @@ def _read_protocol(path: Path, required: tuple[str, ...]) -> dict[str, Any]:
             path=str(path),
             fields=missing,
         )
+    misshapen = [
+        key
+        for key in required
+        if key in PROTOCOL_SHAPES and not isinstance(protocol[key], PROTOCOL_SHAPES[key])
+    ]
+    if "cost_cases" in required and "cost_cases" not in misshapen:
+        if not all(isinstance(costs, dict) for costs in protocol["cost_cases"].values()):
+            misshapen.append("cost_cases")
+    if misshapen:
+        raise ExperimentCliError(
+            CliErrorCode.CONFIG_INVALID,
+            f"Protocol {path} has a malformed {', '.join(repr(key) for key in misshapen)}",
+            path=str(path),
+            fields=misshapen,
+        )
     return protocol
+
+
+def _read_capture(path: Path) -> bytes:
+    capture = _read_bytes(path, "Capture")
+    payload = _read_json(path, "Capture")
+    missing = [key for key in CAPTURE_KEYS if key not in payload]
+    if missing or not isinstance(payload["requests"], list):
+        raise ExperimentCliError(
+            CliErrorCode.CONFIG_INVALID,
+            f"Capture {path} is not a candle capture"
+            + (f"; missing {', '.join(repr(key) for key in missing)}" if missing else ""),
+            path=str(path),
+        )
+    return capture
 
 
 def _load_input(path: Path, benchmark: str | None) -> ExperimentInput:
@@ -165,15 +206,20 @@ def _existing_run(root: Path, hint: str = "") -> Path:
 
 
 def _on_root(root: Path, operation: Callable[[], T]) -> T:
+    """Type ledger refusals and unusable files; leave engine faults to main's traceback."""
     try:
         return operation()
     except sqlite3.DatabaseError as error:
+        # Integrity/Programming errors are code faults; only a bad or busy file is reported.
+        bad_file = type(error) is sqlite3.DatabaseError
+        if not bad_file and not isinstance(error, sqlite3.OperationalError):
+            raise
         raise ExperimentCliError(
             CliErrorCode.OPERATION_FAILED,
             f"Experiment root {root}: could not use {DATABASE}: {error}",
             root=str(root),
         ) from None
-    except ValueError as error:
+    except ExperimentIntegrityError as error:
         raise ExperimentCliError(
             CliErrorCode.VALIDATION_ERROR, f"Experiment root {root}: {error}", root=str(root)
         ) from None
@@ -271,6 +317,12 @@ def handle(args: Namespace) -> CliResponse:
                 f"Experiment root {root} is not a directory",
                 root=str(root),
             )
+        elif not (root / DATABASE).exists() and root.exists() and any(root.iterdir()):
+            raise ExperimentCliError(
+                CliErrorCode.INVALID_ARGUMENT,
+                f"New experiment requires an empty directory; {root} is not empty",
+                root=str(root),
+            )
         result = _on_root(
             root,
             lambda: run_experiment(root, source, max_bars=args.max_bars, benchmark=args.benchmark),
@@ -360,7 +412,7 @@ def handle_verify(args: Namespace) -> CliResponse:
         raise ExperimentCliError(
             CliErrorCode.MISSING_ARGUMENT, "Name at least one --input or --root to verify"
         )
-    capture = _read_bytes(args.capture, "Capture")
+    capture = _read_capture(args.capture)
     payloads = [(str(path), _read_json(path, "Input")) for path in args.input]
     for root in args.root:
         _existing_run(root)

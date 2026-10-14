@@ -314,3 +314,60 @@ def _one_bar_input():
             }
         ],
     }
+
+
+def test_cli_new_run_in_non_empty_root_is_refused(tmp_path, capsys):
+    source = tmp_path / "input.json"
+    source.write_text(json.dumps(_one_bar_input()))
+    root = tmp_path / "run"
+    root.mkdir()
+    (root / "notes.txt").write_text("keep")
+    error = _failure(capsys, ["experiment", "run", "--root", str(root), "--input", str(source)])
+    assert error["code"] == "INVALID_ARGUMENT"
+    assert f"{root} is not empty" in error["message"]
+    assert sorted(path.name for path in root.iterdir()) == ["notes.txt"]
+
+
+def test_cli_engine_faults_mid_run_stay_internal_errors(tmp_path, capsys, caplog, monkeypatch):
+    import sqlite3
+
+    from gpt_trader.cli.commands import experiment
+
+    source = tmp_path / "input.json"
+    source.write_text(json.dumps(_one_bar_input()))
+    for fault in (ValueError("engine bug"), sqlite3.IntegrityError("constraint bug")):
+
+        def broken(*_args, fault=fault, **_kwargs):
+            raise fault
+
+        monkeypatch.setattr(experiment, "run_experiment", broken)
+        caplog.clear()
+        root = tmp_path / type(fault).__name__
+        argv = ["experiment", "run", "--root", str(root), "--input", str(source)]
+        assert main([*argv, "--format", "json"]) == 1
+        envelope = json.loads(capsys.readouterr().out)
+        assert envelope["errors"][0]["code"] == "INTERNAL_ERROR"
+        assert any(record.exc_info for record in caplog.records)
+
+
+def test_cli_protocol_with_malformed_values_is_config_invalid(tmp_path, capsys):
+    committed = "config/experiments/held-out-2026-09-06/protocol.json"
+    payload = json.loads(open(committed, encoding="utf-8").read())
+    payload["cost_cases"] = ["base", "stress"]
+    protocol = tmp_path / "p.json"
+    protocol.write_text(json.dumps(payload))
+    argv = ["experiment", "fetch-input", "--protocol", str(protocol), "--symbol", "ETH-USD"]
+    error = _failure(capsys, [*argv, "--out", str(tmp_path / "out")])
+    assert error["code"] == "CONFIG_INVALID"
+    assert error["details"]["fields"] == ["cost_cases"]
+
+
+def test_cli_verify_capture_of_wrong_shape_is_config_invalid(tmp_path, capsys):
+    capture = tmp_path / "capture.json"
+    capture.write_text("[]")
+    source = tmp_path / "input.json"
+    source.write_text("{}")
+    argv = ["experiment", "verify-input", "--capture", str(capture), "--input", str(source)]
+    error = _failure(capsys, argv)
+    assert error["code"] == "CONFIG_INVALID"
+    assert str(capture) in error["message"]
