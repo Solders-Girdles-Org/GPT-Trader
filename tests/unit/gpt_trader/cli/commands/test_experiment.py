@@ -384,7 +384,7 @@ def test_cli_verify_capture_of_wrong_shape_is_config_invalid(tmp_path, capsys):
     assert str(capture) in error["message"]
 
 
-def test_cli_help_describes_every_experiment_subcommand(capsys):
+def test_cli_help_describes_run_and_inspect(capsys):
     import pytest
 
     with pytest.raises(SystemExit):
