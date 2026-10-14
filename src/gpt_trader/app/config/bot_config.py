@@ -13,6 +13,8 @@ from dataclasses import dataclass, field, fields, replace
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Literal, get_args, get_origin
 
+from gpt_trader.utilities.logging_patterns import get_logger
+
 # Import canonical defaults (top-10 symbols).
 
 if TYPE_CHECKING:
@@ -20,6 +22,8 @@ if TYPE_CHECKING:
         PerpsStrategyConfig,
     )
     from gpt_trader.monitoring.health_signals import HealthThresholds
+
+logger = get_logger(__name__, component="bot_config")
 
 
 @dataclass
@@ -602,21 +606,48 @@ class BotConfig:
             config.set_enable_shorts(schema.risk.enable_shorts)
             return config
 
-        strategy_data = data.get("strategy", {})
-        if not isinstance(strategy_data, dict):
-            strategy_data = {}
-        strategy_kwargs = _filter_dataclass_fields(strategy_data, PerpsStrategyConfig)
+        # Keys the schema does not know are dropped; name them so a typo in a
+        # risk key cannot silently fall back to default risk (#1323).
+        ignored_keys: list[str] = []
+        non_mapping_sections: list[str] = []
+
+        def _section(name: str, dataclass_type: type) -> dict[str, Any]:
+            section = data.get(name)
+            if section is None:
+                return {}
+            if not isinstance(section, dict):
+                non_mapping_sections.append(f"{name} ({type(section).__name__})")
+                return {}
+            kept = _filter_dataclass_fields(section, dataclass_type)
+            ignored_keys.extend(f"{name}.{key}" for key in section if key not in kept)
+            return kept
+
+        strategy_kwargs = _section("strategy", PerpsStrategyConfig)
         strategy = PerpsStrategyConfig(**strategy_kwargs)
 
-        risk_data = data.get("risk", {})
-        if not isinstance(risk_data, dict):
-            risk_data = {}
-        risk_kwargs = _filter_dataclass_fields(risk_data, BotRiskConfig)
+        risk_kwargs = _section("risk", BotRiskConfig)
         risk_kwargs = _coerce_decimal_fields(risk_kwargs, BotRiskConfig)
         risk = BotRiskConfig(**risk_kwargs)
 
         valid_bot_fields = {f.name for f in dataclass_fields(cls)}
         config_data = {k: v for k, v in data.items() if k in valid_bot_fields}
+        ignored_keys.extend(str(key) for key in data if key not in valid_bot_fields)
+
+        if ignored_keys or non_mapping_sections:
+            problems = []
+            if ignored_keys:
+                problems.append("unknown keys ignored: " + ", ".join(ignored_keys))
+            if non_mapping_sections:
+                problems.append(
+                    "sections not mappings, defaults used: " + ", ".join(non_mapping_sections)
+                )
+            logger.warning(
+                "BotConfig.from_dict dropped config input; %s",
+                "; ".join(problems),
+                operation="config_load",
+                ignored_keys=ignored_keys,
+                non_mapping_sections=non_mapping_sections,
+            )
         config_data.update({"strategy": strategy, "risk": risk})
         if "kill_switch_enabled" in config_data:
             from gpt_trader.config.config_utilities import parse_kill_switch_flag
@@ -635,4 +666,11 @@ class BotConfig:
         with open(path) as f:
             data = yaml.safe_load(f)
 
+        if data is None:
+            data = {}
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"Config file {os.fspath(path)} must contain a YAML mapping at its root, "
+                f"got {type(data).__name__}"
+            )
         return cls.from_dict(data)

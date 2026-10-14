@@ -5,8 +5,6 @@ from argparse import Namespace
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from gpt_trader.app.config import BotConfig
 from gpt_trader.app.config.profile_loader import (
     DEFAULT_RUNTIME_PROFILE_NAME,
@@ -45,15 +43,12 @@ def load_config_from_yaml(path: str | Path) -> BotConfig:
         interval: 60
         ...
     """
-    with open(path) as f:
-        data = yaml.safe_load(f) or {}
-
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore",
             message="Legacy profile-style YAML mapping via BotConfig.from_dict\\(\\) is deprecated.*",
         )
-        return BotConfig.from_dict(data)
+        return BotConfig.from_yaml(path)
 
 
 def load_profile_config(profile: Profile | str) -> BotConfig:
