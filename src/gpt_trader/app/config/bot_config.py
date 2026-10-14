@@ -515,10 +515,13 @@ class BotConfig:
         )
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "BotConfig":
+    def from_dict(cls, data: dict[str, Any], *, strict: bool = False) -> "BotConfig":
         """Create configuration from a dictionary (e.g. loaded from YAML).
 
-        Supports both BotConfig-style and profile-style YAML schemas.
+        Supports both BotConfig-style and profile-style YAML schemas. Unknown
+        keys and non-mapping ``strategy``/``risk`` sections are logged and
+        dropped; with ``strict=True`` they raise ``ConfigValidationError``
+        instead. ``strict`` does not apply to the legacy profile-style schema.
         """
         from dataclasses import fields as dataclass_fields
 
@@ -633,6 +636,15 @@ class BotConfig:
         config_data = {k: v for k, v in data.items() if k in valid_bot_fields}
         ignored_keys.extend(str(key) for key in data if key not in valid_bot_fields)
 
+        if strict and (ignored_keys or non_mapping_sections):
+            from gpt_trader.app.config.validation import ConfigValidationError
+
+            errors = []
+            if ignored_keys:
+                errors.append("unknown keys: " + ", ".join(ignored_keys))
+            if non_mapping_sections:
+                errors.append("sections not mappings: " + ", ".join(non_mapping_sections))
+            raise ConfigValidationError(errors)
         if ignored_keys or non_mapping_sections:
             problems = []
             if ignored_keys:
@@ -659,8 +671,8 @@ class BotConfig:
         return cls(**config_data)
 
     @classmethod
-    def from_yaml(cls, path: str | os.PathLike) -> "BotConfig":
-        """Load configuration from a YAML file."""
+    def from_yaml(cls, path: str | os.PathLike, *, strict: bool = False) -> "BotConfig":
+        """Load configuration from a YAML file; ``strict`` as in ``from_dict``."""
         import yaml
 
         with open(path) as f:
@@ -673,4 +685,14 @@ class BotConfig:
                 f"Config file {os.fspath(path)} must contain a YAML mapping at its root, "
                 f"got {type(data).__name__}"
             )
-        return cls.from_dict(data)
+        if not strict:
+            return cls.from_dict(data)
+
+        from gpt_trader.app.config.validation import ConfigValidationError
+
+        try:
+            return cls.from_dict(data, strict=True)
+        except ConfigValidationError as exc:
+            raise ConfigValidationError(
+                [f"Config file {os.fspath(path)} rejected; {'; '.join(exc.errors)}"]
+            ) from exc
