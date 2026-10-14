@@ -59,6 +59,8 @@ def add_preflight_arguments(parser: argparse.ArgumentParser) -> None:
         "--report-target",
         type=ReportTarget,
         choices=list(ReportTarget),
+        # str(ReportTarget.FILE) is "ReportTarget.FILE"; show the accepted values.
+        metavar="{" + ",".join(target.value for target in ReportTarget) + "}",
         default=ReportTarget.FILE,
         help="Artifact target for the preflight report (default: file)",
     )

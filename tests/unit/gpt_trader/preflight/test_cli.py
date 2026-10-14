@@ -112,6 +112,22 @@ class TestParsePreflightArgs:
 
         assert parsed.report_target == ReportTarget.STDOUT
 
+    def test_report_target_help_shows_accepted_values(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with pytest.raises(SystemExit):
+            parse_preflight_args(["--help"])
+
+        help_text = capsys.readouterr().out
+        assert "{file,stdout}" in help_text
+        assert "ReportTarget." not in help_text
+
+    def test_report_target_rejects_unknown_value(self) -> None:
+        with pytest.raises(SystemExit) as exit_info:
+            parse_preflight_args(["--report-target", "bogus"])
+
+        assert exit_info.value.code == 2
+
     def test_report_target_stdout_rejects_report_dir(self, tmp_path: Path) -> None:
         with pytest.raises(SystemExit):
             parse_preflight_args(
