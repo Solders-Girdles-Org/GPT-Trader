@@ -212,7 +212,17 @@ def test_cli_inspect_unreadable_ledger_is_typed(tmp_path, capsys):
     assert str(root) in error["message"]
 
 
-def test_cli_fetch_protocol_missing_key_names_it(tmp_path, capsys):
+def _no_download(monkeypatch):
+    from gpt_trader.features.recorder import candle_capture
+
+    async def refuse(*_args, **_kwargs):
+        raise AssertionError("protocol validation must fail before any download")
+
+    monkeypatch.setattr(candle_capture, "capture_public_hourly_candles", refuse)
+
+
+def test_cli_fetch_protocol_missing_key_names_it(tmp_path, capsys, monkeypatch):
+    _no_download(monkeypatch)
     protocol = tmp_path / "p.json"
     protocol.write_text(json.dumps({"warmup_start": "x"}))
     argv = ["experiment", "fetch-input", "--protocol", str(protocol), "--symbol", "BTC-USD"]
@@ -350,7 +360,8 @@ def test_cli_engine_faults_mid_run_stay_internal_errors(tmp_path, capsys, caplog
         assert any(record.exc_info for record in caplog.records)
 
 
-def test_cli_protocol_with_malformed_values_is_config_invalid(tmp_path, capsys):
+def test_cli_protocol_with_malformed_values_is_config_invalid(tmp_path, capsys, monkeypatch):
+    _no_download(monkeypatch)
     committed = "config/experiments/held-out-2026-09-06/protocol.json"
     payload = json.loads(open(committed, encoding="utf-8").read())
     payload["cost_cases"] = ["base", "stress"]

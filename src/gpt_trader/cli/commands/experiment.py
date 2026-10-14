@@ -116,18 +116,13 @@ def _read_bytes(path: Path, label: str) -> bytes:
         ) from None
 
 
-def _read_text(path: Path, label: str) -> str:
+def _parse_json(raw: bytes, path: Path, label: str) -> dict[str, Any]:
     try:
-        return _read_bytes(path, label).decode("utf-8")
+        payload = json.loads(raw.decode("utf-8"))
     except UnicodeDecodeError:
         raise ExperimentCliError(
             CliErrorCode.CONFIG_INVALID, f"{label} {path} is not UTF-8 text", path=str(path)
         ) from None
-
-
-def _read_json(path: Path, label: str) -> dict[str, Any]:
-    try:
-        payload = json.loads(_read_text(path, label))
     except json.JSONDecodeError as error:
         raise ExperimentCliError(
             CliErrorCode.CONFIG_INVALID,
@@ -140,6 +135,10 @@ def _read_json(path: Path, label: str) -> dict[str, Any]:
             CliErrorCode.CONFIG_INVALID, f"{label} {path} must be a JSON object", path=str(path)
         )
     return payload
+
+
+def _read_json(path: Path, label: str) -> dict[str, Any]:
+    return _parse_json(_read_bytes(path, label), path, label)
 
 
 def _read_protocol(path: Path, required: tuple[str, ...]) -> dict[str, Any]:
@@ -173,7 +172,7 @@ def _read_protocol(path: Path, required: tuple[str, ...]) -> dict[str, Any]:
 
 def _read_capture(path: Path) -> bytes:
     capture = _read_bytes(path, "Capture")
-    payload = _read_json(path, "Capture")
+    payload = _parse_json(capture, path, "Capture")
     missing = [key for key in CAPTURE_KEYS if key not in payload]
     if missing or not isinstance(payload["requests"], list):
         raise ExperimentCliError(
