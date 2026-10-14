@@ -42,13 +42,17 @@ def load_config_from_yaml(path: str | Path) -> BotConfig:
         symbols: [BTC-USD]
         interval: 60
         ...
+
+    Strict: unknown keys or non-mapping ``strategy``/``risk`` sections raise
+    ``ConfigValidationError`` naming the file and keys, so a misspelled risk
+    key stops the run instead of falling back to default risk (#1329).
     """
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore",
             message="Legacy profile-style YAML mapping via BotConfig.from_dict\\(\\) is deprecated.*",
         )
-        return BotConfig.from_yaml(path)
+        return BotConfig.from_yaml(path, strict=True)
 
 
 def load_profile_config(profile: Profile | str) -> BotConfig:
