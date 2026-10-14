@@ -46,21 +46,17 @@ def check_test_suite(checker: PreflightCheck) -> bool:
         )
 
         output = result.stdout + result.stderr
-        if "passed" in output:
-            match = re.search(r"(\d+) passed", output)
-            if match:
-                passed = int(match.group(1))
-                checker.log_success(f"{passed} core tests passed")
-
-            if "failed" in output:
-                match = re.search(r"(\d+) failed", output)
-                if match:
-                    failed = int(match.group(1))
-                    checker.log_warning(f"{failed} tests failed")
-                    return False
+        if result.returncode == 0:
+            passed = re.search(r"(\d+) passed", output)
+            if passed:
+                checker.log_success(f"{passed.group(1)} core tests passed")
+            else:
+                checker.log_success("Core test suite passed")
             return True
 
-        checker.log_error("Test suite failed")
+        checker.log_error(
+            f"Test suite failed (exit code {result.returncode}): {_summarize_counts(output)}"
+        )
         if checker.verbose:
             print(output)
         return False
@@ -71,3 +67,13 @@ def check_test_suite(checker: PreflightCheck) -> bool:
     except Exception as exc:
         checker.log_error(f"Failed to run tests: {exc}")
         return False
+
+
+def _summarize_counts(output: str) -> str:
+    """Build a "N passed, N failed, N errors" summary from pytest output."""
+    counts = [
+        match.group(0)
+        for pattern in (r"\d+ passed", r"\d+ failed", r"\d+ errors?\b")
+        if (match := re.search(pattern, output))
+    ]
+    return ", ".join(counts) or "no test counts reported"
