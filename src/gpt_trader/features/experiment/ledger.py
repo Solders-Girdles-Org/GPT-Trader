@@ -25,6 +25,8 @@ from gpt_trader.features.experiment.inputs import (
 )
 from gpt_trader.features.experiment.valuation import end_valuation
 
+DATABASE = "experiment.sqlite3"
+
 
 class ExperimentIntegrityError(ValueError):
     """A run cannot continue from conflicting or incomplete evidence."""
@@ -36,7 +38,7 @@ def encode(value: Any) -> str:
 
 def open_run(root: Path, source: ExperimentInput | None = None) -> sqlite3.Connection:
     """Open only a designated experiment root; never adopt a runtime store."""
-    database = root / "experiment.sqlite3"
+    database = root / DATABASE
     new = not database.exists()
     if new:
         if source is None:
@@ -227,14 +229,14 @@ def reconcile(source: ExperimentInput, events: list[dict[str, Any]]) -> dict[str
 
 def run_input(root: Path) -> dict[str, Any]:
     """Return the input payload a run is bound to, read-only."""
-    database = root / "experiment.sqlite3"
+    database = root / DATABASE
     with closing(sqlite3.connect(f"{database.resolve().as_uri()}?mode=ro", uri=True)) as connection:
         return read_source(connection).payload
 
 
 def inspect_run(root: Path) -> dict[str, Any]:
     """Read a consistent snapshot without creating files or advancing the run."""
-    database = root / "experiment.sqlite3"
+    database = root / DATABASE
     with closing(sqlite3.connect(f"{database.resolve().as_uri()}?mode=ro", uri=True)) as connection:
         connection.execute("BEGIN")
         source = read_source(connection)

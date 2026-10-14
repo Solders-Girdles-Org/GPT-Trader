@@ -167,7 +167,3 @@ def with_benchmark(payload: dict[str, Any], benchmark: str | None) -> dict[str, 
     if payload.get("benchmark", benchmark) != benchmark:
         raise ValueError("Input file names a different benchmark")
     return {**payload, "benchmark": benchmark}
-
-
-def load_input(path: Path, *, benchmark: str | None = None) -> ExperimentInput:
-    return parse_input(with_benchmark(json.loads(path.read_text(encoding="utf-8")), benchmark))
