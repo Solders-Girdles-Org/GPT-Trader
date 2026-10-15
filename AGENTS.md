@@ -69,10 +69,6 @@ PR is the queue, not a failure. `scripts/ci/check_branch_protection.py` owns
 the expected protection contract; drift surfaces as an `agent-pr-ready`
 warning.
 
-## Handoff between agents
-
-Codex and Claude exchange work through the shared handoff contract (`/Users/rj/Projects/Workspace Operations/HANDOFF-CONTRACT.md`): code handoffs are the pull request with a six-field packet, reviews are posted to GitHub, and this file's gates still govern. Manual paste between agents is not the handoff.
-
 ## Hosted agents
 
 A hosted agent (Jules or similar) bootstraps with `uv sync --all-extras --dev`,
