@@ -103,8 +103,8 @@ def test_create_chunks_splits_over_limit() -> None:
     chunks = fetcher._create_chunks(start, end, candle_seconds=60, max_candles=300)
 
     assert len(chunks) == 2
-    assert chunks[0] == (start, start + timedelta(seconds=60 * 300))
-    assert chunks[1] == (start + timedelta(seconds=60 * 300), end)
+    assert chunks[0] == (start, start + timedelta(seconds=60 * 299))
+    assert chunks[1] == (start + timedelta(seconds=60 * 299), end)
 
 
 def test_granularity_to_seconds_unknown_defaults() -> None:
@@ -149,8 +149,8 @@ def test_create_chunks_uses_four_hour_duration() -> None:
     )
 
     assert chunks == [
-        (start, start + timedelta(hours=4 * 300)),
-        (start + timedelta(hours=4 * 300), end),
+        (start, start + timedelta(hours=4 * 299)),
+        (start + timedelta(hours=4 * 299), end),
     ]
 
 
@@ -201,3 +201,35 @@ async def test_fetch_chunk_calls_client_get_candles_and_parses_timestamps() -> N
         start.isoformat(),
         (start + timedelta(minutes=1)).isoformat(),
     ]
+
+
+class _InclusiveCandlesClient:
+    """Mimics Coinbase: bars starting in [start, end], newest `limit` kept."""
+
+    def __init__(self, step: timedelta) -> None:
+        self.step = step
+
+    def get_candles(self, symbol, granularity, limit, *, start, end):  # noqa: ANN001
+        bars = []
+        ts = start
+        while ts <= end:
+            bars.append({"start": str(int(ts.timestamp())), **dict.fromkeys(_OHLCV, "1")})
+            ts += self.step
+        return {"candles": list(reversed(bars))[:limit]}
+
+
+_OHLCV = ("open", "high", "low", "close", "volume")
+
+
+@pytest.mark.asyncio
+async def test_fetch_candles_keeps_first_bar_when_api_end_is_inclusive() -> None:
+    """A 300-bar chunk must not span 301 inclusive bars, or the API drops its first."""
+    start = datetime(2026, 9, 3, tzinfo=UTC)
+    end = start + timedelta(hours=912)
+    fetcher = CoinbaseHistoricalFetcher(client=_InclusiveCandlesClient(timedelta(hours=1)))
+    fetcher._rate_limit = AsyncMock()
+
+    result = await fetcher.fetch_candles("BTC-USD", "ONE_HOUR", start, end)
+
+    in_window = [c.ts for c in result if c.ts < end]
+    assert in_window == [start + timedelta(hours=i) for i in range(912)]
