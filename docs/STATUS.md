@@ -49,8 +49,13 @@ held-out benchmark ([#1315](https://github.com/Solders-Girdles-Org/GPT-Trader/is
 ran that day under its committed [protocol](../config/experiments/held-out-2026-09-06/PROTOCOL.md)
 and read action D: neither fixed rule survives costs, and hold-the-coin beat
 both ([result](decisions/held-out-benchmark-before-reasoning-proposer.md#result-2026-10-17)).
-Round two is the open [proposal](decisions/next-round-after-held-out-benchmark.md)
-waiting on RJ; continue from RJ's answer there. Do not start the old runtime,
+RJ chose round two the same day: an AI that manages the trades on its own,
+tested once against a predeclared bar, with the project pausing until a
+stronger model if it fails ([decision](decisions/next-round-after-held-out-benchmark.md)).
+Continue with the build items under
+[#1252](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1252), W1
+first; no model call or spend happens before RJ's one card for the credential,
+spending cap and run. Do not start the old runtime,
 use its approval grants for the new product, or infer a deployment from this
 page.
 

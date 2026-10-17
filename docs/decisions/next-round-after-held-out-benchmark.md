@@ -1,21 +1,25 @@
 # Next improvement round after the held-out benchmark
 
 ---
-status: proposed
+status: accepted
 date: 2026-10-17
 deciders: rj
 supersedes:
 superseded-by:
 ---
 
-> **In plain language.** Round one is done. Both of GPT-Trader's existing
-> fixed trading rules lost money after fees on five weeks of prices they had
-> never seen, and simply buying and holding the coins did better. This is the
-> first round of an improvement series, not the end. The proposal for round
-> two is to build the AI trade-proposer the project has been heading toward
-> and test it forward against the same bar. Building it costs nothing beyond
-> agent time; before it makes a single paid model call, RJ gets a separate ask
-> for the API key and a spending cap.
+> **In plain language.** Round one is done: both fixed trading rules lost
+> money after fees on five weeks of unseen prices, and simply holding the
+> coins did better. RJ chose round two on 2026-10-17: build toward an AI that
+> manages the trades on its own, with whatever rules it chooses, and pause the
+> project if that cannot be built credibly with today's models. The agent's
+> answer is that a fair, cheap test of it can be built now, but the public
+> studies it found give no convincing evidence that today's models beat "just
+> hold" after fees, so whether it is useful is unproven. Round two is one bounded test with a pause rule written down in
+> advance: if the AI does not beat holding, cash and the old rules over five
+> weeks that have not happened yet when the test is frozen, the project
+> pauses until a stronger model is released. The API key, spending cap
+> and run come to RJ later as one card.
 
 ## Context
 
@@ -70,23 +74,196 @@ and the old paper job's small gross gains did not cover stress costs.
 - **Option C — Stop alpha investment.** Keep the evidence and stop. Always
   RJ's choice; not recommended, because RJ's conditions treat a weak result as
   the start of the next round.
-
 ## Decision
 
-Pending RJ on [#1344](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1344). The agent recommends Option A.
+**RJ, 2026-10-17** (the `rj-answer` comment on
+[#1344](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1344)): not
+option A as framed, and not C. Build toward an AI that manages the trades on
+its own; which strategy or rules it uses is open. If that cannot be built
+credibly with today's models, pause the project until a stronger model is
+available rather than build something less. RJ's words: "The vision for the
+project is the AI being able to manage the trades on its' own. I don't care
+which trading strategy it uses so the rules can be anything we want. I don't
+want a trade proposer though."
+
+RJ's conditions, as recorded on #1344:
+
+1. No design in which the AI only suggests trades. The AI may choose, write
+   or change its own rules, fixed rules included.
+2. Practice money and every live-trading gate stay as they are.
+3. When model spending is needed, the credential, the spending cap and the run
+   come to RJ as **one card**, not three. RJ's Claude API key uses credits
+   that expire unused.
+4. Open question for the agent: can it be built now? Answer with evidence; if
+   not, record the pause and the test that would restart it.
+
+### What "proposer" meant
+
+In [#1252](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1252),
+"proposer" is only the name of the code slot a decision comes from. In the
+recorded experiment the decision goes straight to the simulator: the
+experiment's limits (exposure cap, stop, drawdown halt) apply and the
+simulated trade is placed, with no person approving each one
+([engine](../../src/gpt_trader/features/experiment/engine.py), and
+[Direction](../DIRECTION.md#immediate-product-outcome): "Ordinary local
+simulations do not require per-trade human approval"). Today's engine,
+though, only asks a rule for entries: while a position is open, its fixed
+stop, target and expiry decide the exit. Managing trades means the AI also
+reviews open positions and may exit or keep them, so W1 adds that. With it,
+the design meets RJ's aim. From here the round-two channel is called the
+**AI trade manager**.
+
+### Can it be built now? (agent assessment, 2026-10-17)
+
+**A bounded, fair simulation test of an AI trade manager is feasible now.
+Useful performance is unproven, and public evidence leans against it.** That
+is not yet the credible capability RJ's condition asks for; only a test can
+show whether it exists. Round two therefore runs as one bounded, cheap test
+with the pause written down in advance, not as an open-ended build.
+
+What supports building now:
+
+- **The machinery exists.** The experiment slice already takes one decision
+  per closed bar through a single seam (`propose` in
+  [benchmarks.py](../../src/gpt_trader/features/experiment/benchmarks.py)),
+  journals every event, fills at the next open with fees and slippage, and
+  re-derives every balance independently. Round one proved it on 32 cases.
+  An AI channel is a new decision source in that seam, a review step for
+  open positions and a recorded evidence bundle, not a new system.
+- **A held-out test is possible without a live forward lane.** A model
+  cannot honestly be tested on prices it was trained on; that is why
+  [agentic alpha](adopt-agentic-alpha-direction.md) made model channels
+  forward-only. Models do recall exact prices from before their cutoff
+  (Lopez-Lira et al., arXiv 2504.14765), and testing after a model's
+  training cutoff is standard practice in published benchmarks (StockBench,
+  arXiv 2510.02209). Claude Opus 5.5's documented knowledge cutoff is June
+  2026 (Anthropic model documentation, read 2026-10-17). If the prompt,
+  rulebook, cadence, model version and reading are frozen before the window
+  **starts**, and the model has no web or other tools, then replaying the
+  window's recorded bars after it closes protects against training
+  contamination and against the builders tuning on the outcome. It does not
+  prove the cutoff is exact, and it does not reproduce live latency, outages
+  or slippage; those are disclosed limits, not solved ones. It reuses the
+  round-one machinery and comparators unchanged.
+- **It is cheap.** At Opus 5.5's list price ($4 input / $20 output per
+  million tokens) and an *assumed* 6,000 input and 3,000 output tokens per
+  decision, a turn costs about $0.08. Eight coins over a 35-day window cost
+  about $24 deciding once a day, about $140 every four hours, and about $565
+  every hour *(estimates; W2 measures real token counts before the card)*.
+
+What argues against expecting a pass (public evidence, gathered 2026-10-17;
+facts from the sources, judgments marked):
+
+- The only costed, live crypto study found here ("Can AI Make Money in
+  Crypto?", arXiv 2609.34510, September 2026; 4-hour decisions, 0.05–0.10%
+  fees, holding and closing allowed) found no LLM or agent method made money
+  in its 2025 backtest. Live, none of its four deployed methods (one LLM and
+  three machine-learning methods) beat buy-and-hold BTC (+11.6%; the LLM
+  made +3.7%), and live slippage was about six times paper's.
+- Nof1's Alpha Arena real-money crypto season (October–November 2025, as
+  reported second-hand): two of six models finished up, four lost 42–59%;
+  in its stock season (November–December 2025) only one of the models
+  finished up. These were older models trading leveraged perpetuals.
+- A 2026 review of five well-known LLM trading frameworks ("Alpha Illusion",
+  arXiv 2605.16895) found most cost categories unmodelled, and in its own
+  one-year rerun two frameworks ended below buy-and-hold after costs.
+  FINSABER (arXiv 2505.07078) found earlier LLM advantages mostly vanish over
+  longer tests.
+- On the other side, StockBench (stocks, March–June 2025, after the tested
+  models' cutoffs) found 8 of 13 models beat equal-weight buy-and-hold
+  (+0.4%), the best by about 2 points, with costs not described and no
+  significance test.
+- No primary-source, costed test of the current Claude, GPT or Gemini
+  generations against a hold benchmark was found. Self-published arenas with
+  current models (TradeRank) publish too little method to read.
+- *Agent judgment:* the published results do not show that today's models
+  cannot do this in this setting: they used leverage, older models, stocks
+  or no costs, and the one costed crypto study tested a single LLM. Among
+  the sources reviewed, none gives convincing, cost-complete evidence that
+  current models reliably beat holding in this crypto setting. Five weeks
+  on eight correlated coins is one market regime, so even a pass is a first
+  reading, not proof.
+
+**Strongest option rejected: pause now on the public evidence.** It saves a
+few agent-days of building and about $25–150 of model credits. It is
+rejected because the public tests are not this setting, the test RJ's
+condition asks for costs little, RJ's credits expire unused, and pausing
+without a reading of our own would leave the restart question just as open
+as today.
+
+### Round two
+
+1. **Build, default-off, no spend** (agent work, filed under #1252): the AI
+   trade manager channel in the experiment slice with an injected transport
+   that also reviews open positions, and a recorded evidence bundle (W1);
+   the real model transport with a hard spend stop (W2); and the round-two
+   protocol (W3). The AI keeps a rulebook it may rewrite on any turn, using
+   only what it has seen up to that bar, and every version is journaled;
+   model-written executable code is out of scope. Round one's lesson goes
+   into the design: trading costs about 0.30% a round trip, and holding or
+   staying out are normal choices.
+2. **A window that has not happened yet.** W3 freezes the prompt, initial
+   rulebook, cadence, pinned model version, settings and the whole reading
+   before the window starts. The window is the 35 days from the first 00:00
+   UTC at least one day after W3 merges; prices since 2026-10-11 are already
+   known to the people building this, so they cannot be the test.
+3. **The bar**, as the
+   [forward-test bar](held-out-benchmark-before-reasoning-proposer.md#held-out-protocol-and-predeclared-reading)
+   states it: beat cash, hold-the-coin and mean reversion, and baseline when
+   baseline survives costs, at the same costs, limits and $1,000 accounts, on
+   the 8 round-one coins. Hold-the-coin keeps round one's 20% exposure, so a
+   pass says nothing about beating full-size holding. W3 also fixes, before
+   the window: pooled versus per-coin success, what makes a rarely trading
+   channel's reading conclusive (round one's 30-round-trip minimum does not
+   fit it), how failed model calls count, that each case runs once with no
+   reruns, and the result net of model spend.
+4. **One card to RJ** once W1–W3 have merged: the API credential, a spending
+   cap set from W2's measured cost, the run over the frozen window, and
+   confirmation that a run on bars dated after the model's documented
+   training cutoff and after the freeze counts as forward evidence. That last
+   point amends [agentic alpha](adopt-agentic-alpha-direction.md)'s
+   forward-only constraint, which RJ set, so it is RJ's to confirm. The
+   alternative, a wall-clock run that calls the model every few hours for
+   five weeks, needs a scheduled service but also captures live latency and
+   outages; it stays available if RJ prefers it.
+
+### Pause rule and the test that restarts the project
+
+Read once, by the protocol W3 commits:
+
+- **Passes the bar under both cost cases:** propose round three, the same
+  test on the next unseen window, before any claim of skill.
+  A pass authorizes further validation, not a claim that autonomous trading
+  works.
+- **Anything else** (fails, trails hold-the-coin, beats only some
+  comparators, inconclusive, or cost-dependent): **the project pauses**, per
+  RJ. This is an investment decision on insufficient evidence, not a finding
+  that today's models cannot trade. Pausing records the result here, closes
+  round two's items, and leaves every gate, record and the built channel in
+  place, default-off.
+- **Restart test:** a model is eligible when it enters the frontier tier of
+  RJ's workspace model stack (re-evaluated at each major release) and has a
+  documented training cutoff. Each eligible model gets **one** attempt, in
+  release order: the same protocol, re-frozen for that model before a fresh
+  window that starts after the freeze, with RJ's one-card go. Every attempt is
+  reported here cumulatively, passes and failures alike. The project restarts
+  only on a pass, and a pass again means round three's confirmation, not
+  proof.
 
 ## Consequences
 
-If RJ chooses A: #1252 becomes the round-two build, starting with W1 (a
-default-off skeleton with recorded evidence and no model dependency), and its
-forward window and reading are committed before any model call. Separate RJ
-cards follow for the credential, the spending cap and the forward run. If RJ
-chooses B, the agent commits a new protocol for the 2026-10-11 to 2026-11-15
-window before fetching it, and asks for that run's go. Whichever option is
-chosen, the next round is filed as issues.
+- [#1252](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1252) is
+  round two's build umbrella, re-scoped from the quiesced Stage-2 cycle to
+  the experiment slice; W1 is its first item. W0 (mean reversion in the old
+  cycle) stays deferred; the experiment already runs mean reversion beside
+  any channel.
+- No fixed-rule redesign (option B) is built; the experiment keeps running
+  both fixed rules beside the AI trade manager as comparators.
+- No model call, credential or spend happens before RJ's one card.
 
 ## Safety boundary
 
 This record authorizes no broker or account call, model call, credential,
 spend, service, schedule, order, money movement or autonomy change, and starts
-no run. All [Direction](../DIRECTION.md) gates are unchanged.
+no run. The AI trade manager runs only in the recorded experiment's simulated
+accounts. All [Direction](../DIRECTION.md) gates are unchanged.
