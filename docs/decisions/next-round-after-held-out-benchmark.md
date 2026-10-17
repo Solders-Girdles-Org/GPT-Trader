@@ -166,10 +166,11 @@ What supports building now:
   account, so the AI runs 16 accounts (8 coins × 2 cost cases) over a
   35-day window: about $120 deciding once a day and about $710 every four
   hours, before extra turns on fills and stops and before the optional
-  second arm *(estimates; before the card, W2 counts input tokens from the
-  requests W1's fake transport builds and bounds output by the frozen
-  `max_tokens` and effort level, with no model call; the real counts are
-  measured during the approved run)*. W3 sets a cadence no faster than
+  second arm *(estimates; before the card, W2 estimates input tokens
+  offline from the requests W1's fake transport builds, with no API key or
+  model call, states its method and safety margin, and bounds output by the
+  frozen `max_tokens` and effort level; real counts are measured only
+  during the approved run)*. W3 sets a cadence no faster than
   every four hours: round one showed costs punish frequent trading, and
   hourly would cost
   about $2,800. The engine steps through hourly bars, so a slower
@@ -250,9 +251,11 @@ as today.
    and does (through the journal's source hash, as round one did) and says
    in advance how a defect found after the window opens is handled.
 4. **One card to RJ** once W1–W3 have merged: the API credential, a spending
-   cap set as decisions × (counted input + frozen `max_tokens`) × list
-   price and enforced by W2's hard spend stop, the run over the frozen
-   window, and the optional GPT-6 Astra arm. The card also offers pausing
+   cap of at most maximum turns × (estimated input tokens × input price +
+   frozen `max_tokens` × output price), shown beside the expected spend and
+   enforced by W2's hard spend stop, the run over the frozen window, and the
+   optional GPT-6 Astra arm. W3 states in advance how an arm is read if the
+   spend stop ends it before the window does. The card also offers pausing
    now instead, which RJ's answer allows, and restates the pause rule below
    for RJ to confirm. It names the three ways round two departs from
    [agentic alpha](adopt-agentic-alpha-direction.md)'s constraints, which RJ
