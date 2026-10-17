@@ -19,6 +19,7 @@ from gpt_trader.core.fill_accounting import (
 )
 from gpt_trader.features.experiment.inputs import (
     ENGINE_VERSION,
+    MANAGER_CHANNEL,
     ExperimentInput,
     implementation_digest,
     parse_input,
@@ -110,6 +111,7 @@ def read_source(connection: sqlite3.Connection) -> ExperimentInput:
 
 def read_events(connection: sqlite3.Connection, source: ExperimentInput) -> list[dict[str, Any]]:
     from gpt_trader.features.experiment.engine import advance
+    from gpt_trader.features.experiment.trade_manager import RecordedTransport
 
     previous = source.identity
     events: list[dict[str, Any]] = []
@@ -128,8 +130,12 @@ def read_events(connection: sqlite3.Connection, source: ExperimentInput) -> list
             or event["bar"] != source.payload["candles"][sequence]
         ):
             raise ExperimentIntegrityError("Experiment observation checksum mismatch")
+        # A committed model turn is replayed from its record, never sent again.
         expected = advance(
-            source, sequence, events[-1]["state"] if events else initial_state(source)
+            source,
+            sequence,
+            events[-1]["state"] if events else initial_state(source),
+            RecordedTransport(event.get("turn")) if source.benchmark == MANAGER_CHANNEL else None,
         )
         expected["previous"] = previous
         if event != expected:
@@ -142,7 +148,7 @@ def read_events(connection: sqlite3.Connection, source: ExperimentInput) -> list
 
 
 def initial_state(source: ExperimentInput) -> dict[str, Any]:
-    return {
+    state: dict[str, Any] = {
         "cash": str(source.settings.initial_cash),
         "quantity": "0",
         "cost_basis": "0",
@@ -153,6 +159,13 @@ def initial_state(source: ExperimentInput) -> dict[str, Any]:
         "position": None,
         "pending": None,
     }
+    if source.manager is not None:
+        state["manager"] = {
+            "rulebook": source.manager.rulebook,
+            "rulebook_version": 1,
+            "exit_pending": False,
+        }
+    return state
 
 
 def reconcile(source: ExperimentInput, events: list[dict[str, Any]]) -> dict[str, Any]:
@@ -243,7 +256,7 @@ def inspect_run(root: Path) -> dict[str, Any]:
         events = read_events(connection, source)
         report = reconcile(source, events)
         state = events[-1]["state"] if events else initial_state(source)
-        return {
+        report = {
             "engine": ENGINE_VERSION,
             "implementation_sha256": implementation_digest(),
             "identity": source.identity,
@@ -274,8 +287,35 @@ def inspect_run(root: Path) -> dict[str, Any]:
                     "fills": event["fills"],
                     "thesis": event["proposal"]["thesis"] if event["proposal"] else None,
                 }
+                | ({"turn_reason": event["turn"]["reason"]} if event.get("turn") else {})
                 for event in events
-                if event["fills"] or event["proposal"] or event["actions"]
+                if event["fills"] or event["proposal"] or event["actions"] or event.get("turn")
             ],
             "evidence_class": "deterministic historical simulation; no AI decisions or trading-readiness evidence",
         }
+        if source.manager is not None:
+            report["evidence_class"] = (
+                "historical simulation with model decisions replayed from the journal; "
+                "not trading-readiness evidence"
+            )
+            report["manager"] = manager_summary(events, state)
+        return report
+
+
+def manager_summary(events: list[dict[str, Any]], state: dict[str, Any]) -> dict[str, Any]:
+    """Totals over the AI trade manager's journaled turns."""
+    turns = [event["turn"] for event in events if event.get("turn")]
+    usage = [turn["usage"] for turn in turns if turn["usage"]]
+    return {
+        "turns": len(turns),
+        "outcomes": {
+            outcome: sum(turn["outcome"] == outcome for turn in turns)
+            for outcome in sorted({turn["outcome"] for turn in turns})
+        },
+        "models": sorted({turn["model"] for turn in turns}),
+        "input_tokens": sum(item["input_tokens"] for item in usage),
+        "output_tokens": sum(item["output_tokens"] for item in usage),
+        "cost_usd": str(sum((Decimal(turn["cost_usd"]) for turn in turns), Decimal(0))),
+        "rulebook_version": state["manager"]["rulebook_version"],
+        "rulebook": state["manager"]["rulebook"],
+    }

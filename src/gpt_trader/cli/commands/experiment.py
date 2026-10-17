@@ -19,6 +19,7 @@ from gpt_trader.features.experiment.engine import run_experiment
 from gpt_trader.features.experiment.held_out import build_input_payload, verify_input_payload
 from gpt_trader.features.experiment.inputs import (
     BENCHMARKS,
+    MANAGER_CHANNEL,
     ExperimentInput,
     parse_input,
     with_benchmark,
@@ -30,6 +31,7 @@ from gpt_trader.features.experiment.ledger import (
     run_input,
 )
 from gpt_trader.features.experiment.reading import case_outcome, combined_action, rule_verdict
+from gpt_trader.features.experiment.trade_manager import TransportUnavailableError
 
 T = TypeVar("T")
 Handler = Callable[[Namespace], CliResponse]
@@ -222,6 +224,10 @@ def _on_root(root: Path, operation: Callable[[], T]) -> T:
         raise ExperimentCliError(
             CliErrorCode.VALIDATION_ERROR, f"Experiment root {root}: {error}", root=str(root)
         ) from None
+    except TransportUnavailableError as error:
+        raise ExperimentCliError(
+            CliErrorCode.OPERATION_FAILED, f"Experiment root {root}: {error}", root=str(root)
+        ) from None
     except OSError as error:
         raise ExperimentCliError(
             CliErrorCode.INVALID_ARGUMENT,
@@ -262,8 +268,9 @@ def register(subparsers: Any) -> None:
             command.add_argument(
                 "--benchmark",
                 choices=BENCHMARKS,
-                help="Rule channel; defaults to the input file's rule, else baseline. Must not "
-                "contradict a rule the file names; bound to the run and checked on resume",
+                help="Decision channel; defaults to the input file's channel, else baseline. Must "
+                "not contradict a channel the file names; bound to the run and checked on "
+                "resume. ai-trade-manager needs a model transport, which this build lacks",
             )
         add_output_options(command)
         command.set_defaults(handler=_reported(handle))
@@ -314,13 +321,29 @@ def handle(args: Namespace) -> CliResponse:
         source = _load_input(args.input, args.benchmark) if args.input else None
         if source is None:
             _existing_run(root, "; create it with --input")
-        elif root.exists() and not root.is_dir():
+            channel = _on_root(root, lambda: run_input(root))["benchmark"]
+        else:
+            channel = source.benchmark
+        if channel == MANAGER_CHANNEL:
+            # No model transport ships yet (W2, #1252); refuse before creating or advancing.
+            raise ExperimentCliError(
+                CliErrorCode.OPERATION_FAILED,
+                f"The {MANAGER_CHANNEL} channel needs a model transport, which this build "
+                "lacks; nothing was created or advanced",
+                root=str(root),
+            )
+        if source is not None and root.exists() and not root.is_dir():
             raise ExperimentCliError(
                 CliErrorCode.INVALID_ARGUMENT,
                 f"Experiment root {root} is not a directory",
                 root=str(root),
             )
-        elif not (root / DATABASE).exists() and root.exists() and any(root.iterdir()):
+        elif (
+            source is not None
+            and not (root / DATABASE).exists()
+            and root.exists()
+            and any(root.iterdir())
+        ):
             raise ExperimentCliError(
                 CliErrorCode.INVALID_ARGUMENT,
                 f"New experiment requires an empty directory; {root} is not empty",
@@ -336,7 +359,10 @@ def handle(args: Namespace) -> CliResponse:
     text = "\n".join(
         [
             f"Recorded experiment: {result['processed_bars']}/{result['total_bars']} bars",
-            f"Source: {result['source']}; {result['benchmark']} rule; no model or broker calls",
+            f"Source: {result['source']}; {result['benchmark']} rule; no model or broker calls"
+            if "manager" not in result
+            else f"Source: {result['source']}; {result['benchmark']} channel; "
+            f"{result['manager']['turns']} journaled model turns; no broker calls",
             f"Cash ${account['cash']}; position {account['quantity']} {result['symbol']}; equity ${account['equity']}",
             f"Net P&L ${account['net_pnl']} (realized ${account['realized_net']}, unrealized ${account['unrealized_net']}); fees ${account['fees']}",
             f"At liquidation value: net ${valuation.get('net_pnl')}; hold-the-coin ${hold.get('net_pnl')}; cash $0",

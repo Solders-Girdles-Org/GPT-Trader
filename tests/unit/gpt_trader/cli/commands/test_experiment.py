@@ -395,6 +395,6 @@ def test_cli_help_describes_run_and_inspect(capsys):
     with pytest.raises(SystemExit):
         main(["experiment", "run", "--help"])
     run_help = " ".join(capsys.readouterr().out.split())
-    assert "defaults to the input file's rule, else baseline" in run_help
-    assert "Must not contradict a rule the file names" in run_help
+    assert "defaults to the input file's channel, else baseline" in run_help
+    assert "Must not contradict a channel the file names" in run_help
     assert "default baseline" not in run_help

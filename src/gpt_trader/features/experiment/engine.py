@@ -15,7 +15,7 @@ from typing import Any
 
 from gpt_trader.core.fill_accounting import FillFact, aware_time, semantic_checksum
 from gpt_trader.features.experiment.benchmarks import HISTORY_BARS, propose
-from gpt_trader.features.experiment.inputs import ExperimentInput
+from gpt_trader.features.experiment.inputs import MANAGER_CHANNEL, ExperimentInput
 from gpt_trader.features.experiment.ledger import (
     ExperimentIntegrityError,
     encode,
@@ -26,6 +26,7 @@ from gpt_trader.features.experiment.ledger import (
     read_source,
     reconcile,
 )
+from gpt_trader.features.experiment.trade_manager import DecisionTransportProtocol, manage
 from gpt_trader.features.trade_ideas.snapshot import MarketSnapshot, SymbolSeries
 
 
@@ -73,9 +74,17 @@ def _fill(
 
 
 def advance(
-    source: ExperimentInput, sequence: int, previous_state: dict[str, Any]
+    source: ExperimentInput,
+    sequence: int,
+    previous_state: dict[str, Any],
+    transport: DecisionTransportProtocol | None = None,
 ) -> dict[str, Any]:
-    """Pure observation transition. Strategy sees only bars closed at this cutoff."""
+    """Observation transition. Strategy sees only bars closed at this cutoff.
+
+    Pure for the rule channels. The AI trade manager's due turns go through
+    ``transport``; replay passes the journaled reply instead.
+    """
+    managed = source.benchmark == MANAGER_CHANNEL
     state = deepcopy(previous_state)
     candle = source.candles[sequence]
     settings = source.settings
@@ -83,6 +92,21 @@ def advance(
     fee = settings.fee_bps / 10000
     fills = []
     actions = []
+    if managed and state["manager"]["exit_pending"]:
+        # Only set while holding; nothing can close the position before this open.
+        state["manager"]["exit_pending"] = False
+        fills.append(
+            _fill(
+                source,
+                sequence,
+                state,
+                side="sell",
+                quantity=Decimal(state["quantity"]),
+                price=candle.open * (1 - slip),
+                reason="manager exit",
+            )
+        )
+        actions.append("position settled: manager exit at next open")
     pending = state["pending"]
     state["pending"] = None
     if pending and not state["halted"] and state["position"] is None:
@@ -99,7 +123,8 @@ def advance(
             loss_per_unit = price - stop_fill + fee * (price + stop_fill)
             quantity = min(
                 cash / (price * (1 + fee)),
-                cash * settings.exposure_fraction / price,
+                # A manager entry names its own size; it was clamped to the cap.
+                cash * Decimal(pending.get("size_fraction", settings.exposure_fraction)) / price,
                 cash * settings.risk_fraction / loss_per_unit,
             )
             quantity = (quantity / settings.quantity_increment).to_integral_value(
@@ -155,8 +180,14 @@ def advance(
     if equity <= peak * (1 - settings.drawdown_fraction):
         state["halted"] = True
     proposal = None
+    turn = None
     if state["halted"]:
         decision = "new entries halted by drawdown limit"
+    elif managed and sequence >= source.scored_index:
+        decision, proposal, turn, decided = manage(
+            source, sequence, state, transport, filled=bool(fills)
+        )
+        actions.extend(decided)
     elif state["position"] is not None:
         decision = "hold existing position"
     elif sequence < source.scored_index:
@@ -196,7 +227,7 @@ def advance(
             decision = "collecting benchmark history"
         else:
             decision = f"no {source.benchmark} signal"
-    return {
+    event = {
         "sequence": sequence,
         "bar": source.payload["candles"][sequence],
         "decision": decision,
@@ -205,6 +236,9 @@ def advance(
         "fills": fills,
         "state": state,
     }
+    if managed:
+        event["turn"] = turn
+    return event
 
 
 def run_experiment(
@@ -213,8 +247,13 @@ def run_experiment(
     *,
     max_bars: int | None = None,
     benchmark: str | None = None,
+    transport: DecisionTransportProtocol | None = None,
 ) -> dict[str, Any]:
-    """Create/resume one bound run, committing no more than max_bars new observations."""
+    """Create/resume one bound run, committing no more than max_bars new observations.
+
+    ``transport`` serves the AI trade manager's new turns only; committed turns
+    replay from the journal.
+    """
     if max_bars is not None and max_bars < 1:
         raise ValueError("max_bars must be positive")
     connection = open_run(root, source)
@@ -235,7 +274,7 @@ def run_experiment(
                     connection.commit()
                     break
                 state = events[-1]["state"] if events else initial_state(saved)
-                event = advance(saved, sequence, state)
+                event = advance(saved, sequence, state, transport)
                 event["previous"] = semantic_checksum(events[-1]) if events else saved.identity
                 reconcile(saved, [*events, event])
                 connection.execute(

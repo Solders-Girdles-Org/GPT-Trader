@@ -54,9 +54,11 @@ or a pause until a stronger model if that cannot be built credibly today. The
 agent's plan is one test of the strongest model available against a
 predeclared bar, pausing if it does not pass
 ([decision](decisions/next-round-after-held-out-benchmark.md)).
-Continue with the build items under
-[#1252](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1252), W1
-first; no model call or spend happens before RJ's one card for the credential,
+W1 shipped: the default-off `ai-trade-manager` experiment channel with an
+injected transport and journaled turns ([#1348](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1348));
+no transport ships yet. Continue with W2, the model transport and spend
+ceiling, under [#1252](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1252);
+no model call or spend happens before RJ's one card for the credential,
 spending cap and run. Do not start the old runtime,
 use its approval grants for the new product, or infer a deployment from this
 page.
