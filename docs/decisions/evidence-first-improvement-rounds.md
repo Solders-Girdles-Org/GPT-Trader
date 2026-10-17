@@ -45,14 +45,17 @@ fixes, upgrades, and improvements until we get it right."
 **Option 1, run as improvement rounds.** The
 [Direction](../DIRECTION.md#destination) destination is unchanged and
 reaffirmed: a bot that trades real money autonomously inside machine-enforced
-limits. The path is a series of rounds, each with these properties:
+limits. The path is a series of rounds, each with these properties. Items
+1–5 are RJ's conditions; the parts marked *agent default* are how the project
+agent applies them, and RJ may change them.
 
-1. **Predeclared reading.** A round's test, data window and reading rules are
-   committed before its data is fetched, and its result is read by those
-   rules only.
+1. **Predeclared reading.** A round's result is read by rules committed
+   beforehand. *Agent default:* the test, data window and reading rules are
+   committed before the round's data is fetched.
 2. **Unseen data.** A round tests on market data the change was not built or
-   tuned on. Once a window has been read, it is in-sample for every change
-   designed after that reading; the next round's test uses a later window.
+   tuned on. *Agent default:* once a window has been read, it is in-sample for
+   every change designed after that reading, so the next round's test uses a
+   later window.
 3. **A weak result opens the next round.** The agent reports what the result
    shows and proposes the next round: what to change and how to test it
    fairly. Stopping alpha investment remains a choice RJ can make, but it is
@@ -67,7 +70,7 @@ The stages, in order:
 
 | Stage | Done when |
 | --- | --- |
-| 1 — Record the approved path | This record, [Direction](../DIRECTION.md) and [STATUS](../STATUS.md) are merged, #1252 is reconciled with #1315, and the Phase B procedure is checked against the merged code without fetching data (#1340) |
+| 1 — Record the approved path | This record, [Direction](../DIRECTION.md) and [STATUS](../STATUS.md) are merged, #1252 is reconciled with #1315, the Phase B procedure is checked against the merged code without fetching data, and stages 1 and 2 are bounded agent-owned items (#1340, #1315) |
 | 2 — Held-out benchmark | #1315's run follows the committed [protocol](../../config/experiments/held-out-2026-09-06/PROTOCOL.md) unchanged: capture hashes verified, independent Decimal balances and pause/resume agree, all 32 cases accounted for, and `experiment read` yields the predeclared A–D action |
 | 3 — Next round | Proposed from stage 2's reading under the rules above; if it is a forward reasoning test, it starts default-off with full model, input and output provenance, bounded spend and a predeclared window read against the [forward-test bar](held-out-benchmark-before-reasoning-proposer.md#held-out-protocol-and-predeclared-reading) |
 | 4 — Earned operational autonomy | Independent review of the [measured-outcome gates](adopt-measured-outcome-rubric.md), account and execution capability, loss breakers, kill switch and rollback, then RJ's explicit grants; software completion alone earns no promotion |
@@ -76,7 +79,8 @@ The stages, in order:
 
 - The held-out decision's predeclared reading and actions A–D are unchanged.
   What follows action D changes: the agent brings RJ a proposed next round
-  rather than a fund-or-stop recommendation.
+  rather than recommending a stop. A funded forward reasoning test, judged
+  against the forward-test bar, remains one possible next round.
 - The reasoning proposer
   ([#1252](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1252))
   stays sequenced after #1315's result; it is one candidate for stage 3, not a
