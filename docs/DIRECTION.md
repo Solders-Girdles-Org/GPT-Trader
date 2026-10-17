@@ -40,6 +40,14 @@ market experiment with disclosed costs, missing-data treatment and no-trade/loss
 cases. Its result should tell RJ whether further investment is useful, not
 merely satisfy a process gate.
 
+RJ chose the path on 2026-10-17: evidence first, run as improvement rounds
+toward a real-money autonomous bot. Each round is read by rules committed
+beforehand, tested on data the change was not built or tuned on, and needs its
+own go for any run, spend, account access or real-money step; a weak result
+opens the next round. The
+[improvement-rounds decision](decisions/evidence-first-improvement-rounds.md)
+owns the rounds and their stages.
+
 Ordinary local simulations do not require per-trade human approval or create
 operational autonomy grants. Existing scheduled/live lanes retain their own
 recorded authority. The accepted [paper-runtime cutover](decisions/paper-runtime-cutover.md)

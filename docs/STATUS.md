@@ -42,10 +42,16 @@ stays, the regime switcher and overlay are frozen comparison rows, and
 [mean reversion](../src/gpt_trader/features/live_trade/strategies/mean_reversion/)
 are the benchmark pair the reasoning proposer must beat.
 
-Continue by inspecting/running the local product, then evaluating the milestone
-in [Direction](DIRECTION.md#immediate-product-outcome). Do not start the old
-runtime, use its approval grants for the new product, or infer a deployment from
-this page.
+The held-out benchmark ([#1315](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1315))
+is ready to run: its [protocol](../config/experiments/held-out-2026-09-06/PROTOCOL.md)
+and tooling are merged ([#1318](https://github.com/Solders-Girdles-Org/GPT-Trader/pull/1318),
+[#1320](https://github.com/Solders-Girdles-Org/GPT-Trader/pull/1320)) and RJ gave
+its run the go on 2026-10-17. RJ also chose the long-term path that day:
+evidence first, in improvement rounds toward a real-money autonomous bot
+([decision](decisions/evidence-first-improvement-rounds.md)). Continue with
+#1315's run and reading, then propose the next round under that decision. Do
+not start the old runtime, use its approval grants for the new product, or
+infer a deployment from this page.
 
 ## Documentation continuation
 
