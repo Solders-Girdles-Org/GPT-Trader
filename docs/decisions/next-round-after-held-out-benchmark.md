@@ -15,10 +15,11 @@ superseded-by:
 > project if that cannot be built credibly with today's models. The agent's
 > answer is that a fair, cheap test of it can be built now, but the public
 > studies it found give no convincing evidence that today's models beat "just
-> hold" after fees, so whether it is useful is unproven. Round two is one bounded test with a pause rule written down in
-> advance: if the AI does not beat holding, cash and the old rules over five
-> weeks that have not happened yet when the test is frozen, the project
-> pauses until a stronger model is released. The test uses the strongest
+> hold" after fees, so whether it is useful is unproven. Round two is one
+> bounded test with a pause rule written down in advance: if the AI does
+> not beat holding, cash and the old rules over five weeks that have not
+> happened yet when the test is frozen, the project pauses until a stronger
+> model is released. The test uses the strongest
 > model available today. The API key, spending cap and run come to RJ later
 > as one card, which also offers pausing now instead.
 
@@ -149,16 +150,17 @@ What supports building now:
   comparators and reconciliation; W1 adds the AI channel and position review
   to the engine.
 - **The strongest model available today.** RJ's condition is about today's
-  models, so a test on a weaker one could not settle it. Round two uses
-  Claude Fable 5.1, the frontier tier of RJ's workspace model stack and the
-  most capable model on RJ's existing Claude API credits. The strongest
-  alternative is GPT-6 Astra, the other frontier-tier model; it is not the
-  default because it needs a separate paid OpenAI API credential. The card
-  offers it as an optional second arm on the same frozen window, read
-  separately under the same protocol.
+  models, so a test on a weaker one could not settle it. Round two uses the
+  strongest frontier-tier model of RJ's workspace model stack available on
+  RJ's existing Claude API credits at W3's freeze: Claude Fable 5.1 as of
+  2026-10-17. The strongest alternative is GPT-6 Astra, the other
+  frontier-tier model; it is not the default because it needs a separate
+  paid OpenAI API credential. The card offers it as an optional second arm
+  on the same frozen window, read separately under the same protocol.
 - **It is cheap.** At Claude Fable 5.1's list price ($10 input / $50 output
   per million tokens, Anthropic API documentation read 2026-10-17) and an
-  *assumed* 6,000 input and 3,000 output tokens per decision, a turn costs
+  *assumed* 6,000 input and 3,000 output tokens per decision (thinking is
+  billed as output, so W3 freezes the effort level), a turn costs
   about $0.21. Eight coins over a 35-day window cost about $60 deciding once
   a day and about $350 every four hours *(estimates; W2 measures real token
   counts before the card)*. W3 sets a cadence no faster than every four
@@ -230,13 +232,19 @@ as today.
    pass says nothing about beating full-size holding. W3 also fixes, before
    the window: pooled versus per-coin success, what makes a rarely trading
    channel's reading conclusive (round one's 30-round-trip minimum does not
-   fit it), how failed model calls count, that each case runs once with no
-   reruns, and the result net of model spend.
+   fit it), how failed model calls count, the model's effort level, and that
+   each case runs once with no reruns. The bar is judged on trading results
+   alone, like the comparators, which make no model calls; model spend is
+   reported beside it. A model's cost is per decision, not per dollar
+   traded, so on $1,000 test accounts it would swamp any result (about $350
+   at four-hourly decisions against round one's +$213 for holding), while at
+   a larger account size it would not.
 4. **One card to RJ** once W1–W3 have merged: the API credential, a spending
    cap set from W2's measured cost, the run over the frozen window, the
    optional GPT-6 Astra arm, and confirmation that a run on recorded bars
    from a window that started after the freeze counts as forward evidence.
-   The card also offers pausing now instead, which RJ's answer allows. That last
+   The card also offers pausing now instead, which RJ's answer allows, and
+   restates the pause rule below for RJ to confirm. The forward-evidence
    point amends [agentic alpha](adopt-agentic-alpha-direction.md)'s
    forward-only constraint, which RJ set, so it is RJ's to confirm. The
    alternative, a wall-clock run that calls the model every few hours for
@@ -248,24 +256,31 @@ as today.
 Read once, by the protocol W3 commits:
 
 - **Passes the bar under both cost cases:** propose round three, the same
-  test on the next unseen window, before any claim of skill.
-  A pass authorizes further validation, not a claim that autonomous trading
-  works.
+  test on the next unseen window, before any claim of skill. A pass
+  authorizes further validation, not a claim that autonomous trading works.
+  If RJ adds the GPT-6 Astra arm, a pass by either arm opens round three for
+  that model alone, and the report states that two arms were tried; round
+  three's fresh window is the guard against a lucky pass.
 - **Anything else** (fails, trails hold-the-coin, beats only some
-  comparators, inconclusive, or cost-dependent): **the project pauses**. RJ
-  set the pause; treating anything short of a pass as a pause is the agent's
-  reading of "credibly". This is an investment decision on insufficient evidence, not a finding
-  that today's models cannot trade. Pausing records the result here, closes
-  round two's items, and leaves every gate, record and the built channel in
-  place, default-off.
+  comparators, inconclusive, or cost-dependent; for both arms if there are
+  two): **the project pauses**. RJ set the pause; treating anything short
+  of a pass as a pause is the agent's reading of "credibly". RJ's later,
+  specific answer on #1344 replaces, for this round, the
+  [improvement-rounds](evidence-first-improvement-rounds.md) default that a
+  weak result opens the next round. This is an investment decision on
+  insufficient evidence, not a finding that today's models cannot trade.
+  Pausing records the result here, closes round two's items, and leaves
+  every gate, record and the built channel in place, default-off.
 - **Restart test:** the models available at round two's freeze, including
   the GPT-6 Astra arm whether or not RJ adds it, are not eligible; round two
   stands for them. A model is eligible when it is **released after that
   freeze** and enters the frontier tier of RJ's workspace model stack
   (re-evaluated at each major release). Each eligible model gets **one**
-  attempt, in release order: the same protocol, re-frozen for that model
-  before a fresh window that starts after the freeze, with RJ's one-card go. Every attempt is
-  reported here cumulatively, passes and failures alike. The project restarts
+  attempt, in release order: the same protocol, prompt and starting
+  rulebook, changed only where the new model's API requires it (each change
+  recorded), re-frozen for that model before a fresh window that starts
+  after the freeze, with RJ's one-card go. Every attempt is reported here
+  cumulatively, passes and failures alike. The project restarts
   only on a pass, and a pass again means round three's confirmation, not
   proof.
 
