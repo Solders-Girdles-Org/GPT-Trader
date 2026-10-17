@@ -156,11 +156,17 @@ class SpendLedger:
             raise SpendLedgerError("Spend cap must be a positive dollar amount")
         self.path = path
         self.cap_usd = cap_usd
+        if path.is_dir() or not path.parent.is_dir():
+            raise SpendLedgerError(f"Spend ledger {path} must be a file in an existing directory")
         if self._exists():
-            uri = f"{path.resolve().as_uri()}?mode=ro"
+            # Read-write without creating, so an interrupted write's journal is
+            # recovered rather than mistaken for a foreign file.
+            uri = f"{path.resolve().as_uri()}?mode=rw"
             try:
-                with closing(sqlite3.connect(uri, uri=True)) as connection:
+                with closing(sqlite3.connect(uri, uri=True, timeout=30)) as connection:
                     self._check(connection)
+            except sqlite3.OperationalError as error:
+                raise SpendLedgerError(f"Could not read spend ledger {path}: {error}") from None
             except sqlite3.DatabaseError:
                 raise SpendLedgerError(f"{path} is not a spend ledger; name a new file") from None
 
@@ -171,7 +177,10 @@ class SpendLedger:
         """Refuse a file that is not a spend ledger bound to this cap."""
         if connection.execute("PRAGMA application_id").fetchone()[0] != APPLICATION_ID:
             raise SpendLedgerError(f"{self.path} is not a spend ledger; name a new file")
-        (cap,) = connection.execute("SELECT cap_usd FROM ceiling WHERE id = 1").fetchone()
+        row = connection.execute("SELECT cap_usd FROM ceiling WHERE id = 1").fetchone()
+        if row is None:
+            raise SpendLedgerError(f"Spend ledger {self.path} has no cap; name a new file")
+        (cap,) = row
         if Decimal(cap) != self.cap_usd:
             raise SpendLedgerError(
                 f"Spend ledger {self.path} is bound to a ${cap} cap, not ${self.cap_usd}; "
@@ -325,7 +334,14 @@ class AnthropicTransport:
             for name, priced in PRICED_USAGE.items()
             if getattr(usage, name, None) not in priced
         }
-        self.ledger.settle(call, cost, "replied", reply.stop_reason)
+        # Spend billed outside the price table is unknown: keep the reservation.
+        charged = max(cost, reserved) if unpriced else cost
+        self.ledger.settle(call, charged, "replied", reply.stop_reason)
+        if reply.model != self.model:
+            raise TransportHalted(
+                f"Reply came from model {reply.model}, not the pinned {self.model}; "
+                "the turn is not evidence for the model under test"
+            )
         if unpriced:
             raise TransportHalted(
                 f"Reply usage reports {unpriced}, which the price table does not cover; "

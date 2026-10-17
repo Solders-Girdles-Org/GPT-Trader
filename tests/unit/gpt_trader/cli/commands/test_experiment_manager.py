@@ -122,7 +122,7 @@ def stub_transport(monkeypatch):
     """Replace only the SDK client; the real transport and spend ledger run."""
     from gpt_trader.cli.commands import experiment as command
     from gpt_trader.features.experiment.model_transport import AnthropicTransport
-    from tests.unit.gpt_trader.features.experiment.test_model_transport import StubClient
+    from tests.unit.gpt_trader.features.experiment.model_transport_test_helpers import StubClient
 
     built = []
 
@@ -177,23 +177,23 @@ def test_cli_runs_through_the_transport_and_stops_loudly_at_the_cap(
     ledger = tmp_path / "spend.sqlite"
     flags = ["--model-transport", "anthropic", "--spend-ledger", str(ledger)]
     # Each call reserves its worst case (about $0.45 here) and settles at $0.09,
-    # so a $0.60 cap allows a third call only while at most one has been made.
-    assert _run(tmp_path, *flags, "--spend-cap-usd", "0.60", "--max-bars", "2") == 0
-    result = json.loads(capsys.readouterr().out)["data"]
-    assert result["processed_bars"] == 2 and result["manager"]["turns"] == 2
+    # so a $0.60 cap allows a call only while at most one has been made.
+    assert _run(tmp_path, *flags, "--spend-cap-usd", "0.60") == 1
+    error = _error(capsys)
+    assert error["code"] == "OPERATION_FAILED"
+    assert "run stopped: Spend ceiling reached" in error["message"]
+    assert inspect_run(tmp_path / "run")["processed_bars"] == 2
     (transport,) = stub_transport
     assert len(transport.client.messages.calls) == 2
     assert Decimal("0.42") < Decimal(transport.ledger.calls()[0]["reserved_usd"]) < Decimal("0.51")
     assert transport.ledger.spent_usd() == Decimal("0.18")
     resume = ["experiment", "run", "--root", str(tmp_path / "run"), *flags]
     assert main([*resume, "--spend-cap-usd", "0.60", "--format", "json"]) == 1
-    error = _error(capsys)
-    assert error["code"] == "OPERATION_FAILED"
-    assert "run stopped: Spend ceiling reached" in error["message"]
-    assert inspect_run(tmp_path / "run")["processed_bars"] == 2
-    assert len(stub_transport[-1].client.messages.calls) == 0
+    assert "too little room for one call" in _error(capsys)["message"]
+    assert len(stub_transport) == 2 and not stub_transport[-1].client.messages.calls
     assert main([*resume, "--spend-cap-usd", "3", "--format", "json"]) == 1
     assert "bound to a $0.60 cap" in _error(capsys)["message"]
+    assert inspect_run(tmp_path / "run")["processed_bars"] == 2
 
 
 def test_cli_estimate_spend_makes_no_call(tmp_path, capsys, monkeypatch):
@@ -212,9 +212,15 @@ def test_cli_creates_nothing_when_the_sdk_is_missing_or_the_cap_is_too_small(
     monkeypatch.setenv("ANTHROPIC_API_KEY", "k-test")
     ledger = tmp_path / "spend.sqlite"
     flags = ["--model-transport", "anthropic", "--spend-ledger", str(ledger)]
-    assert _run(tmp_path, *flags, "--spend-cap-usd", "0.10") == 1
-    assert "too little room for one call" in _error(capsys)["message"]
-    assert not ledger.exists() and not (tmp_path / "run").exists()
+    # Above one call's output bound ($0.40) but below its full worst case.
+    for cap in ("0.10", "0.41", "0.44"):
+        assert _run(tmp_path, *flags, "--spend-cap-usd", cap) == 1
+        assert "too little room for one call" in _error(capsys)["message"]
+        assert not ledger.exists() and not (tmp_path / "run").exists()
+    for bad in (tmp_path, tmp_path / "missing" / "spend.sqlite"):
+        assert _run(tmp_path, *flags[:2], "--spend-ledger", str(bad), "--spend-cap-usd", "5") == 1
+        assert "existing directory" in _error(capsys)["message"]
+        assert not (tmp_path / "run").exists()
     real_import = builtins.__import__
 
     def without_sdk(name, *args, **kwargs):

@@ -1,10 +1,12 @@
 """Recorded bars that naturally exercise the shipped moving-average benchmark."""
 
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 import pytest
 
 from gpt_trader.features.experiment.inputs import parse_input
+from gpt_trader.features.experiment.model_transport import SpendLedger
 
 
 @pytest.fixture
@@ -36,3 +38,15 @@ def experiment_payload():
 @pytest.fixture
 def experiment_input(experiment_payload):
     return parse_input(experiment_payload)
+
+
+@pytest.fixture
+def manager_input(experiment_payload):
+    return parse_input(
+        {**experiment_payload, "benchmark": "ai-trade-manager", "manager": {"cadence_bars": 1}}
+    )
+
+
+@pytest.fixture
+def ledger(tmp_path):
+    return SpendLedger(tmp_path / "spend.sqlite", Decimal("100"))

@@ -1,12 +1,20 @@
-"""The Anthropic transport and its spend ceiling, through a stubbed SDK client: no network."""
+"""The Anthropic transport through a stubbed SDK client: request, reply, pricing, failures."""
 
 import json
 import re
 from decimal import Decimal
 
 import anthropic
-import httpx2
 import pytest
+from tests.unit.gpt_trader.features.experiment.model_transport_test_helpers import (
+    HOLD,
+    REQUEST,
+    StubClient,
+    first_request,
+    message,
+    status_error,
+    transport,
+)
 
 from gpt_trader.features.experiment.engine import advance, run_experiment
 from gpt_trader.features.experiment.inputs import parse_input
@@ -15,9 +23,6 @@ from gpt_trader.features.experiment.model_transport import (
     OVERHEAD_TOKENS,
     REPLY_SCHEMA,
     AnthropicTransport,
-    SpendCeilingReached,
-    SpendLedger,
-    SpendLedgerError,
     TransportHalted,
     estimate_spend,
     from_environment,
@@ -25,71 +30,7 @@ from gpt_trader.features.experiment.model_transport import (
     wire_params,
     worst_case_usd,
 )
-from gpt_trader.features.experiment.trade_manager import TransportError, build_request
-
-HOLD = json.dumps({"action": "hold", "reason": "nothing worth the cost"})
-REQUEST = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
-
-
-def message(text=HOLD, stop_reason="end_turn", *, model="claude-fable-5-1", **usage):
-    content = [{"type": "thinking", "thinking": "", "signature": "sig"}]
-    if text is not None:
-        content.append({"type": "text", "text": text})
-    return anthropic.types.Message.model_validate(
-        {
-            "id": "msg_test",
-            "type": "message",
-            "role": "assistant",
-            "model": model,
-            "content": content,
-            "stop_reason": stop_reason,
-            "stop_sequence": None,
-            "usage": {"input_tokens": 3000, "output_tokens": 1200, **usage},
-        }
-    )
-
-
-def status_error(status):
-    response = httpx2.Response(status, request=REQUEST)
-    return anthropic.APIStatusError(f"status {status}", response=response, body=None)
-
-
-class StubMessages:
-    def __init__(self, replies):
-        self.replies = list(replies)
-        self.calls = []
-
-    def create(self, **params):
-        self.calls.append(params)
-        reply = self.replies.pop(0) if self.replies else message()
-        if isinstance(reply, BaseException):
-            raise reply
-        return reply
-
-
-class StubClient:
-    def __init__(self, *replies):
-        self.messages = StubMessages(replies)
-
-
-@pytest.fixture
-def manager_input(experiment_payload):
-    return parse_input(
-        {**experiment_payload, "benchmark": "ai-trade-manager", "manager": {"cadence_bars": 1}}
-    )
-
-
-@pytest.fixture
-def ledger(tmp_path):
-    return SpendLedger(tmp_path / "spend.sqlite", Decimal("100"))
-
-
-def first_request(source):
-    return build_request(source, source.scored_index, initial_state(source))
-
-
-def transport(source, ledger, *replies):
-    return AnthropicTransport(source.manager, ledger, StubClient(*replies))
+from gpt_trader.features.experiment.trade_manager import TransportError
 
 
 def test_request_is_pinned_structured_and_carries_no_fallback(manager_input, ledger):
@@ -112,9 +53,9 @@ def test_request_is_pinned_structured_and_carries_no_fallback(manager_input, led
 
 
 def test_success_reports_model_usage_latency_pricing_and_settles_cost(manager_input, ledger):
-    sender = transport(manager_input, ledger, message(model="claude-fable-5-1-served"))
+    sender = transport(manager_input, ledger, message())
     reply = sender.decide(first_request(manager_input))
-    assert reply.model == "claude-fable-5-1-served"
+    assert reply.model == "claude-fable-5-1"
     assert reply.text == HOLD  # the empty thinking block is not part of the reply
     assert reply.stop_reason == "end_turn"
     assert (reply.input_tokens, reply.output_tokens) == (3000, 1200)
@@ -219,70 +160,6 @@ def test_unknown_model_price_refuses_before_any_call(experiment_payload, ledger)
         AnthropicTransport(source.manager, ledger, StubClient())
 
 
-def test_spend_ceiling_stops_the_run_loudly_before_the_call(manager_input, tmp_path):
-    params = wire_params(first_request(manager_input), manager_input.manager)
-    # Room for one worst-case reservation, not two.
-    ledger = SpendLedger(tmp_path / "spend.sqlite", worst_case_usd(params) + Decimal("0.05"))
-    sender = transport(manager_input, ledger)
-    root = tmp_path / "run"
-    with pytest.raises(SpendCeilingReached, match="it was not sent"):
-        run_experiment(root, manager_input, transport=sender)
-    assert len(sender.client.messages.calls) == 1
-    assert inspect_run(root)["processed_bars"] == 1
-    assert ledger.spent_usd() == Decimal("0.09")
-
-
-def test_calls_whose_bar_never_committed_still_count(manager_input, ledger, tmp_path):
-    class CrashBeforeCommit:
-        def __init__(self, inner):
-            self.inner = inner
-            self.model = inner.model
-
-        def decide(self, request):
-            self.inner.decide(request)
-            raise RuntimeError("process died before the journal commit")
-
-    root = tmp_path / "run"
-    with pytest.raises(RuntimeError):
-        run_experiment(
-            root,
-            manager_input,
-            max_bars=1,
-            transport=CrashBeforeCommit(transport(manager_input, ledger)),
-        )
-    assert inspect_run(root)["processed_bars"] == 0
-    run_experiment(root, max_bars=1, transport=transport(manager_input, ledger))
-    assert inspect_run(root)["processed_bars"] == 1
-    assert [call["status"] for call in ledger.calls()] == ["replied", "replied"]
-    assert ledger.spent_usd() == Decimal("0.18")
-
-
-def test_a_call_that_never_settles_keeps_its_full_reservation(manager_input, ledger):
-    sender = transport(manager_input, ledger, KeyboardInterrupt())
-    with pytest.raises(KeyboardInterrupt):
-        sender.decide(first_request(manager_input))
-    (call,) = ledger.calls()
-    assert call["status"] == "reserved" and call["cost_usd"] is None
-    assert ledger.spent_usd() == Decimal(call["reserved_usd"])
-
-
-def test_ledger_is_shared_by_path_and_bound_to_its_cap(manager_input, ledger, tmp_path):
-    transport(manager_input, ledger).decide(first_request(manager_input))
-    again = SpendLedger(tmp_path / "spend.sqlite", Decimal("100"))
-    assert again.spent_usd() == Decimal("0.09")
-    with pytest.raises(SpendLedgerError, match=r"bound to a \$100 cap"):
-        SpendLedger(tmp_path / "spend.sqlite", Decimal("200"))
-    for bad in (Decimal(0), Decimal(-1), Decimal("NaN")):
-        with pytest.raises(SpendLedgerError):
-            SpendLedger(tmp_path / "other.sqlite", bad)
-
-
-def test_an_unusable_ledger_stops_the_run(manager_input, ledger):
-    ledger.path.mkdir()
-    with pytest.raises(TransportHalted, match="is unusable"):
-        transport(manager_input, ledger).decide(first_request(manager_input))
-
-
 def test_environment_credential_and_no_sdk_retries(manager_input, ledger):
     with pytest.raises(TransportHalted, match="ANTHROPIC_API_KEY is not set"):
         from_environment(manager_input.manager, ledger, environ={})
@@ -319,32 +196,6 @@ def test_pinned_request_settings_are_bound_and_validated(experiment_payload, man
             parse_input({**payload, "manager": bad})
 
 
-def test_ledger_file_is_created_only_by_the_first_reservation(manager_input, ledger, tmp_path):
-    assert not ledger.path.exists() and ledger.spent_usd() == 0
-    tiny = SpendLedger(tmp_path / "tiny.sqlite", Decimal("0.01"))
-    with pytest.raises(SpendCeilingReached, match="above the"):
-        transport(manager_input, tiny).decide(first_request(manager_input))
-    assert not tiny.path.exists()
-    transport(manager_input, ledger).decide(first_request(manager_input))
-    assert ledger.path.is_file() and len(ledger.calls()) == 1
-
-
-def test_a_file_that_is_not_a_spend_ledger_is_refused_and_left_unchanged(
-    experiment_input, tmp_path
-):
-    root = tmp_path / "baseline"
-    run_experiment(root, experiment_input, max_bars=1)
-    journal = next(root.iterdir())
-    before = journal.read_bytes()
-    with pytest.raises(SpendLedgerError, match="is not a spend ledger"):
-        SpendLedger(journal, Decimal("5"))
-    text = tmp_path / "notes.txt"
-    text.write_text("not a database")
-    with pytest.raises(SpendLedgerError, match="is not a spend ledger"):
-        SpendLedger(text, Decimal("5"))
-    assert journal.read_bytes() == before and text.read_text() == "not a database"
-
-
 @pytest.mark.parametrize(
     "usage",
     [{"service_tier": "priority"}, {"speed": "fast"}, {"inference_geo": "us"}],
@@ -352,8 +203,10 @@ def test_a_file_that_is_not_a_spend_ledger_is_refused_and_left_unchanged(
 def test_usage_outside_the_price_table_stops_the_run(manager_input, ledger, usage):
     with pytest.raises(TransportHalted, match="price table does not cover"):
         transport(manager_input, ledger, message(**usage)).decide(first_request(manager_input))
-    assert ledger.calls()[0]["status"] == "replied"
-    assert ledger.spent_usd() == Decimal("0.09")
+    (call,) = ledger.calls()
+    assert call["status"] == "replied"
+    # Its real price is unknown, so it keeps the worst-case reservation.
+    assert ledger.spent_usd() == Decimal(call["reserved_usd"])
 
 
 def test_standard_usage_labels_are_accepted(manager_input, ledger):
@@ -374,3 +227,10 @@ def test_hour_cache_writes_are_charged_at_twice_base_input(manager_input, ledger
     reply = message(cache_creation_input_tokens=1000, cache_creation=split)
     transport(manager_input, ledger, reply).decide(first_request(manager_input))
     assert ledger.spent_usd() == Decimal("0.09") + Decimal("0.02")  # 1000 tokens at $20/M
+
+
+def test_a_reply_from_another_model_stops_the_run(manager_input, ledger):
+    sender = transport(manager_input, ledger, message(model="claude-opus-5-5"))
+    with pytest.raises(TransportHalted, match="not the pinned claude-fable-5-1"):
+        sender.decide(first_request(manager_input))
+    assert ledger.spent_usd() == Decimal("0.09")

@@ -28,6 +28,7 @@ from gpt_trader.features.experiment.inputs import (
 from gpt_trader.features.experiment.ledger import (
     DATABASE,
     ExperimentIntegrityError,
+    initial_state,
     inspect_run,
     run_input,
 )
@@ -40,12 +41,14 @@ from gpt_trader.features.experiment.model_transport import (
     estimate_spend,
     from_environment,
     parse_cap,
-    pricing_for,
+    wire_params,
+    worst_case_usd,
 )
 from gpt_trader.features.experiment.reading import case_outcome, combined_action, rule_verdict
 from gpt_trader.features.experiment.trade_manager import (
     DecisionTransportProtocol,
     TransportUnavailableError,
+    build_request,
 )
 
 T = TypeVar("T")
@@ -478,13 +481,15 @@ def _model_transport(
         # Neither creates a file: the ledger is written by its first reservation.
         ledger = SpendLedger(args.spend_ledger, parse_cap(args.spend_cap_usd))
         transport = from_environment(source.manager, ledger)
-        _, output_price = pricing_for(source.manager.model)
-        least = source.manager.max_tokens * output_price / 1_000_000
+        # A new run's first turn is exact (no fill can precede it); a resume's next
+        # turn is near it, and its real reservation is still checked at the call.
+        first = build_request(source, source.scored_index, initial_state(source))
+        least = worst_case_usd(wire_params(first, source.manager))
         if ledger.spent_usd() + least > ledger.cap_usd:
             raise ExperimentCliError(
                 CliErrorCode.OPERATION_FAILED,
                 f"Spend ledger {args.spend_ledger} has ${ledger.spent_usd()} of its "
-                f"${ledger.cap_usd} cap charged, too little room for one call (at least "
+                f"${ledger.cap_usd} cap charged, too little room for one call (up to "
                 f"${least}); nothing was created or advanced",
                 path=str(args.spend_ledger),
             )
