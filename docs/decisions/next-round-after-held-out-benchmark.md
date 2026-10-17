@@ -39,8 +39,8 @@ per coin, at most 20% of it in the market):
   same 20% exposure made +$213 pooled. Any useful approach has to beat that
   in rising markets and stay out in falling ones.
 
-This agrees with earlier evidence: tuning the moving-average rule was positive
-in 0 of 24 trials (M5, [#1241](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1241)),
+This agrees with earlier evidence: no tuned moving-average configuration was
+positive on both evidence windows (0 of 24; M5, [#1241](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1241)),
 and the old paper job's small gross gains did not cover stress costs.
 
 ## Options
@@ -55,16 +55,18 @@ and the old paper job's small gross gains did not cover stress costs.
   into its design: trade rarely, treat holding and staying out as normal
   choices, and count every trade's cost. Building is agent work with no spend.
   Running it needs RJ's separate go on an API credential, a spending cap and
-  the forward window. Weeks of building, then weeks of forward time. This is
-  the only option that moves toward RJ's destination of an autonomous bot.
+  the forward window. Weeks of building, then weeks of forward time. It is the
+  most direct test of whether AI decisions add value, the direction the
+  project already accepted ([agentic alpha](adopt-agentic-alpha-direction.md)).
 - **Option B — Cheaper fixed-rule round.** Redesign the fixed rules to trade
   less (for example, decide on 4-hour or daily bars, add a trend filter), using
   round one's window as design data, and test them on the next unseen window,
   2026-10-11 to 2026-11-15 (readable after 2026-11-15). No model spend, about a
   month. The strongest alternative; not recommended because no fixed rule
-  measured here has yet cleared costs (tuning was 0 for 24, and the best
-  relative performer, mean reversion, had no edge before costs on this
-  window), and a pass would still not be an AI decision-maker.
+  measured here has yet cleared costs (no tuned configuration was positive on
+  both M5 windows, and the best relative performer, mean reversion, had no
+  edge before costs on this window). A pass would still advance the project,
+  as a stronger benchmark, but it would not test AI decisions.
 - **Option C — Stop alpha investment.** Keep the evidence and stop. Always
   RJ's choice; not recommended, because RJ's conditions treat a weak result as
   the start of the next round.
