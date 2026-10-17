@@ -18,8 +18,9 @@ superseded-by:
 > hold" after fees, so whether it is useful is unproven. Round two is one bounded test with a pause rule written down in
 > advance: if the AI does not beat holding, cash and the old rules over five
 > weeks that have not happened yet when the test is frozen, the project
-> pauses until a stronger model is released. The API key, spending cap
-> and run come to RJ later as one card.
+> pauses until a stronger model is released. The test uses the strongest
+> model available today. The API key, spending cap and run come to RJ later
+> as one card, which also offers pausing now instead.
 
 ## Context
 
@@ -74,6 +75,7 @@ and the old paper job's small gross gains did not cover stress costs.
 - **Option C — Stop alpha investment.** Keep the evidence and stop. Always
   RJ's choice; not recommended, because RJ's conditions treat a weak result as
   the start of the next round.
+
 ## Decision
 
 **RJ, 2026-10-17** (the `rj-answer` comment on
@@ -136,20 +138,33 @@ What supports building now:
   forward-only. Models do recall exact prices from before their cutoff
   (Lopez-Lira et al., arXiv 2504.14765), and testing after a model's
   training cutoff is standard practice in published benchmarks (StockBench,
-  arXiv 2510.02209). Claude Opus 5.5's documented knowledge cutoff is June
-  2026 (Anthropic model documentation, read 2026-10-17). If the prompt,
-  rulebook, cadence, model version and reading are frozen before the window
-  **starts**, and the model has no web or other tools, then replaying the
-  window's recorded bars after it closes protects against training
-  contamination and against the builders tuning on the outcome. It does not
-  prove the cutoff is exact, and it does not reproduce live latency, outages
-  or slippage; those are disclosed limits, not solved ones. It reuses the
-  round-one machinery and comparators unchanged.
-- **It is cheap.** At Opus 5.5's list price ($4 input / $20 output per
-  million tokens) and an *assumed* 6,000 input and 3,000 output tokens per
-  decision, a turn costs about $0.08. Eight coins over a 35-day window cost
-  about $24 deciding once a day, about $140 every four hours, and about $565
-  every hour *(estimates; W2 measures real token counts before the card)*.
+  arXiv 2510.02209). Round two goes further: the prompt, rulebook, cadence,
+  pinned model version and reading are frozen before a window that **starts
+  after the freeze**, so no model available at the freeze can have been
+  trained on it, whatever its stated cutoff. With no web or other tools,
+  replaying the window's recorded bars after it closes protects against
+  training contamination and against the builders tuning on the outcome. It
+  does not reproduce live latency, outages or slippage; those are disclosed
+  limits, not solved ones. It reuses the round-one simulator, costs,
+  comparators and reconciliation; W1 adds the AI channel and position review
+  to the engine.
+- **The strongest model available today.** RJ's condition is about today's
+  models, so a test on a weaker one could not settle it. Round two uses
+  Claude Fable 5.1, the frontier tier of RJ's workspace model stack and the
+  most capable model on RJ's existing Claude API credits. The strongest
+  alternative is GPT-6 Astra, the other frontier-tier model; it is not the
+  default because it needs a separate paid OpenAI API credential. The card
+  offers it as an optional second arm on the same frozen window, read
+  separately under the same protocol.
+- **It is cheap.** At Claude Fable 5.1's list price ($10 input / $50 output
+  per million tokens, Anthropic API documentation read 2026-10-17) and an
+  *assumed* 6,000 input and 3,000 output tokens per decision, a turn costs
+  about $0.21. Eight coins over a 35-day window cost about $60 deciding once
+  a day and about $350 every four hours *(estimates; W2 measures real token
+  counts before the card)*. W3 sets a cadence no faster than every four
+  hours: round one showed costs punish frequent trading, and hourly would
+  cost about $1,400. The engine steps through hourly bars, so a slower
+  cadence is a W1 setting.
 
 What argues against expecting a pass (public evidence, gathered 2026-10-17;
 facts from the sources, judgments marked):
@@ -185,7 +200,7 @@ facts from the sources, judgments marked):
   reading, not proof.
 
 **Strongest option rejected: pause now on the public evidence.** It saves a
-few agent-days of building and about $25–150 of model credits. It is
+few agent-days of building and about $60–350 of model credits. It is
 rejected because the public tests are not this setting, the test RJ's
 condition asks for costs little, RJ's credits expire unused, and pausing
 without a reading of our own would leave the restart question just as open
@@ -218,9 +233,10 @@ as today.
    fit it), how failed model calls count, that each case runs once with no
    reruns, and the result net of model spend.
 4. **One card to RJ** once W1–W3 have merged: the API credential, a spending
-   cap set from W2's measured cost, the run over the frozen window, and
-   confirmation that a run on bars dated after the model's documented
-   training cutoff and after the freeze counts as forward evidence. That last
+   cap set from W2's measured cost, the run over the frozen window, the
+   optional GPT-6 Astra arm, and confirmation that a run on recorded bars
+   from a window that started after the freeze counts as forward evidence.
+   The card also offers pausing now instead, which RJ's answer allows. That last
    point amends [agentic alpha](adopt-agentic-alpha-direction.md)'s
    forward-only constraint, which RJ set, so it is RJ's to confirm. The
    alternative, a wall-clock run that calls the model every few hours for
@@ -236,16 +252,19 @@ Read once, by the protocol W3 commits:
   A pass authorizes further validation, not a claim that autonomous trading
   works.
 - **Anything else** (fails, trails hold-the-coin, beats only some
-  comparators, inconclusive, or cost-dependent): **the project pauses**, per
-  RJ. This is an investment decision on insufficient evidence, not a finding
+  comparators, inconclusive, or cost-dependent): **the project pauses**. RJ
+  set the pause; treating anything short of a pass as a pause is the agent's
+  reading of "credibly". This is an investment decision on insufficient evidence, not a finding
   that today's models cannot trade. Pausing records the result here, closes
   round two's items, and leaves every gate, record and the built channel in
   place, default-off.
-- **Restart test:** a model is eligible when it enters the frontier tier of
-  RJ's workspace model stack (re-evaluated at each major release) and has a
-  documented training cutoff. Each eligible model gets **one** attempt, in
-  release order: the same protocol, re-frozen for that model before a fresh
-  window that starts after the freeze, with RJ's one-card go. Every attempt is
+- **Restart test:** the models available at round two's freeze, including
+  the GPT-6 Astra arm whether or not RJ adds it, are not eligible; round two
+  stands for them. A model is eligible when it is **released after that
+  freeze** and enters the frontier tier of RJ's workspace model stack
+  (re-evaluated at each major release). Each eligible model gets **one**
+  attempt, in release order: the same protocol, re-frozen for that model
+  before a fresh window that starts after the freeze, with RJ's one-card go. Every attempt is
   reported here cumulatively, passes and failures alike. The project restarts
   only on a pass, and a pass again means round three's confirmation, not
   proof.

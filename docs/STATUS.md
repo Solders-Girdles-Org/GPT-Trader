@@ -50,8 +50,10 @@ ran that day under its committed [protocol](../config/experiments/held-out-2026-
 and read action D: neither fixed rule survives costs, and hold-the-coin beat
 both ([result](decisions/held-out-benchmark-before-reasoning-proposer.md#result-2026-10-17)).
 RJ chose round two the same day: an AI that manages the trades on its own,
-tested once against a predeclared bar, with the project pausing until a
-stronger model if it fails ([decision](decisions/next-round-after-held-out-benchmark.md)).
+or a pause until a stronger model if that cannot be built credibly today. The
+agent's plan is one test of the strongest model available against a
+predeclared bar, pausing if it does not pass
+([decision](decisions/next-round-after-held-out-benchmark.md)).
 Continue with the build items under
 [#1252](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1252), W1
 first; no model call or spend happens before RJ's one card for the credential,
