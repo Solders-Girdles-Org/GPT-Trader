@@ -33,6 +33,9 @@ DEFAULT_RULEBOOK = (
     "normal choices. Exit when the reason you entered no longer holds."
 )
 MAX_RULEBOOK_CHARS = 4000
+MANAGER_EFFORTS = ("low", "medium", "high", "xhigh", "max")
+# Non-streaming requests above this output cap risk the SDK's HTTP timeout.
+MAX_MANAGER_OUTPUT_TOKENS = 20000
 
 
 @lru_cache(maxsize=1)
@@ -83,11 +86,24 @@ class ManagerSettings:
     cadence_bars: int = 4
     # Closed bars in each decision's context, ending at the decision bar.
     history_bars: int = 48
+    # The model transport's pinned request settings; the round-two protocol
+    # freezes its own. Output tokens (thinking included) never exceed max_tokens.
+    model: str = "claude-fable-5-1"
+    effort: str = "high"
+    max_tokens: int = 8000
 
     def __post_init__(self) -> None:
         if not isinstance(self.rulebook, str) or not 0 < len(self.rulebook) <= MAX_RULEBOOK_CHARS:
             raise ValueError(f"Manager rulebook must be 1 to {MAX_RULEBOOK_CHARS} characters")
-        for name, upper in (("cadence_bars", 168), ("history_bars", 500)):
+        if not isinstance(self.model, str) or not self.model:
+            raise ValueError("Manager model must be a model id")
+        if self.effort not in MANAGER_EFFORTS:
+            raise ValueError(f"Manager effort must be one of {', '.join(MANAGER_EFFORTS)}")
+        for name, upper in (
+            ("cadence_bars", 168),
+            ("history_bars", 500),
+            ("max_tokens", MAX_MANAGER_OUTPUT_TOKENS),
+        ):
             value = getattr(self, name)
             if type(value) is not int or not 1 <= value <= upper:
                 raise ValueError(f"Manager {name} must be an integer from 1 to {upper}")

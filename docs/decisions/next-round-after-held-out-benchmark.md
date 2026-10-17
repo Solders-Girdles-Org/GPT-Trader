@@ -175,6 +175,26 @@ What supports building now:
   hourly would cost
   about $2,800. The engine steps through hourly bars, so a slower
   cadence is a W1 setting.
+- **Measured request size (W2, 2026-10-17).** `experiment estimate-spend`
+  rebuilt every four-hourly request from round one's 16 recorded inputs
+  offline, with no key or call, using W1's context (instructions, 48 bars,
+  account, starting rulebook) and W2's reply schema. The context is
+  6,400–6,900 bytes per turn. *Method and margin:* a token covers at least one
+  byte, so a request's bytes plus a 2,000-token allowance for what the API
+  adds bound its input tokens: at most 10,497 per turn, mean 10,220. A real
+  count is likely well below the bound, since a token usually spans several
+  bytes, but it is known only from the first approved call. Output is bounded
+  by `max_tokens` (8,000 as a placeholder until W3 freezes it), thinking
+  included. A rulebook rewritten to its 4,000-character limit adds about
+  4,000 bytes, and each call is bounded from its own bytes. For the 3,360
+  cadence turns (16 accounts × 35 days × 6), the worst case is about $1,773
+  *(derived: the input bound at the cache-write rate of $12.50 per million,
+  which the spend stop reserves, plus 8,000 output tokens at $50 per million,
+  about $0.53 a turn)*. At the input bound and the assumed 3,000 output
+  tokens a turn costs about $0.25, about $850 *(derived)*, against the
+  earlier $710. These figures replace the assumed 6,000 input tokens; W3
+  reruns the command on its frozen inputs for the card, and adds turns for
+  fills.
 
 What argues against expecting a pass (public evidence, gathered 2026-10-17;
 facts from the sources, judgments marked):

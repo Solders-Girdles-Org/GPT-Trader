@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import functools
 import json
+import os
 import sqlite3
 from argparse import Namespace
 from collections.abc import Callable
@@ -27,11 +28,28 @@ from gpt_trader.features.experiment.inputs import (
 from gpt_trader.features.experiment.ledger import (
     DATABASE,
     ExperimentIntegrityError,
+    initial_state,
     inspect_run,
     run_input,
 )
+from gpt_trader.features.experiment.model_transport import (
+    CREDENTIAL_ENV,
+    SpendCeilingReached,
+    SpendLedger,
+    SpendLedgerError,
+    TransportHalted,
+    estimate_spend,
+    from_environment,
+    parse_cap,
+    wire_params,
+    worst_case_usd,
+)
 from gpt_trader.features.experiment.reading import case_outcome, combined_action, rule_verdict
-from gpt_trader.features.experiment.trade_manager import TransportUnavailableError
+from gpt_trader.features.experiment.trade_manager import (
+    DecisionTransportProtocol,
+    TransportUnavailableError,
+    build_request,
+)
 
 T = TypeVar("T")
 Handler = Callable[[Namespace], CliResponse]
@@ -228,6 +246,13 @@ def _on_root(root: Path, operation: Callable[[], T]) -> T:
         raise ExperimentCliError(
             CliErrorCode.OPERATION_FAILED, f"Experiment root {root}: {error}", root=str(root)
         ) from None
+    except (SpendCeilingReached, TransportHalted) as error:
+        raise ExperimentCliError(
+            CliErrorCode.OPERATION_FAILED,
+            f"Experiment root {root}: run stopped: {error}. The bar it was deciding was not "
+            "committed; earlier bars are kept",
+            root=str(root),
+        ) from None
     except OSError as error:
         raise ExperimentCliError(
             CliErrorCode.INVALID_ARGUMENT,
@@ -270,7 +295,23 @@ def register(subparsers: Any) -> None:
                 choices=BENCHMARKS,
                 help="Decision channel; defaults to the input file's channel, else baseline. Must "
                 "not contradict a channel the file names; bound to the run and checked on "
-                "resume. ai-trade-manager needs a model transport, which this build lacks",
+                "resume. ai-trade-manager runs only with --model-transport",
+            )
+            command.add_argument(
+                "--model-transport",
+                choices=("anthropic",),
+                help="Opt in to paid model calls for the ai-trade-manager channel, with the "
+                f"credential from {CREDENTIAL_ENV}; requires --spend-ledger and --spend-cap-usd",
+            )
+            command.add_argument(
+                "--spend-ledger",
+                type=Path,
+                help="Spend ledger file outside the run, shared by every run under one cap; "
+                "created on first use and bound to its cap",
+            )
+            command.add_argument(
+                "--spend-cap-usd",
+                help="Hard spend cap in USD; a call that could pass it is never sent",
             )
         add_output_options(command)
         command.set_defaults(handler=_reported(handle))
@@ -284,6 +325,14 @@ def register(subparsers: Any) -> None:
     fetch.add_argument("--out", type=Path, required=True, help="New, empty evidence directory")
     add_output_options(fetch)
     fetch.set_defaults(handler=_reported(handle_fetch))
+    estimate = commands.add_parser(
+        "estimate-spend",
+        help="Measure an ai-trade-manager input's model requests offline and bound their "
+        "cost (no credential, network or model call)",
+    )
+    estimate.add_argument("--input", type=Path, required=True)
+    add_output_options(estimate)
+    estimate.set_defaults(handler=_reported(handle_estimate))
     verify = commands.add_parser(
         "verify-input",
         help="Rebuild inputs from their raw capture and refuse any difference",
@@ -324,12 +373,19 @@ def handle(args: Namespace) -> CliResponse:
             channel = _on_root(root, lambda: run_input(root))["benchmark"]
         else:
             channel = source.benchmark
-        if channel == MANAGER_CHANNEL:
-            # No model transport ships yet (W2, #1252); refuse before creating or advancing.
+        if channel == MANAGER_CHANNEL and args.model_transport is None:
+            # Model calls cost money; refuse before creating or advancing anything.
             raise ExperimentCliError(
                 CliErrorCode.OPERATION_FAILED,
-                f"The {MANAGER_CHANNEL} channel needs a model transport, which this build "
-                "lacks; nothing was created or advanced",
+                f"The {MANAGER_CHANNEL} channel needs a model transport; paid model calls run "
+                "only with --model-transport anthropic, --spend-ledger and --spend-cap-usd. "
+                "Nothing was created or advanced",
+                root=str(root),
+            )
+        if channel != MANAGER_CHANNEL and args.model_transport is not None:
+            raise ExperimentCliError(
+                CliErrorCode.INVALID_ARGUMENT,
+                f"--model-transport applies only to the {MANAGER_CHANNEL} channel",
                 root=str(root),
             )
         if source is not None and root.exists() and not root.is_dir():
@@ -349,9 +405,20 @@ def handle(args: Namespace) -> CliResponse:
                 f"New experiment requires an empty directory; {root} is not empty",
                 root=str(root),
             )
+        transport = None
+        if args.model_transport is not None:
+            bound = source or _on_root(root, lambda: parse_input(run_input(root)))
+            assert bound.manager is not None
+            transport = _model_transport(args, root, bound)
         result = _on_root(
             root,
-            lambda: run_experiment(root, source, max_bars=args.max_bars, benchmark=args.benchmark),
+            lambda: run_experiment(
+                root,
+                source,
+                max_bars=args.max_bars,
+                benchmark=args.benchmark,
+                transport=transport,
+            ),
         )
     account = result["account"]
     valuation = result["end_valuation"] or {}
@@ -375,6 +442,89 @@ def handle(args: Namespace) -> CliResponse:
     return CliResponse.success_response(
         f"experiment {args.experiment_command}",
         data=result if args.output_format == "json" else text,
+    )
+
+
+def _model_transport(
+    args: Namespace, root: Path, source: ExperimentInput
+) -> DecisionTransportProtocol:
+    """Check the spend ledger and build the real transport; neither creates a file."""
+    assert source.manager is not None
+    missing = [
+        flag
+        for flag, value in (
+            ("--spend-ledger", args.spend_ledger),
+            ("--spend-cap-usd", args.spend_cap_usd),
+        )
+        if value is None
+    ]
+    if missing:
+        raise ExperimentCliError(
+            CliErrorCode.MISSING_ARGUMENT,
+            f"--model-transport requires {' and '.join(missing)}; no model call is made without "
+            "a hard spend cap",
+        )
+    ledger_path = args.spend_ledger.resolve()
+    if ledger_path == root.resolve() or root.resolve() in ledger_path.parents:
+        raise ExperimentCliError(
+            CliErrorCode.INVALID_ARGUMENT,
+            f"Spend ledger {args.spend_ledger} must be outside the experiment root {root}",
+            path=str(args.spend_ledger),
+        )
+    if not os.environ.get(CREDENTIAL_ENV):
+        raise ExperimentCliError(
+            CliErrorCode.MISSING_ARGUMENT,
+            f"--model-transport anthropic reads its credential from {CREDENTIAL_ENV}, which is "
+            "not set; nothing was created or advanced",
+        )
+    try:
+        # Neither creates a file: the ledger is written by its first reservation.
+        ledger = SpendLedger(args.spend_ledger, parse_cap(args.spend_cap_usd))
+        transport = from_environment(source.manager, ledger)
+        # A new run's first turn is exact (no fill can precede it); a resume's next
+        # turn is near it, and its real reservation is still checked at the call.
+        first = build_request(source, source.scored_index, initial_state(source))
+        least = worst_case_usd(wire_params(first, source.manager))
+        if ledger.spent_usd() + least > ledger.cap_usd:
+            raise ExperimentCliError(
+                CliErrorCode.OPERATION_FAILED,
+                f"Spend ledger {args.spend_ledger} has ${ledger.spent_usd()} of its "
+                f"${ledger.cap_usd} cap charged, too little room for one call (up to "
+                f"${least}); nothing was created or advanced",
+                path=str(args.spend_ledger),
+            )
+        return transport
+    except SpendLedgerError as error:
+        raise ExperimentCliError(
+            CliErrorCode.CONFIG_INVALID, str(error), path=str(args.spend_ledger)
+        ) from None
+    except TransportHalted as error:
+        raise ExperimentCliError(CliErrorCode.OPERATION_FAILED, str(error)) from None
+    except (sqlite3.DatabaseError, OSError) as error:
+        raise ExperimentCliError(
+            CliErrorCode.OPERATION_FAILED,
+            f"Could not use spend ledger {args.spend_ledger}: {error}",
+            path=str(args.spend_ledger),
+        ) from None
+
+
+def handle_estimate(args: Namespace) -> CliResponse:
+    source = _load_input(args.input, None)
+    if source.manager is None:
+        raise ExperimentCliError(
+            CliErrorCode.INVALID_ARGUMENT,
+            f"Input {args.input} is not an {MANAGER_CHANNEL} input",
+            path=str(args.input),
+        )
+    try:
+        result = estimate_spend(source)
+    except TransportHalted as error:
+        raise ExperimentCliError(
+            CliErrorCode.CONFIG_INVALID, f"Input {args.input}: {error}", path=str(args.input)
+        ) from None
+    return CliResponse.success_response(
+        "experiment estimate-spend",
+        data=result if args.output_format == "json" else json.dumps(result, indent=1),
     )
 
 
