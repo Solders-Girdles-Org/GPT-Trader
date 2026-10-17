@@ -7,8 +7,9 @@ the cap. The ledger is a file of its own, outside any run's journal, so a call
 whose bar never commits (a crash between the call and the journal commit
 re-asks for that bar) stays counted. A reply settles its reservation at the
 measured cost; a failure whose billing is unknown keeps the full reservation.
-A reply costing more than its reservation, or reporting a service tier, speed
-or region outside the price table, stops the run.
+A reply costing more than its reservation, coming from a model other than the
+pinned one, or reporting a service tier, speed or region outside the price
+table, stops the run.
 
 The request is pinned to the input's manager settings (model, effort and
 ``max_tokens``, which the round-two protocol freezes) and asks for structured
@@ -168,7 +169,10 @@ class SpendLedger:
             except sqlite3.OperationalError as error:
                 raise SpendLedgerError(f"Could not read spend ledger {path}: {error}") from None
             except sqlite3.DatabaseError:
-                raise SpendLedgerError(f"{path} is not a spend ledger; name a new file") from None
+                raise SpendLedgerError(
+                    f"{path} is not a readable spend ledger. If it is this cap's ledger, it is "
+                    "damaged: recover it, since a new file would restart the count at $0"
+                ) from None
 
     def _exists(self) -> bool:
         return self.path.is_file() and self.path.stat().st_size > 0
@@ -334,10 +338,12 @@ class AnthropicTransport:
             for name, priced in PRICED_USAGE.items()
             if getattr(usage, name, None) not in priced
         }
-        # Spend billed outside the price table is unknown: keep the reservation.
-        charged = max(cost, reserved) if unpriced else cost
+        # Spend billed outside the price table, or for another model, is unknown:
+        # keep the reservation.
+        foreign = reply.model != self.model
+        charged = max(cost, reserved) if unpriced or foreign else cost
         self.ledger.settle(call, charged, "replied", reply.stop_reason)
-        if reply.model != self.model:
+        if foreign:
             raise TransportHalted(
                 f"Reply came from model {reply.model}, not the pinned {self.model}; "
                 "the turn is not evidence for the model under test"

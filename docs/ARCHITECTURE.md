@@ -59,8 +59,8 @@ Anthropic transport in `features/experiment/model_transport.py` runs only
 behind `--model-transport anthropic`, and reserves each call's worst-case cost
 in a spend ledger outside the journal before sending it, so a call that could
 pass the cap is never sent, an uncommitted call still counts, and a reply
-costing more than its reservation or billed outside the price table stops the
-run), an optional `scored_from` makes
+costing more than its reservation, from another model or billed outside the
+price table stops the run), an optional `scored_from` makes
 earlier bars indicator history only, and reports value anything still held at
 liquidation beside cash and hold-the-coin. `experiment fetch-input` builds
 inputs from a retained raw public Coinbase capture, `experiment verify-input`

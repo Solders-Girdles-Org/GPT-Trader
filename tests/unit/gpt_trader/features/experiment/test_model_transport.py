@@ -233,4 +233,6 @@ def test_a_reply_from_another_model_stops_the_run(manager_input, ledger):
     sender = transport(manager_input, ledger, message(model="claude-opus-5-5"))
     with pytest.raises(TransportHalted, match="not the pinned claude-fable-5-1"):
         sender.decide(first_request(manager_input))
-    assert ledger.spent_usd() == Decimal("0.09")
+    # Its real billing is unknown, so it keeps the worst-case reservation.
+    (call,) = ledger.calls()
+    assert ledger.spent_usd() == Decimal(call["reserved_usd"]) > Decimal("0.09")

@@ -105,7 +105,7 @@ def test_a_file_that_is_not_a_spend_ledger_is_refused_and_left_unchanged(
         SpendLedger(journal, Decimal("5"))
     text = tmp_path / "notes.txt"
     text.write_text("not a database")
-    with pytest.raises(SpendLedgerError, match="is not a spend ledger"):
+    with pytest.raises(SpendLedgerError, match="not a readable spend ledger.*restart the count"):
         SpendLedger(text, Decimal("5"))
     assert journal.read_bytes() == before and text.read_text() == "not a database"
 
