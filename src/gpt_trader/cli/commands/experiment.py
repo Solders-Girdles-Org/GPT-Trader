@@ -19,6 +19,7 @@ from gpt_trader.features.experiment.engine import run_experiment
 from gpt_trader.features.experiment.held_out import build_input_payload, verify_input_payload
 from gpt_trader.features.experiment.inputs import (
     BENCHMARKS,
+    MANAGER_CHANNEL,
     ExperimentInput,
     parse_input,
     with_benchmark,
@@ -318,23 +319,31 @@ def handle(args: Namespace) -> CliResponse:
         result = _inspect(root)
     else:
         source = _load_input(args.input, args.benchmark) if args.input else None
-        if source is not None and source.manager is not None:
-            # No model transport ships yet (W2, #1252); refuse before creating a root.
-            raise ExperimentCliError(
-                CliErrorCode.OPERATION_FAILED,
-                f"The {source.benchmark} channel needs a model transport, which this build "
-                "lacks; nothing was created",
-                root=str(root),
-            )
         if source is None:
             _existing_run(root, "; create it with --input")
-        elif root.exists() and not root.is_dir():
+            channel = _on_root(root, lambda: run_input(root))["benchmark"]
+        else:
+            channel = source.benchmark
+        if channel == MANAGER_CHANNEL:
+            # No model transport ships yet (W2, #1252); refuse before creating or advancing.
+            raise ExperimentCliError(
+                CliErrorCode.OPERATION_FAILED,
+                f"The {MANAGER_CHANNEL} channel needs a model transport, which this build "
+                "lacks; nothing was created or advanced",
+                root=str(root),
+            )
+        if source is not None and root.exists() and not root.is_dir():
             raise ExperimentCliError(
                 CliErrorCode.INVALID_ARGUMENT,
                 f"Experiment root {root} is not a directory",
                 root=str(root),
             )
-        elif not (root / DATABASE).exists() and root.exists() and any(root.iterdir()):
+        elif (
+            source is not None
+            and not (root / DATABASE).exists()
+            and root.exists()
+            and any(root.iterdir())
+        ):
             raise ExperimentCliError(
                 CliErrorCode.INVALID_ARGUMENT,
                 f"New experiment requires an empty directory; {root} is not empty",

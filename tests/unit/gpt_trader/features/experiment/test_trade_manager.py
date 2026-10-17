@@ -176,6 +176,7 @@ def test_rulebook_rewrite_is_versioned_journaled_and_sent_back(manager_payload):
         ({**HOLD, "leverage": 5}, "unknown reply fields"),
         ({**HOLD, "rulebook": "y" * 4001}, "rulebook must be"),
         ({k: v for k, v in ENTER.items() if k != "target"}, "enter requires"),
+        ('{"action": "exit", "reason": "a", "action": "hold"}', "repeats a field"),
     ],
 )
 def test_malformed_reply_makes_no_trade_and_records_why(manager_payload, reply, why):
@@ -281,3 +282,47 @@ def test_replay_refuses_a_request_that_differs_from_the_journal(manager_payload)
         recorded.decide(changed)
     with pytest.raises(ExperimentIntegrityError, match="lacks"):
         RecordedTransport(None).decide(turn["request"])
+
+
+def test_journaled_failed_refused_and_malformed_turns_replay_without_re_asking(
+    manager_payload, tmp_path
+):
+    source = parse_input(manager_payload)
+    script = {2: TransportError("timeout"), 3: "not json"}
+    first = transport_for(manager_payload, script)
+    run_experiment(tmp_path / "run", source, max_bars=5, transport=first)
+    resumed = transport_for(manager_payload, script)
+    report = run_experiment(tmp_path / "run", transport=resumed)
+    assert report["manager"]["outcomes"] == {"accepted": 58, "failed": 1, "malformed": 1}
+    assert len(first.requests) == 5 and len(resumed.requests) == len(source.candles) - 5
+    assert report["account"]["fill_count"] == 0
+    refused = transport_for(manager_payload, {2: ENTER}, stop_reason="refusal")
+    run_experiment(tmp_path / "refused", source, max_bars=3, transport=refused)
+    assert inspect_run(tmp_path / "refused")["manager"]["outcomes"] == {"refused": 3}
+
+
+def test_stop_risk_binds_when_the_model_stop_is_wide(manager_payload):
+    source = parse_input(manager_payload)
+    reply = {**ENTER, "size_fraction": "0.2", "stop": "80"}
+    events = replay(source, transport_for(manager_payload, {2: reply}))
+    price, fee, slip = Decimal(100) * Decimal("1.0005"), Decimal("0.001"), Decimal("0.0005")
+    stop_fill = Decimal(80) * (1 - slip)
+    loss_per_unit = price - stop_fill + fee * (price + stop_fill)
+    expected = (Decimal(1000) * Decimal("0.01") / loss_per_unit).quantize(
+        Decimal("0.00000001"), rounding=ROUND_DOWN
+    )
+    assert Decimal(events[3]["fills"][0]["quantity"]) == expected
+    assert expected < Decimal(1000) * Decimal("0.2") / price
+
+
+def test_drawdown_halt_stops_turns_but_entry_rails_still_exit(manager_payload):
+    payload = {**manager_payload, "settings": {"drawdown_fraction": "0.001"}}
+    source = parse_input(payload)
+    reply = {**ENTER, "size_fraction": "0.2", "stop": "90", "expires_in_hours": 720}
+    events = replay(source, transport_for(payload, {2: reply}))
+    halted = next(event["sequence"] for event in events if event["state"]["halted"])
+    assert halted == 50
+    assert all(event["turn"] is None for event in events[halted:])
+    assert events[halted]["decision"] == "new entries halted by drawdown limit"
+    exits = [event for event in events if event["fills"] and event["fills"][0]["side"] == "sell"]
+    assert exits[0]["sequence"] > halted and "position settled: target" in exits[0]["actions"]

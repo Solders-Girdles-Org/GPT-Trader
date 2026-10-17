@@ -220,10 +220,19 @@ def _price(value: Any, name: str) -> Decimal:
     return number
 
 
+def _unique_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    keys = [key for key, _ in pairs]
+    if len(set(keys)) != len(keys):
+        raise MalformedReplyError("reply repeats a field")
+    return dict(pairs)
+
+
 def parse_reply(text: str, *, holding: bool, last_close: Decimal) -> Decision:
     """Accept exactly one valid decision for the current account, or raise why not."""
     try:
-        reply = json.loads(text, parse_float=Decimal)
+        reply = json.loads(text, parse_float=Decimal, object_pairs_hook=_unique_keys)
+    except MalformedReplyError:
+        raise
     except ValueError:
         raise MalformedReplyError("reply is not one JSON object") from None
     if not isinstance(reply, dict):
