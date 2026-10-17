@@ -225,6 +225,11 @@ Agent-owned orchestration, in order:
 5. Read the result against the predeclared criterion and bring RJ the single
    product choice it implies: fund a forward reasoning test judged against
    the forward-test bar, or stop alpha investment with the evidence recorded.
+   *Update 2026-10-17: under RJ's
+   [improvement-rounds decision](evidence-first-improvement-rounds.md), action
+   D opens the next round: the agent proposes what to change and how to test
+   it on unseen data, rather than recommending a stop. The reading itself is
+   unchanged.*
 
 Until step 5, no W1–W4 implementation, model credential or forward lane is
 started under #1252. The venue re-open trigger in

@@ -40,6 +40,10 @@ market experiment with disclosed costs, missing-data treatment and no-trade/loss
 cases. Its result should tell RJ whether further investment is useful, not
 merely satisfy a process gate.
 
+RJ chose the path toward that destination on 2026-10-17: evidence first, run
+as [improvement rounds](decisions/evidence-first-improvement-rounds.md); that
+decision owns the rounds, their conditions and stages.
+
 Ordinary local simulations do not require per-trade human approval or create
 operational autonomy grants. Existing scheduled/live lanes retain their own
 recorded authority. The accepted [paper-runtime cutover](decisions/paper-runtime-cutover.md)
