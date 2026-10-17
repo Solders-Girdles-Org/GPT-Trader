@@ -392,3 +392,8 @@ def test_cli_help_describes_run_and_inspect(capsys):
     help_text = capsys.readouterr().out
     assert "Create or resume a recorded experiment" in help_text
     assert "Show a recorded experiment's state without changing it" in help_text
+    with pytest.raises(SystemExit):
+        main(["experiment", "run", "--help"])
+    run_help = " ".join(capsys.readouterr().out.split())
+    assert "defaults to the input file's rule, else baseline" in run_help
+    assert "default baseline" not in run_help

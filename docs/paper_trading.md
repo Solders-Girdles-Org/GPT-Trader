@@ -49,7 +49,8 @@ copy. Each input has `schema_version: 1`, `source`, `symbol`, `recorded_at`,
 `candles`, and optional `settings`, `benchmark` (`baseline`, the default, or
 `mean-reversion`) and `scored_from` (the start time of the first bar on which
 a decision may be taken; earlier bars are indicator history only). `run
---benchmark` sets the channel for a new run and must match on resume. Hourly bars contain `ts`, `open`, `high`,
+--benchmark` is optional: without it a new run uses the file's `benchmark`;
+with it, it must match the file and, on resume, the bound run. Hourly bars contain `ts`, `open`, `high`,
 `low`, `close`, `volume`; timestamps require timezones. Supply 1–2000 ordered,
 contiguous, finite valid bars. All must have closed by `recorded_at`, with the
 last bar less than one hour old at that recorded cutoff. This is historical

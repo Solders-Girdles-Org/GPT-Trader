@@ -262,7 +262,8 @@ def register(subparsers: Any) -> None:
             command.add_argument(
                 "--benchmark",
                 choices=BENCHMARKS,
-                help="Rule channel (default baseline); bound to the run and checked on resume",
+                help="Rule channel; defaults to the input file's rule, else baseline. Must match "
+                "the file; bound to the run and checked on resume",
             )
         add_output_options(command)
         command.set_defaults(handler=_reported(handle))
