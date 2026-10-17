@@ -19,8 +19,8 @@ superseded-by:
 > bounded test with a pause rule written down in advance: if the AI does
 > not beat holding, cash and the old rules over five weeks that have not
 > happened yet when the test is frozen, the project pauses until a stronger
-> model is released. The test uses the strongest
-> model available today. The API key, spending cap and run come to RJ later
+> model is released. The test uses the strongest model available when it
+> is frozen. The API key, spending cap and run come to RJ later
 > as one card, which also offers pausing now instead.
 
 ## Context
@@ -149,7 +149,7 @@ What supports building now:
   limits, not solved ones. It reuses the round-one simulator, costs,
   comparators and reconciliation; W1 adds the AI channel and position review
   to the engine.
-- **The strongest model available today.** RJ's condition is about today's
+- **The strongest model available at the freeze.** RJ's condition is about today's
   models, so a test on a weaker one could not settle it. Round two uses the
   strongest frontier-tier model of RJ's workspace model stack available on
   RJ's existing Claude API credits at W3's freeze: Claude Fable 5.1 as of
@@ -161,11 +161,14 @@ What supports building now:
   per million tokens, Anthropic API documentation read 2026-10-17) and an
   *assumed* 6,000 input and 3,000 output tokens per decision (thinking is
   billed as output, so W3 freezes the effort level), a turn costs
-  about $0.21. Eight coins over a 35-day window cost about $60 deciding once
-  a day and about $350 every four hours *(estimates; W2 measures real token
-  counts before the card)*. W3 sets a cadence no faster than every four
-  hours: round one showed costs punish frequent trading, and hourly would
-  cost about $1,400. The engine steps through hourly bars, so a slower
+  about $0.21. The bar must pass under both cost cases, each its own
+  account, so the AI runs 16 accounts (8 coins × 2 cost cases) over a
+  35-day window: about $120 deciding once a day and about $710 every four
+  hours, before extra turns on fills and stops and before the optional
+  second arm *(estimates; W2 measures real token counts for all of these
+  before the card)*. W3 sets a cadence no faster than every four hours:
+  round one showed costs punish frequent trading, and hourly would cost
+  about $2,800. The engine steps through hourly bars, so a slower
   cadence is a W1 setting.
 
 What argues against expecting a pass (public evidence, gathered 2026-10-17;
@@ -202,7 +205,7 @@ facts from the sources, judgments marked):
   reading, not proof.
 
 **Strongest option rejected: pause now on the public evidence.** It saves a
-few agent-days of building and about $60–350 of model credits. It is
+few agent-days of building and about $120–710 of model credits. It is
 rejected because the public tests are not this setting, the test RJ's
 condition asks for costs little, RJ's credits expire unused, and pausing
 without a reading of our own would leave the restart question just as open
@@ -237,8 +240,11 @@ as today.
    alone, like the comparators, which make no model calls; model spend is
    reported beside it. A model's cost is per decision, not per dollar
    traded, so on $1,000 test accounts it would swamp any result (about $350
-   at four-hourly decisions against round one's +$213 for holding), while at
-   a larger account size it would not.
+   per cost case at four-hourly decisions against round one's +$213 for
+   holding), while at a larger account size it would not; the card says so
+   plainly. W3 also freezes the source code that shapes what the model sees
+   and does (through the journal's source hash, as round one did) and says
+   in advance how a defect found after the window opens is handled.
 4. **One card to RJ** once W1–W3 have merged: the API credential, a spending
    cap set from W2's measured cost, the run over the frozen window, the
    optional GPT-6 Astra arm, and confirmation that a run on recorded bars
@@ -269,8 +275,9 @@ Read once, by the protocol W3 commits:
   [improvement-rounds](evidence-first-improvement-rounds.md) default that a
   weak result opens the next round. This is an investment decision on
   insufficient evidence, not a finding that today's models cannot trade.
-  Pausing records the result here, closes round two's items, and leaves
-  every gate, record and the built channel in place, default-off.
+  Pausing records the result here, closes round two's build items, leaves
+  one open restart-watch item for the agent, and leaves every gate, record
+  and the built channel in place, default-off.
 - **Restart test:** the models available at round two's freeze, including
   the GPT-6 Astra arm whether or not RJ adds it, are not eligible; round two
   stands for them. A model is eligible when it is **released after that

@@ -86,6 +86,9 @@ The stages, in order:
   stays sequenced after #1315's result; it is one candidate for stage 3, not a
   commitment.
 - Stage 3 and later work is filed as issues when stage 2's reading names it.
+- 2026-10-17: for round two, RJ's later answer on #1344 replaces condition 3's
+  default with a predeclared pause if the AI trade manager does not pass; see
+  [next-round-after-held-out-benchmark](next-round-after-held-out-benchmark.md#pause-rule-and-the-test-that-restarts-the-project).
 
 ## Safety boundary
 
