@@ -51,7 +51,8 @@ copy. Each input has `schema_version: 1`, `source`, `symbol`, `recorded_at`,
 a decision may be taken; earlier bars are indicator history only). `run
 --benchmark` is optional: without it a new run uses the file's `benchmark`;
 with it, it must not contradict a rule the file names and, on resume, must
-match the bound run (resuming without it keeps the bound rule). Hourly bars contain `ts`, `open`, `high`,
+match the bound run. Resuming with neither `--input` nor `--benchmark` keeps
+the bound rule. Hourly bars contain `ts`, `open`, `high`,
 `low`, `close`, `volume`; timestamps require timezones. Supply 1–2000 ordered,
 contiguous, finite valid bars. All must have closed by `recorded_at`, with the
 last bar less than one hour old at that recorded cutoff. This is historical
