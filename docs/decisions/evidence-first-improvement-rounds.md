@@ -64,7 +64,7 @@ agent applies them, and RJ may change them.
    account access and real-money step needs its own go from RJ. This decision
    grants only #1315's run, which RJ approved separately.
 5. **Plain-language cards.** Because RJ has been away from the project, every
-   card asking RJ for a go explains the current state from scratch.
+   card to RJ explains the current state from scratch in plain language.
 
 The stages, in order:
 
