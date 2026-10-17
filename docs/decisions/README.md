@@ -69,7 +69,7 @@ markers. Regenerating cannot drift from the files.
 | Date | Decision | Status |
 |------|----------|--------|
 | 2026-10-17 | [Evidence first, in improvement rounds, toward a real-money autonomous bot](evidence-first-improvement-rounds.md) | accepted |
-| 2026-10-17 | [Next improvement round after the held-out benchmark](next-round-after-held-out-benchmark.md) | proposed |
+| 2026-10-17 | [Next improvement round after the held-out benchmark](next-round-after-held-out-benchmark.md) | accepted |
 | 2026-10-11 | [Run the held-out benchmark experiment before building the reasoning proposer](held-out-benchmark-before-reasoning-proposer.md) | accepted |
 | 2026-09-16 | [Retire the optimizer and the dead TA strategies; settle venue scope until the reasoning proposer has evidence](retire-optimize-and-dead-ta-strategies.md) | accepted |
 | 2026-09-05 | [Paper runtime cutover](paper-runtime-cutover.md) | accepted |
