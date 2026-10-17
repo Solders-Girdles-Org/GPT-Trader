@@ -54,13 +54,17 @@ channel (`baseline`, `mean-reversion`, or the default-off `ai-trade-manager`
 in `features/experiment/trade_manager.py`, which sends a versioned request
 through an injected transport every few bars, may enter, keep or exit, keeps a
 rulebook it may rewrite, and journals each turn's request, raw reply, usage
-and cost; replay re-derives turns from the journal and never re-asks; no
-transport ships yet, #1252), an optional `scored_from` makes
+and cost; replay re-derives turns from the journal and never re-asks; the
+Anthropic transport in `features/experiment/model_transport.py` runs only
+behind `--model-transport anthropic`, and reserves each call's worst-case cost
+in a spend ledger outside the journal before sending it, so a cap is never
+passed and an uncommitted call still counts), an optional `scored_from` makes
 earlier bars indicator history only, and reports value anything still held at
 liquidation beside cash and hold-the-coin. `experiment fetch-input` builds
 inputs from a retained raw public Coinbase capture, `experiment verify-input`
 rebuilds inputs and run-bound inputs from that capture and refuses any
-difference, and `experiment read` applies a
+difference, `experiment estimate-spend` bounds an AI trade manager input's
+model cost offline, and `experiment read` applies a
 committed protocol's predeclared reading.
 
 **Paper and live spine.**

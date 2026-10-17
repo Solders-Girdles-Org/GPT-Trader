@@ -18,8 +18,8 @@ No order is ever pending at a decision turn: an entry or exit decided on one bar
 fills or lapses at the next bar's open, before that bar's turn. The request
 therefore carries no pending-order field.
 
-This module holds no model client; the transport is injected (W2 adds the real
-one under #1252).
+This module holds no model client; the transport is injected. The real one,
+with its spend ceiling, is ``model_transport.AnthropicTransport``.
 """
 
 from __future__ import annotations
@@ -299,7 +299,7 @@ def manage(
     if transport is None:
         raise TransportUnavailableError(
             f"A {MANAGER_CHANNEL} decision turn is due at bar {sequence} but no model transport "
-            "was supplied; this build has none (W2, #1252)"
+            "was supplied"
         )
     request = build_request(source, sequence, state)
     reply: TransportReply | None = None
