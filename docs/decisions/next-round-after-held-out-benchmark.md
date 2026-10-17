@@ -270,10 +270,12 @@ Read once, by the protocol W3 commits:
 - **Anything else** (fails, trails hold-the-coin, beats only some
   comparators, inconclusive, or cost-dependent; for both arms if there are
   two): **the project pauses**. RJ set the pause; treating anything short
-  of a pass as a pause is the agent's reading of "credibly". RJ's later,
-  specific answer on #1344 replaces, for this round, the
-  [improvement-rounds](evidence-first-improvement-rounds.md) default that a
-  weak result opens the next round. This is an investment decision on
+  of a pass as a pause is the agent's reading of "credibly", which RJ
+  confirms on the card. RJ's later, specific answer on #1344 allows this
+  pause in place of RJ's
+  [improvement-rounds](evidence-first-improvement-rounds.md) condition 3,
+  that a weak result opens the next round. Choosing "pause now" on the card
+  takes the same pause path. This is an investment decision on
   insufficient evidence, not a finding that today's models cannot trade.
   Pausing records the result here, closes round two's build items, leaves
   one open restart-watch item for the agent, and leaves every gate, record
