@@ -212,6 +212,35 @@ significance test: five weeks of hourly bars can show that an edge fails to
 survive costs, not prove that one exists. An extension or exact-fee run is
 offered at most once per rule.
 
+## Result (2026-10-17)
+
+The run followed the protocol unchanged on main ffa9c45b; the full table,
+every case and the record of attempts are on
+[#1315](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1315#issuecomment-6238693084),
+and the evidence is in `runtime_data/experiments/held-out-2026-09-06/` in the
+project home. The first fetch was refused by a candle-fetcher defect (each
+300-hour request lost its window's first bar). It was fixed in
+[#1342](https://github.com/Solders-Girdles-Org/GPT-Trader/pull/1342) before
+any input existed; each symbol was then fetched once and each input run once.
+Capture rebuilds (8/8), the pause/resume case and the independent Decimal
+re-derivation (32/32) all agree.
+
+**Action D: neither tested fixed rule survives these cost assumptions on this
+window.** Both rules are conclusive *Fail* under both cost cases (8/8 symbols
+scored, 104–153 pooled round trips):
+
+| Rule | Costs | Pooled net | Hold-the-coin | Gain before costs |
+| --- | --- | --- | --- | --- |
+| Baseline | base | −$39.70 | +$213.02 | +$24.19 |
+| Baseline | stress | −$266.73 | +$194.13 | +$19.25 |
+| Mean reversion | base | −$105.52 | +$213.02 | −$13.41 |
+| Mean reversion | stress | −$434.55 | +$194.13 | −$13.84 |
+
+Baseline's gain before costs was about 0.11% of notional per entry, against
+about 0.30% of costs for a round trip at the base rate *(derived)*; mean
+reversion lost before costs. The next round is proposed in
+[next-round-after-held-out-benchmark](next-round-after-held-out-benchmark.md).
+
 ## Consequences
 
 Agent-owned orchestration, in order:
