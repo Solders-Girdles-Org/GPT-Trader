@@ -19,9 +19,10 @@ superseded-by:
 > bounded test with a pause rule written down in advance: if the AI does
 > not beat holding, cash and the old rules over five weeks that have not
 > happened yet when the test is frozen, the project pauses until a stronger
-> model is released. The test uses the strongest model available when it
-> is frozen. The API key, spending cap and run come to RJ later
-> as one card, which also offers pausing now instead.
+> model is released (the agent's proposed reading, which RJ confirms). The
+> test uses the strongest model available when it is frozen. The API key,
+> spending cap and run come to RJ later as one card, which also offers
+> pausing now instead.
 
 ## Context
 
@@ -165,9 +166,12 @@ What supports building now:
   account, so the AI runs 16 accounts (8 coins × 2 cost cases) over a
   35-day window: about $120 deciding once a day and about $710 every four
   hours, before extra turns on fills and stops and before the optional
-  second arm *(estimates; W2 measures real token counts for all of these
-  before the card)*. W3 sets a cadence no faster than every four hours:
-  round one showed costs punish frequent trading, and hourly would cost
+  second arm *(estimates; before the card, W2 counts input tokens from the
+  requests W1's fake transport builds and bounds output by the frozen
+  `max_tokens` and effort level, with no model call; the real counts are
+  measured during the approved run)*. W3 sets a cadence no faster than
+  every four hours: round one showed costs punish frequent trading, and
+  hourly would cost
   about $2,800. The engine steps through hourly bars, so a slower
   cadence is a W1 setting.
 
@@ -246,13 +250,18 @@ as today.
    and does (through the journal's source hash, as round one did) and says
    in advance how a defect found after the window opens is handled.
 4. **One card to RJ** once W1–W3 have merged: the API credential, a spending
-   cap set from W2's measured cost, the run over the frozen window, the
-   optional GPT-6 Astra arm, and confirmation that a run on recorded bars
-   from a window that started after the freeze counts as forward evidence.
-   The card also offers pausing now instead, which RJ's answer allows, and
-   restates the pause rule below for RJ to confirm. The forward-evidence
-   point amends [agentic alpha](adopt-agentic-alpha-direction.md)'s
-   forward-only constraint, which RJ set, so it is RJ's to confirm. The
+   cap set as decisions × (counted input + frozen `max_tokens`) × list
+   price and enforced by W2's hard spend stop, the run over the frozen
+   window, and the optional GPT-6 Astra arm. The card also offers pausing
+   now instead, which RJ's answer allows, and restates the pause rule below
+   for RJ to confirm. It names the three ways round two departs from
+   [agentic alpha](adopt-agentic-alpha-direction.md)'s constraints, which RJ
+   set, for RJ to confirm: a run on recorded bars from a window that started
+   after the freeze counts as forward evidence; results are read by the
+   experiment's predeclared reading instead of the old scorecard; and trades
+   run in the experiment's simulator rather than the paper lane's approval
+   rails, as [Direction](../DIRECTION.md#immediate-product-outcome) already
+   allows for local simulations. The
    alternative, a wall-clock run that calls the model every few hours for
    five weeks, needs a scheduled service but also captures live latency and
    outages; it stays available if RJ prefers it.
@@ -271,7 +280,7 @@ Read once, by the protocol W3 commits:
   comparators, inconclusive, or cost-dependent; for both arms if there are
   two): **the project pauses**. RJ set the pause; treating anything short
   of a pass as a pause is the agent's reading of "credibly", which RJ
-  confirms on the card. RJ's later, specific answer on #1344 allows this
+  confirms on the card. RJ's later, specific answer on #1344 allows a
   pause in place of RJ's
   [improvement-rounds](evidence-first-improvement-rounds.md) condition 3,
   that a weak result opens the next round. Choosing "pause now" on the card
@@ -281,9 +290,9 @@ Read once, by the protocol W3 commits:
   one open restart-watch item for the agent, and leaves every gate, record
   and the built channel in place, default-off.
 - **Restart test:** the models available at round two's freeze, including
-  the GPT-6 Astra arm whether or not RJ adds it, are not eligible; round two
-  stands for them. A model is eligible when it is **released after that
-  freeze** and enters the frontier tier of RJ's workspace model stack
+  the GPT-6 Astra arm whether or not RJ adds it, are not eligible, whether
+  round two runs or RJ pauses now: RJ's answer waits for a stronger model.
+  A model is eligible when it is **released after that freeze** and enters the frontier tier of RJ's workspace model stack
   (re-evaluated at each major release). Each eligible model gets **one**
   attempt, in release order: the same protocol, prompt and starting
   rulebook, changed only where the new model's API requires it (each change
