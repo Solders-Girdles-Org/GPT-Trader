@@ -135,7 +135,7 @@ jobs:
 
       - name: Install uv
         # astral-sh/setup-uv@v10.2.0
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
           prune-cache: true  # Preserve the pre-v9 cache policy.
@@ -177,7 +177,7 @@ jobs:
 
       - name: Install uv
         # astral-sh/setup-uv@v10.2.0
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
           prune-cache: true  # Preserve the pre-v9 cache policy.
@@ -247,7 +247,7 @@ jobs:
 
       - name: Install uv
         # astral-sh/setup-uv@v10.2.0
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
           prune-cache: true  # Preserve the pre-v9 cache policy.
@@ -276,7 +276,7 @@ jobs:
 
       - name: Install uv
         # astral-sh/setup-uv@v10.2.0
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
           prune-cache: true  # Preserve the pre-v9 cache policy.
@@ -320,7 +320,7 @@ jobs:
 
       - name: Install uv
         # astral-sh/setup-uv@v10.2.0
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
           prune-cache: true  # Preserve the pre-v9 cache policy.
@@ -371,7 +371,7 @@ jobs:
 
       - name: Install uv
         # astral-sh/setup-uv@v10.2.0
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
           prune-cache: true  # Preserve the pre-v9 cache policy.
@@ -405,7 +405,7 @@ jobs:
 
       - name: Install uv
         # astral-sh/setup-uv@v10.2.0
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
           prune-cache: true  # Preserve the pre-v9 cache policy.
@@ -437,7 +437,7 @@ jobs:
 
       - name: Install uv
         # astral-sh/setup-uv@v10.2.0
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
           prune-cache: true  # Preserve the pre-v9 cache policy.
@@ -469,7 +469,7 @@ jobs:
 
       - name: Install uv
         # astral-sh/setup-uv@v10.2.0
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
           prune-cache: true  # Preserve the pre-v9 cache policy.
@@ -518,7 +518,7 @@ jobs:
 
       - name: Install uv
         # astral-sh/setup-uv@v10.2.0
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         if: needs.changes.result == 'success' && needs.changes.outputs.dependencies == 'true'
         with:
           enable-cache: true
