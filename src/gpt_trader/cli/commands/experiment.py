@@ -30,6 +30,7 @@ from gpt_trader.features.experiment.ledger import (
     run_input,
 )
 from gpt_trader.features.experiment.reading import case_outcome, combined_action, rule_verdict
+from gpt_trader.features.experiment.trade_manager import TransportUnavailableError
 
 T = TypeVar("T")
 Handler = Callable[[Namespace], CliResponse]
@@ -222,6 +223,10 @@ def _on_root(root: Path, operation: Callable[[], T]) -> T:
         raise ExperimentCliError(
             CliErrorCode.VALIDATION_ERROR, f"Experiment root {root}: {error}", root=str(root)
         ) from None
+    except TransportUnavailableError as error:
+        raise ExperimentCliError(
+            CliErrorCode.OPERATION_FAILED, f"Experiment root {root}: {error}", root=str(root)
+        ) from None
     except OSError as error:
         raise ExperimentCliError(
             CliErrorCode.INVALID_ARGUMENT,
@@ -262,8 +267,9 @@ def register(subparsers: Any) -> None:
             command.add_argument(
                 "--benchmark",
                 choices=BENCHMARKS,
-                help="Rule channel; defaults to the input file's rule, else baseline. Must not "
-                "contradict a rule the file names; bound to the run and checked on resume",
+                help="Decision channel; defaults to the input file's channel, else baseline. Must "
+                "not contradict a channel the file names; bound to the run and checked on "
+                "resume. ai-trade-manager needs a model transport, which this build lacks",
             )
         add_output_options(command)
         command.set_defaults(handler=_reported(handle))
@@ -312,6 +318,14 @@ def handle(args: Namespace) -> CliResponse:
         result = _inspect(root)
     else:
         source = _load_input(args.input, args.benchmark) if args.input else None
+        if source is not None and source.manager is not None:
+            # No model transport ships yet (W2, #1252); refuse before creating a root.
+            raise ExperimentCliError(
+                CliErrorCode.OPERATION_FAILED,
+                f"The {source.benchmark} channel needs a model transport, which this build "
+                "lacks; nothing was created",
+                root=str(root),
+            )
         if source is None:
             _existing_run(root, "; create it with --input")
         elif root.exists() and not root.is_dir():
@@ -336,7 +350,10 @@ def handle(args: Namespace) -> CliResponse:
     text = "\n".join(
         [
             f"Recorded experiment: {result['processed_bars']}/{result['total_bars']} bars",
-            f"Source: {result['source']}; {result['benchmark']} rule; no model or broker calls",
+            f"Source: {result['source']}; {result['benchmark']} rule; no model or broker calls"
+            if "manager" not in result
+            else f"Source: {result['source']}; {result['benchmark']} channel; "
+            f"{result['manager']['turns']} journaled model turns; no broker calls",
             f"Cash ${account['cash']}; position {account['quantity']} {result['symbol']}; equity ${account['equity']}",
             f"Net P&L ${account['net_pnl']} (realized ${account['realized_net']}, unrealized ${account['unrealized_net']}); fees ${account['fees']}",
             f"At liquidation value: net ${valuation.get('net_pnl')}; hold-the-coin ${hold.get('net_pnl')}; cash $0",

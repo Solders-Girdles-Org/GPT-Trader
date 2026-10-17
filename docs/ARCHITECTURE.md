@@ -50,7 +50,12 @@ the resume checkpoint. History is append-only; a resume advances only missing
 observations; a changed source or input is a new experiment. Cash and results
 are reconciled independently through `core/fill_accounting.py`; reports derive
 from a consistent snapshot and own no state. `--benchmark` selects the bound
-rule channel (`baseline` or `mean-reversion`), an optional `scored_from` makes
+channel (`baseline`, `mean-reversion`, or the default-off `ai-trade-manager`
+in `features/experiment/trade_manager.py`, which sends a versioned request
+through an injected transport every few bars, may enter, keep or exit, keeps a
+rulebook it may rewrite, and journals each turn's request, raw reply, usage
+and cost; replay re-derives turns from the journal and never re-asks; no
+transport ships yet, #1252), an optional `scored_from` makes
 earlier bars indicator history only, and reports value anything still held at
 liquidation beside cash and hold-the-coin. `experiment fetch-input` builds
 inputs from a retained raw public Coinbase capture, `experiment verify-input`
