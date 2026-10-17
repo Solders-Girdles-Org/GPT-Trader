@@ -202,6 +202,8 @@ class CoinbaseHistoricalFetcher:
         Returns:
             List of (chunk_start, chunk_end) tuples
         """
+        if max_candles < 2:
+            raise ValueError("max_candles must be at least 2 for inclusive chunk bounds")
         chunks = []
         # Coinbase returns bars starting anywhere in [start, end], both ends
         # included, keeping the newest `max_candles`. A span of max_candles
