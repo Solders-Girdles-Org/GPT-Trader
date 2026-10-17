@@ -106,7 +106,9 @@ def test_request_is_pinned_structured_and_carries_no_fallback(manager_input, led
         "effort": "high",
         "format": {"type": "json_schema", "schema": REPLY_SCHEMA},
     }
-    assert not {"thinking", "temperature", "fallbacks", "betas", "tools"} & set(params)
+    assert params["service_tier"] == "standard_only"
+    assert params["inference_geo"] == "global"
+    assert not {"thinking", "temperature", "fallbacks", "betas", "tools", "speed"} & set(params)
 
 
 def test_success_reports_model_usage_latency_pricing_and_settles_cost(manager_input, ledger):
@@ -276,7 +278,6 @@ def test_ledger_is_shared_by_path_and_bound_to_its_cap(manager_input, ledger, tm
 
 
 def test_an_unusable_ledger_stops_the_run(manager_input, ledger):
-    ledger.path.unlink()
     ledger.path.mkdir()
     with pytest.raises(TransportHalted, match="is unusable"):
         transport(manager_input, ledger).decide(first_request(manager_input))
@@ -285,8 +286,13 @@ def test_an_unusable_ledger_stops_the_run(manager_input, ledger):
 def test_environment_credential_and_no_sdk_retries(manager_input, ledger):
     with pytest.raises(TransportHalted, match="ANTHROPIC_API_KEY is not set"):
         from_environment(manager_input.manager, ledger, environ={})
-    real = from_environment(manager_input.manager, ledger, environ={"ANTHROPIC_API_KEY": "k-test"})
+    key = {"ANTHROPIC_API_KEY": "k-test"}
+    for name in ("ANTHROPIC_BASE_URL", "ANTHROPIC_CUSTOM_HEADERS"):
+        with pytest.raises(TransportHalted, match=f"{name} is set"):
+            from_environment(manager_input.manager, ledger, environ={**key, name: "x"})
+    real = from_environment(manager_input.manager, ledger, environ=key)
     assert real.client.api_key == "k-test"
+    assert str(real.client.base_url).rstrip("/") == "https://api.anthropic.com"
     assert real.client.max_retries == 0
     assert real.model == "claude-fable-5-1"
     assert ledger.calls() == []
@@ -311,3 +317,60 @@ def test_pinned_request_settings_are_bound_and_validated(experiment_payload, man
     for bad in ({"effort": "huge"}, {"max_tokens": 0}, {"max_tokens": 20001}, {"model": ""}):
         with pytest.raises(ValueError):
             parse_input({**payload, "manager": bad})
+
+
+def test_ledger_file_is_created_only_by_the_first_reservation(manager_input, ledger, tmp_path):
+    assert not ledger.path.exists() and ledger.spent_usd() == 0
+    tiny = SpendLedger(tmp_path / "tiny.sqlite", Decimal("0.01"))
+    with pytest.raises(SpendCeilingReached, match="above the"):
+        transport(manager_input, tiny).decide(first_request(manager_input))
+    assert not tiny.path.exists()
+    transport(manager_input, ledger).decide(first_request(manager_input))
+    assert ledger.path.is_file() and len(ledger.calls()) == 1
+
+
+def test_a_file_that_is_not_a_spend_ledger_is_refused_and_left_unchanged(
+    experiment_input, tmp_path
+):
+    root = tmp_path / "baseline"
+    run_experiment(root, experiment_input, max_bars=1)
+    journal = next(root.iterdir())
+    before = journal.read_bytes()
+    with pytest.raises(SpendLedgerError, match="is not a spend ledger"):
+        SpendLedger(journal, Decimal("5"))
+    text = tmp_path / "notes.txt"
+    text.write_text("not a database")
+    with pytest.raises(SpendLedgerError, match="is not a spend ledger"):
+        SpendLedger(text, Decimal("5"))
+    assert journal.read_bytes() == before and text.read_text() == "not a database"
+
+
+@pytest.mark.parametrize(
+    "usage",
+    [{"service_tier": "priority"}, {"speed": "fast"}, {"inference_geo": "us"}],
+)
+def test_usage_outside_the_price_table_stops_the_run(manager_input, ledger, usage):
+    with pytest.raises(TransportHalted, match="price table does not cover"):
+        transport(manager_input, ledger, message(**usage)).decide(first_request(manager_input))
+    assert ledger.calls()[0]["status"] == "replied"
+    assert ledger.spent_usd() == Decimal("0.09")
+
+
+def test_standard_usage_labels_are_accepted(manager_input, ledger):
+    reply = message(service_tier="standard", speed="standard", inference_geo="global")
+    transport(manager_input, ledger, reply).decide(first_request(manager_input))
+    assert ledger.spent_usd() == Decimal("0.09")
+
+
+def test_a_cost_above_its_reservation_stops_the_run(manager_input, ledger):
+    sender = transport(manager_input, ledger, message(output_tokens=20000))
+    with pytest.raises(TransportHalted, match="exceeded the call's"):
+        sender.decide(first_request(manager_input))
+    assert ledger.spent_usd() == Decimal("1.03")  # 3000 * $10/M + 20000 * $50/M
+
+
+def test_hour_cache_writes_are_charged_at_twice_base_input(manager_input, ledger):
+    split = {"ephemeral_5m_input_tokens": 0, "ephemeral_1h_input_tokens": 1000}
+    reply = message(cache_creation_input_tokens=1000, cache_creation=split)
+    transport(manager_input, ledger, reply).decide(first_request(manager_input))
+    assert ledger.spent_usd() == Decimal("0.09") + Decimal("0.02")  # 1000 tokens at $20/M

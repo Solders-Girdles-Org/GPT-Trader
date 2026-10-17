@@ -40,6 +40,7 @@ from gpt_trader.features.experiment.model_transport import (
     estimate_spend,
     from_environment,
     parse_cap,
+    pricing_for,
 )
 from gpt_trader.features.experiment.reading import case_outcome, combined_action, rule_verdict
 from gpt_trader.features.experiment.trade_manager import (
@@ -444,7 +445,7 @@ def handle(args: Namespace) -> CliResponse:
 def _model_transport(
     args: Namespace, root: Path, source: ExperimentInput
 ) -> DecisionTransportProtocol:
-    """Open the spend ledger and the real transport; check everything before creating files."""
+    """Check the spend ledger and build the real transport; neither creates a file."""
     assert source.manager is not None
     missing = [
         flag
@@ -474,8 +475,20 @@ def _model_transport(
             "not set; nothing was created or advanced",
         )
     try:
+        # Neither creates a file: the ledger is written by its first reservation.
         ledger = SpendLedger(args.spend_ledger, parse_cap(args.spend_cap_usd))
-        return from_environment(source.manager, ledger)
+        transport = from_environment(source.manager, ledger)
+        _, output_price = pricing_for(source.manager.model)
+        least = source.manager.max_tokens * output_price / 1_000_000
+        if ledger.spent_usd() + least > ledger.cap_usd:
+            raise ExperimentCliError(
+                CliErrorCode.OPERATION_FAILED,
+                f"Spend ledger {args.spend_ledger} has ${ledger.spent_usd()} of its "
+                f"${ledger.cap_usd} cap charged, too little room for one call (at least "
+                f"${least}); nothing was created or advanced",
+                path=str(args.spend_ledger),
+            )
+        return transport
     except SpendLedgerError as error:
         raise ExperimentCliError(
             CliErrorCode.CONFIG_INVALID, str(error), path=str(args.spend_ledger)

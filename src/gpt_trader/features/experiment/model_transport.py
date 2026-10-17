@@ -7,6 +7,8 @@ the cap. The ledger is a file of its own, outside any run's journal, so a call
 whose bar never commits (a crash between the call and the journal commit
 re-asks for that bar) stays counted. A reply settles its reservation at the
 measured cost; a failure whose billing is unknown keeps the full reservation.
+A reply costing more than its reservation, or reporting a service tier, speed
+or region outside the price table, stops the run.
 
 The request is pinned to the input's manager settings (model, effort and
 ``max_tokens``, which the round-two protocol freezes) and asks for structured
@@ -42,14 +44,25 @@ CREDENTIAL_ENV = "ANTHROPIC_API_KEY"
 PRICING: dict[str, tuple[Decimal, Decimal]] = {
     "claude-fable-5-1": (Decimal("10"), Decimal("50")),
 }
-# Cache writes cost 1.25 times base input. The transport sets no cache_control,
-# so cache counts should stay zero; any that appear are still charged in full.
+# Cache writes cost 1.25 times base input (two times for one-hour writes). The
+# transport sets no cache_control, so cache counts should stay zero; any that
+# appear are charged in full, and a cost above its reservation stops the run.
 CACHE_WRITE_MULTIPLIER = Decimal("1.25")
+HOUR_CACHE_WRITE_MULTIPLIER = Decimal("2")
+# What a reply's usage must report for PRICING to hold; None means not reported.
+PRICED_USAGE = {
+    "service_tier": (None, "standard"),
+    "speed": (None, "standard"),
+    "inference_geo": (None, "global"),
+}
 # A token covers at least one UTF-8 byte, so the request's bytes bound its
 # input tokens. This allowance covers what the API adds around the request
 # (role markers and the output schema's grammar prompt), generously.
 OVERHEAD_TOKENS = 2000
 TIMEOUT_SECONDS = 600.0
+BASE_URL = "https://api.anthropic.com"
+# Marks a SQLite file as a spend ledger ("GTSP"), so no other file is adopted.
+APPLICATION_ID = 0x47545350
 # Client errors a later turn may not repeat; any other client error stops the run.
 TRANSIENT_CLIENT_STATUSES = frozenset({408, 409, 429})
 # Client errors and overload (529) are rejected unbilled; another server error
@@ -91,6 +104,10 @@ def wire_params(request: dict[str, Any], manager: ManagerSettings) -> dict[str, 
         "max_tokens": manager.max_tokens,
         "system": request["instructions"],
         "messages": [{"role": "user", "content": encode(request["context"])}],
+        # Priority capacity and US-only inference are priced differently; PRICING
+        # records standard capacity at global inference.
+        "service_tier": "standard_only",
+        "inference_geo": "global",
         "output_config": {
             "effort": manager.effort,
             "format": {"type": "json_schema", "schema": REPLY_SCHEMA},
@@ -130,7 +147,8 @@ class SpendLedger:
     """Every call's charge under one cap, shared by all runs that name the file.
 
     A call counts at its settled cost once replied, else at its reservation.
-    The cap is bound when the ledger is created and cannot change.
+    The file is created by the first reservation, marked as a spend ledger and
+    bound to its cap; any other existing file is refused, never written.
     """
 
     def __init__(self, path: Path, cap_usd: Decimal) -> None:
@@ -138,28 +156,45 @@ class SpendLedger:
             raise SpendLedgerError("Spend cap must be a positive dollar amount")
         self.path = path
         self.cap_usd = cap_usd
-        with closing(self._connect()) as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            connection.execute(
-                "CREATE TABLE IF NOT EXISTS ceiling "
-                "(id INTEGER PRIMARY KEY CHECK (id = 1), cap_usd TEXT NOT NULL, "
-                "created_at TEXT NOT NULL)"
+        if self._exists():
+            uri = f"{path.resolve().as_uri()}?mode=ro"
+            try:
+                with closing(sqlite3.connect(uri, uri=True)) as connection:
+                    self._check(connection)
+            except sqlite3.DatabaseError:
+                raise SpendLedgerError(f"{path} is not a spend ledger; name a new file") from None
+
+    def _exists(self) -> bool:
+        return self.path.is_file() and self.path.stat().st_size > 0
+
+    def _check(self, connection: sqlite3.Connection) -> None:
+        """Refuse a file that is not a spend ledger bound to this cap."""
+        if connection.execute("PRAGMA application_id").fetchone()[0] != APPLICATION_ID:
+            raise SpendLedgerError(f"{self.path} is not a spend ledger; name a new file")
+        (cap,) = connection.execute("SELECT cap_usd FROM ceiling WHERE id = 1").fetchone()
+        if Decimal(cap) != self.cap_usd:
+            raise SpendLedgerError(
+                f"Spend ledger {self.path} is bound to a ${cap} cap, not ${self.cap_usd}; "
+                "a new cap needs a new ledger"
             )
-            connection.execute(
-                "CREATE TABLE IF NOT EXISTS calls (id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                "model TEXT NOT NULL, reserved_at TEXT NOT NULL, reserved_usd TEXT NOT NULL, "
-                "status TEXT NOT NULL, cost_usd TEXT, detail TEXT)"
-            )
-            row = connection.execute("SELECT cap_usd FROM ceiling WHERE id = 1").fetchone()
-            if row is None:
-                connection.execute("INSERT INTO ceiling VALUES (1, ?, ?)", (str(cap_usd), _now()))
-            elif Decimal(row[0]) != cap_usd:
-                connection.execute("ROLLBACK")
-                raise SpendLedgerError(
-                    f"Spend ledger {path} is bound to a ${row[0]} cap, not ${cap_usd}; "
-                    "a new cap needs a new ledger"
-                )
-            connection.execute("COMMIT")
+
+    def _initialize(self, connection: sqlite3.Connection) -> None:
+        """Inside the reservation's transaction: create a new ledger, else check it."""
+        tables = connection.execute("SELECT count(*) FROM sqlite_master").fetchone()[0]
+        if tables:
+            self._check(connection)
+            return
+        connection.execute(f"PRAGMA application_id = {APPLICATION_ID}")
+        connection.execute(
+            "CREATE TABLE ceiling (id INTEGER PRIMARY KEY CHECK (id = 1), "
+            "cap_usd TEXT NOT NULL, created_at TEXT NOT NULL)"
+        )
+        connection.execute(
+            "CREATE TABLE calls (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "model TEXT NOT NULL, reserved_at TEXT NOT NULL, reserved_usd TEXT NOT NULL, "
+            "status TEXT NOT NULL, cost_usd TEXT, detail TEXT)"
+        )
+        connection.execute("INSERT INTO ceiling VALUES (1, ?, ?)", (str(self.cap_usd), _now()))
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.path, timeout=30, isolation_level=None)
@@ -179,18 +214,32 @@ class SpendLedger:
         return sum((Decimal(cost if cost is not None else held) for held, cost in rows), Decimal(0))
 
     def spent_usd(self) -> Decimal:
+        if not self._exists():
+            return Decimal(0)
         with closing(self._connect()) as connection:
             return self._charged(connection)
 
     def calls(self) -> list[dict[str, Any]]:
+        if not self._exists():
+            return []
         with closing(self._connect()) as connection:
             connection.row_factory = sqlite3.Row
             return [dict(row) for row in connection.execute("SELECT * FROM calls ORDER BY id")]
 
     def reserve(self, model: str, amount: Decimal) -> int:
         """Count ``amount`` before a call, or raise if it could pass the cap."""
+        if amount > self.cap_usd and not self._exists():
+            raise SpendCeilingReached(
+                f"Spend ceiling reached: one call could cost up to ${amount}, above the "
+                f"${self.cap_usd} cap; it was not sent"
+            )
         with self._during_run() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._initialize(connection)
+            except SpendLedgerError as error:
+                connection.execute("ROLLBACK")
+                raise TransportHalted(str(error)) from None
             charged = self._charged(connection)
             if charged + amount > self.cap_usd:
                 connection.execute("ROLLBACK")
@@ -231,7 +280,8 @@ class AnthropicTransport:
 
         params = wire_params(request, self.manager)
         input_price, output_price = pricing_for(self.model)
-        call = self.ledger.reserve(self.model, worst_case_usd(params))
+        reserved = worst_case_usd(params)
+        call = self.ledger.reserve(self.model, reserved)
         started = time.monotonic()
         try:
             response = self.client.messages.create(**params)
@@ -254,6 +304,7 @@ class AnthropicTransport:
         usage = response.usage
         cache_write = usage.cache_creation_input_tokens or 0
         cache_read = usage.cache_read_input_tokens or 0
+        hour_writes = getattr(usage.cache_creation, "ephemeral_1h_input_tokens", 0) or 0
         reply = TransportReply(
             model=response.model,
             text="".join(block.text for block in response.content if block.type == "text"),
@@ -264,8 +315,27 @@ class AnthropicTransport:
             input_usd_per_million=input_price,
             output_usd_per_million=output_price,
         )
-        surcharge = cache_write * input_price * (CACHE_WRITE_MULTIPLIER - 1) / 1_000_000
-        self.ledger.settle(call, reply.cost_usd + surcharge, "replied", reply.stop_reason)
+        surcharge = (
+            (cache_write - hour_writes) * (CACHE_WRITE_MULTIPLIER - 1)
+            + hour_writes * (HOUR_CACHE_WRITE_MULTIPLIER - 1)
+        ) * input_price
+        cost = reply.cost_usd + surcharge / 1_000_000
+        unpriced = {
+            name: getattr(usage, name, None)
+            for name, priced in PRICED_USAGE.items()
+            if getattr(usage, name, None) not in priced
+        }
+        self.ledger.settle(call, cost, "replied", reply.stop_reason)
+        if unpriced:
+            raise TransportHalted(
+                f"Reply usage reports {unpriced}, which the price table does not cover; "
+                "its spend is not known"
+            )
+        if cost > reserved:
+            raise TransportHalted(
+                f"Measured cost ${cost} exceeded the call's ${reserved} reservation; "
+                "the spend bound no longer holds"
+            )
         return reply
 
 
@@ -282,8 +352,14 @@ def from_environment(
         raise TransportHalted(
             "The Anthropic SDK is not installed; run uv sync --extra ai-trade-manager"
         ) from None
+    # These would redirect the credential or change requests outside this module.
+    for name in ("ANTHROPIC_CUSTOM_HEADERS", "ANTHROPIC_BASE_URL"):
+        if environ.get(name) is not None or os.environ.get(name) is not None:
+            raise TransportHalted(f"{name} is set; unset it before any model call")
     # Each retry would be another billed request outside the ledger, so none are made.
-    client = anthropic.Anthropic(api_key=key, max_retries=0, timeout=TIMEOUT_SECONDS)
+    client = anthropic.Anthropic(
+        api_key=key, base_url=BASE_URL, max_retries=0, timeout=TIMEOUT_SECONDS
+    )
     return AnthropicTransport(manager, ledger, client)
 
 

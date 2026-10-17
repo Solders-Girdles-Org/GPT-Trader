@@ -202,3 +202,42 @@ def test_cli_estimate_spend_makes_no_call(tmp_path, capsys, monkeypatch):
     assert main([*command, "--format", "json"]) == 0
     estimate = json.loads(capsys.readouterr().out)["data"]
     assert estimate["turns_without_fills"] == 6 and estimate["model"] == "claude-fable-5-1"
+
+
+def test_cli_creates_nothing_when_the_sdk_is_missing_or_the_cap_is_too_small(
+    tmp_path, capsys, monkeypatch
+):
+    import builtins
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "k-test")
+    ledger = tmp_path / "spend.sqlite"
+    flags = ["--model-transport", "anthropic", "--spend-ledger", str(ledger)]
+    assert _run(tmp_path, *flags, "--spend-cap-usd", "0.10") == 1
+    assert "too little room for one call" in _error(capsys)["message"]
+    assert not ledger.exists() and not (tmp_path / "run").exists()
+    real_import = builtins.__import__
+
+    def without_sdk(name, *args, **kwargs):
+        if name == "anthropic":
+            raise ImportError(name)
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", without_sdk)
+    assert _run(tmp_path, *flags, "--spend-cap-usd", "5") == 1
+    assert "uv sync --extra ai-trade-manager" in _error(capsys)["message"]
+    assert not ledger.exists() and not (tmp_path / "run").exists()
+
+
+def test_cli_refuses_another_runs_journal_as_a_ledger(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "k-test")
+    baseline = tmp_path / "baseline"
+    source = ["experiment", "run", "--input", str(_manager_input(tmp_path, benchmark="baseline"))]
+    assert main([*source, "--root", str(baseline), "--max-bars", "1", "--format", "json"]) == 0
+    capsys.readouterr()
+    journal = next(baseline.iterdir())
+    before = journal.read_bytes()
+    flags = ["--model-transport", "anthropic", "--spend-ledger", str(journal)]
+    assert _run(tmp_path, *flags, "--spend-cap-usd", "5") == 1
+    error = _error(capsys)
+    assert error["code"] == "CONFIG_INVALID" and "is not a spend ledger" in error["message"]
+    assert journal.read_bytes() == before and not (tmp_path / "run").exists()
