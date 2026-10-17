@@ -396,4 +396,5 @@ def test_cli_help_describes_run_and_inspect(capsys):
         main(["experiment", "run", "--help"])
     run_help = " ".join(capsys.readouterr().out.split())
     assert "defaults to the input file's rule, else baseline" in run_help
+    assert "Must not contradict a rule the file names" in run_help
     assert "default baseline" not in run_help
