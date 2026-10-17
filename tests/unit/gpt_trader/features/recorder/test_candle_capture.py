@@ -40,11 +40,11 @@ async def test_capture_retains_each_request_and_raw_response_verbatim():
         clock=lambda: datetime(2026, 10, 12, tzinfo=UTC),
     )
     capture = json.loads(data)
-    assert len(client.calls) == 2  # 300-candle chunks
+    assert len(client.calls) == 2  # 300 inclusive candles per chunk
     assert capture["fetched_at"] == "2026-10-12T00:00:00+00:00"
     assert [request["start"] for request in capture["requests"]] == [
         start.isoformat(),
-        (start + timedelta(hours=300)).isoformat(),
+        (start + timedelta(hours=299)).isoformat(),
     ]
     assert capture["requests"][0]["response"]["candles"][0]["volume"] == "9"
     assert data == json.dumps(capture, sort_keys=True, indent=1).encode() + b"\n"

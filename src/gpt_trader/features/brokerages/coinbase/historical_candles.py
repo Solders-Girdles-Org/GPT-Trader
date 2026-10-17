@@ -202,8 +202,15 @@ class CoinbaseHistoricalFetcher:
         Returns:
             List of (chunk_start, chunk_end) tuples
         """
+        if max_candles < 2:
+            raise ValueError("max_candles must be at least 2 for inclusive chunk bounds")
         chunks = []
-        chunk_duration_seconds = candle_seconds * max_candles
+        # Coinbase returns bars starting anywhere in [start, end], both ends
+        # included, keeping the newest `max_candles`. A span of max_candles
+        # durations holds one bar too many and silently loses the first, so
+        # each chunk spans one duration less and shares its end bar with the
+        # next chunk's start (deduplicated after the fetch).
+        chunk_duration_seconds = candle_seconds * (max_candles - 1)
         current_start = start
 
         while current_start < end:

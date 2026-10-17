@@ -103,8 +103,8 @@ def test_create_chunks_splits_over_limit() -> None:
     chunks = fetcher._create_chunks(start, end, candle_seconds=60, max_candles=300)
 
     assert len(chunks) == 2
-    assert chunks[0] == (start, start + timedelta(seconds=60 * 300))
-    assert chunks[1] == (start + timedelta(seconds=60 * 300), end)
+    assert chunks[0] == (start, start + timedelta(seconds=60 * 299))
+    assert chunks[1] == (start + timedelta(seconds=60 * 299), end)
 
 
 def test_granularity_to_seconds_unknown_defaults() -> None:
@@ -149,8 +149,8 @@ def test_create_chunks_uses_four_hour_duration() -> None:
     )
 
     assert chunks == [
-        (start, start + timedelta(hours=4 * 300)),
-        (start + timedelta(hours=4 * 300), end),
+        (start, start + timedelta(hours=4 * 299)),
+        (start + timedelta(hours=4 * 299), end),
     ]
 
 
@@ -201,3 +201,58 @@ async def test_fetch_chunk_calls_client_get_candles_and_parses_timestamps() -> N
         start.isoformat(),
         (start + timedelta(minutes=1)).isoformat(),
     ]
+
+
+class _InclusiveCandlesClient:
+    """Mimics Coinbase: grid bars starting in [start, end], newest `limit` kept."""
+
+    def __init__(self, step: timedelta) -> None:
+        self.step = step
+        self.widest = 0
+
+    def get_candles(self, symbol, granularity, limit, *, start, end):  # noqa: ANN001
+        seconds = int(self.step.total_seconds())
+        first = -(-int(start.timestamp()) // seconds) * seconds
+        bars = [
+            {"start": str(ts), **dict.fromkeys(_OHLCV, "1")}
+            for ts in range(first, int(end.timestamp()) + 1, seconds)
+        ]
+        self.widest = max(self.widest, len(bars))
+        return {"candles": list(reversed(bars))[:limit]}
+
+
+_OHLCV = ("open", "high", "low", "close", "volume")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("granularity", "offset"),
+    [("ONE_HOUR", timedelta(0)), ("FOUR_HOUR", timedelta(0)), ("ONE_HOUR", timedelta(minutes=17))],
+)
+async def test_fetch_candles_keeps_first_bar_when_api_end_is_inclusive(
+    granularity: str, offset: timedelta
+) -> None:
+    """A 300-bar chunk must not span 301 inclusive bars, or the API drops its first."""
+    step = timedelta(seconds=GRANULARITY_SECONDS[granularity])
+    grid_start = datetime(2026, 9, 3, tzinfo=UTC)
+    start = grid_start + offset
+    end = grid_start + step * 912
+    client = _InclusiveCandlesClient(step)
+    fetcher = CoinbaseHistoricalFetcher(client=client)
+    fetcher._rate_limit = AsyncMock()
+
+    result = await fetcher.fetch_candles("BTC-USD", granularity, start, end)
+
+    expected = [grid_start + step * i for i in range(912) if grid_start + step * i >= start]
+    assert [c.ts for c in result if c.ts < end] == expected
+    assert client.widest <= 300
+
+
+def test_create_chunks_refuses_a_limit_that_cannot_advance() -> None:
+    fetcher = CoinbaseHistoricalFetcher(client=Mock())
+    start = datetime(2024, 1, 1, tzinfo=UTC)
+
+    with pytest.raises(ValueError, match="at least 2"):
+        fetcher._create_chunks(
+            start, start + timedelta(hours=3), candle_seconds=3600, max_candles=1
+        )
