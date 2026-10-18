@@ -169,8 +169,8 @@ def test_read_flags_ledger_calls_outside_the_runs_file(tmp_path, capsys, monkeyp
     runs_file = _runs_file(tmp_path, monkeypatch, runs(edit=not_started))
     assert _read(runs_file, "--spend-ledger", str(ledger.path)) == 0
     result = json.loads(capsys.readouterr().out)["data"]
-    assert (result["verdict"], result["action"]) == ("void", "pause")
-    assert result["voided_verdict"] == "passes"
+    assert (result["verdict"], result["action"]) == ("breached", "pause")
+    assert result["trading_verdict"] == "passes"
     breaches = result["model_spend"]["breaches"]
     assert breaches[0].startswith("ledger calls for an account outside the runs file: DOT-USD")
     assert any("fewer ledger calls than journaled turns: BTC-USD" in item for item in breaches)

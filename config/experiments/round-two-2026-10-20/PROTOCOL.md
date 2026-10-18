@@ -223,10 +223,14 @@ outside the runs file, fewer calls than turns (a turn charged to another
 ledger), calls charged to a run directory other than the one listed (a
 second run), and an account whose decision times go back to an earlier bar
 (a resume only asks the same bar again or a later one) are listed as
-breaches. **A breach voids the verdict:** the runs may not be the one run
-per case this protocol allows, so the read reports the verdict as *void*
+breaches. **A breach pauses the arm:** the runs may not be the one run per
+case this protocol allows, so the read reports the verdict as *breached*
 (the trading verdict beside it) and the arm pauses; nothing is rerun to
-repair it. *Strongest option rejected:* leaving only the breached account
+repair it. A breach is not a void attempt (below): it earns no fresh
+window. Only a breach caused by how the runs file names a directory may be
+corrected and read again, and both reads are posted; the ledger records
+every directory charged, so this cannot hide a second run.
+*Strongest option rejected:* leaving only the breached account
 unscored, which would let a second run drop a losing coin from the pool.
 The read also lists every model string that answered;
 more than one (two dated snapshots, say) is reported beside the bar.

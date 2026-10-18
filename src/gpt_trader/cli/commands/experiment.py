@@ -380,7 +380,7 @@ def register(subparsers: Any) -> None:
         "--spend-ledger",
         type=Path,
         help="AI trade manager protocols (required): the run's one spend ledger, read without "
-        "writing; model spend and any breach are reported from it, and a breach voids the verdict",
+        "writing; model spend and any breach are reported from it, and a breach pauses the arm",
     )
     add_output_options(read)
     read.set_defaults(handler=_reported(handle_read))
@@ -836,10 +836,11 @@ def _read_manager(args: Namespace, protocol: dict[str, Any], runs: dict[str, Any
         "breaches": breaches,
     }
     # A breach means the runs may not be the one run per case the protocol
-    # allows, so no verdict stands on them; the arm pauses.
+    # allows, so no verdict stands on them; the arm pauses. "breached" is not a
+    # void attempt (a run-path defect), which earns a fresh window.
     if breaches:
-        result["voided_verdict"] = result["verdict"]
-        result["verdict"] = "void"
+        result["trading_verdict"] = result["verdict"]
+        result["verdict"] = "breached"
         result["action"] = "pause"
     return CliResponse.success_response(
         "experiment read",
