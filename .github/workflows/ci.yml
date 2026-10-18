@@ -134,7 +134,7 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        # astral-sh/setup-uv@v10.2.0
+        # astral-sh/setup-uv@v10.3.0
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
@@ -176,7 +176,7 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        # astral-sh/setup-uv@v10.2.0
+        # astral-sh/setup-uv@v10.3.0
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
@@ -246,7 +246,7 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        # astral-sh/setup-uv@v10.2.0
+        # astral-sh/setup-uv@v10.3.0
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
@@ -275,7 +275,7 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        # astral-sh/setup-uv@v10.2.0
+        # astral-sh/setup-uv@v10.3.0
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
@@ -319,7 +319,7 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        # astral-sh/setup-uv@v10.2.0
+        # astral-sh/setup-uv@v10.3.0
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
@@ -370,7 +370,7 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        # astral-sh/setup-uv@v10.2.0
+        # astral-sh/setup-uv@v10.3.0
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
@@ -404,7 +404,7 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        # astral-sh/setup-uv@v10.2.0
+        # astral-sh/setup-uv@v10.3.0
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
@@ -436,7 +436,7 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        # astral-sh/setup-uv@v10.2.0
+        # astral-sh/setup-uv@v10.3.0
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
@@ -468,7 +468,7 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        # astral-sh/setup-uv@v10.2.0
+        # astral-sh/setup-uv@v10.3.0
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
@@ -517,7 +517,7 @@ jobs:
           persist-credentials: false
 
       - name: Install uv
-        # astral-sh/setup-uv@v10.2.0
+        # astral-sh/setup-uv@v10.3.0
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         if: needs.changes.result == 'success' && needs.changes.outputs.dependencies == 'true'
         with:
