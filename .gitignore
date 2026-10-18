@@ -39,6 +39,10 @@ config/experiments/*
 config/experiments/held-out-2026-09-06/*
 !config/experiments/held-out-2026-09-06/PROTOCOL.md
 !config/experiments/held-out-2026-09-06/protocol.json
+!config/experiments/round-two-2026-10-20/
+config/experiments/round-two-2026-10-20/*
+!config/experiments/round-two-2026-10-20/PROTOCOL.md
+!config/experiments/round-two-2026-10-20/protocol.json
 
 # Ephemeral per-task planning/audit artifacts (see docs/INFORMATION_ARCHITECTURE.md)
 work/

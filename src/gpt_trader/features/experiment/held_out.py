@@ -58,8 +58,9 @@ def build_input_payload(
     scored_from: str,
     benchmark: str,
     settings: dict[str, str],
+    manager: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """One validated experiment input per rule and cost case, from one capture."""
+    """One validated experiment input per channel and cost case, from one capture."""
     capture, bars = capture_bars(capture_bytes)
     digest = hashlib.sha256(capture_bytes).hexdigest()
     payload = {
@@ -75,6 +76,8 @@ def build_input_payload(
         "benchmark": benchmark,
         "settings": settings,
     }
+    if manager is not None:
+        payload["manager"] = manager
     parse_input(payload)
     return payload
 
@@ -86,6 +89,7 @@ def verify_input_payload(capture_bytes: bytes, payload: dict[str, Any]) -> None:
         scored_from=str(payload.get("scored_from")),
         benchmark=str(payload.get("benchmark")),
         settings=payload.get("settings", {}),
+        manager=payload.get("manager"),
     )
     differing = sorted(
         key

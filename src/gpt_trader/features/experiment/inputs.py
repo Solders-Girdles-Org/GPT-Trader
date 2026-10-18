@@ -24,8 +24,9 @@ MANAGER_CHANNEL = "ai-trade-manager"
 BENCHMARKS = ("baseline", "mean-reversion", MANAGER_CHANNEL)
 DEFAULT_BENCHMARK = "baseline"
 
-# Placeholder starting rulebook for the AI trade manager; the round-two
-# protocol freezes its own. The model may rewrite it on any turn.
+# Starting rulebook for the AI trade manager. The round-two protocol
+# (config/experiments/round-two-2026-10-20/protocol.json) freezes its own copy,
+# which is this text. The model may rewrite it on any turn.
 DEFAULT_RULEBOOK = (
     "Starting rulebook; rewrite it whenever you learn something. Every round trip "
     "pays the fee and slippage in the context twice, so trade rarely and only when "
@@ -86,8 +87,10 @@ class ManagerSettings:
     cadence_bars: int = 4
     # Closed bars in each decision's context, ending at the decision bar.
     history_bars: int = 48
-    # The model transport's pinned request settings; the round-two protocol
-    # freezes its own. Output tokens (thinking included) never exceed max_tokens.
+    # The model transport's pinned request settings. The round-two protocol
+    # freezes its own (effort high, max_tokens 16000), which every round-two
+    # input names explicitly. Output tokens (thinking included) never exceed
+    # max_tokens.
     model: str = "claude-fable-5-1"
     effort: str = "high"
     max_tokens: int = 8000

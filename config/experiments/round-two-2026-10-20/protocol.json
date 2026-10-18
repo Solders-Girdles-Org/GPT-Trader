@@ -1,0 +1,51 @@
+{
+  "protocol": "round-two-2026-10-20",
+  "authority": "docs/decisions/next-round-after-held-out-benchmark.md",
+  "reading": "ai-trade-manager",
+  "symbols": [
+    "BTC-USD",
+    "ETH-USD",
+    "LTC-USD",
+    "SOL-USD",
+    "XRP-USD",
+    "LINK-USD",
+    "AVAX-USD",
+    "DOT-USD"
+  ],
+  "warmup_start": "2026-10-17T00:00:00+00:00",
+  "scored_from": "2026-10-20T00:00:00+00:00",
+  "cutoff": "2026-11-24T00:00:00+00:00",
+  "bars_per_symbol": 912,
+  "benchmarks": [
+    "ai-trade-manager",
+    "mean-reversion",
+    "baseline"
+  ],
+  "settings": {
+    "initial_cash": "1000",
+    "risk_fraction": "0.01",
+    "exposure_fraction": "0.20",
+    "drawdown_fraction": "0.10"
+  },
+  "cost_cases": {
+    "base": {
+      "fee_bps": "10",
+      "slippage_bps": "5"
+    },
+    "stress": {
+      "fee_bps": "60",
+      "slippage_bps": "10"
+    }
+  },
+  "manager": {
+    "rulebook": "Starting rulebook; rewrite it whenever you learn something. Every round trip pays the fee and slippage in the context twice, so trade rarely and only when the expected move clearly exceeds that cost. Staying out and holding are normal choices. Exit when the reason you entered no longer holds.",
+    "cadence_bars": 4,
+    "history_bars": 48,
+    "model": "claude-fable-5-1",
+    "effort": "high",
+    "max_tokens": 16000
+  },
+  "max_failed_turn_fraction": "0.05",
+  "min_scored_symbols": 7,
+  "min_round_trips": 30
+}

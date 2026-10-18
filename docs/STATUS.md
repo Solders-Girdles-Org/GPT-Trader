@@ -60,10 +60,13 @@ W2 shipped the Anthropic model transport with a hard spend ceiling
 ([model_transport.py](../src/gpt_trader/features/experiment/model_transport.py),
 [#1350](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1350)); it runs
 only behind `experiment run --model-transport anthropic` with a spend ledger
-and cap, and no model call has been made. Continue with W3, the round-two
-protocol and freeze, under [#1252](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1252);
-no model call or spend happens before RJ's one card for the credential,
-spending cap and run. Do not start the old runtime,
+and cap, and no model call has been made. W3 froze the round-two protocol
+for the window 2026-10-20 to 2026-11-24
+([protocol](../config/experiments/round-two-2026-10-20/PROTOCOL.md),
+[#1352](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1352)).
+Next is RJ's one card for the credential, spending cap and run, under
+[#1252](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1252); no
+model call or spend happens before it. Do not start the old runtime,
 use its approval grants for the new product, or infer a deployment from this
 page.
 

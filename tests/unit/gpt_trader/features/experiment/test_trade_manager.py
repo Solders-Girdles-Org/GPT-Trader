@@ -107,6 +107,11 @@ def test_request_is_versioned_and_holds_only_closed_bars(manager_payload):
     assert len(bars) == 48
     assert bars[-1] == manager_payload["candles"][55]
     assert request["context"]["decision_time"] == manager_payload["candles"][56]["ts"]
+    assert request["context"]["window"] == {
+        "starts_at": manager_payload["candles"][0]["ts"],
+        "ends_at": manager_payload["recorded_at"],
+    }
+    assert "compared with cash" in request["instructions"]
     assert request["context"]["rulebook"]["version"] == 1
     assert request["context"]["costs"]["round_trip_bps"] == "30"
     assert events[55]["turn"]["request"] == request
