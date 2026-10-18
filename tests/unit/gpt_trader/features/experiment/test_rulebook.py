@@ -152,3 +152,19 @@ def test_halt_blocks_entries_but_allows_exit(experiment_payload):
     settled = advance(parsed, 3, exit_["state"])
     assert settled["fills"][0]["side"] == "sell"
     assert settled["proposal"] is None
+
+
+def test_hold_filter_waits_for_its_full_history(experiment_payload):
+    events = walk(source(experiment_payload, entry="hold", trend_filter_bars=100))
+    assert not any(event["proposal"] for event in events)
+    assert {event["decision"] for event in events} == {"ai-rulebook: collecting history"}
+
+
+def test_scored_boundary_does_not_trade_in_warmup(experiment_payload):
+    experiment_payload["scored_from"] = experiment_payload["candles"][5]["ts"]
+    events = walk(source(experiment_payload, entry="hold"))
+    assert not any(event["proposal"] or event["fills"] for event in events[:5])
+    assert not any(event["rulebook_activation"] for event in events[:5])
+    assert events[5]["rulebook_activation"]["rules"]["version"] == 1
+    assert events[5]["fills"] == []
+    assert events[6]["fills"][0]["side"] == "buy"

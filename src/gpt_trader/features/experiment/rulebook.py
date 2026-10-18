@@ -131,7 +131,7 @@ def evaluate(
     needed = max(
         rule.slow_bars + 1 if rule.entry == "trend" else 1,
         rule.reversion_bars if rule.entry == "mean-reversion" else 1,
-        rule.trend_filter_bars if not holding and rule.entry not in ("cash", "hold") else 0,
+        rule.trend_filter_bars if not holding and rule.entry != "cash" else 0,
     )
     if len(closes) < needed:
         return "ai-rulebook: collecting history", None, activation

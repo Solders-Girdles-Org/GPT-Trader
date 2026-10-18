@@ -1,6 +1,7 @@
 """Atomic activation, tamper rejection and historical mechanics regression."""
 
 import json
+import logging
 import sqlite3
 from copy import deepcopy
 from decimal import Decimal
@@ -92,7 +93,7 @@ def test_rulebook_journal_tamper_rejected(experiment_payload, tmp_path):
         inspect_run(tmp_path)
 
 
-def test_historical_hold_gaps_are_measurements():
+def test_historical_hold_gaps_are_measurements(caplog):
     # Exact OHLCV rows 336:480 from retained round-one BTC baseline-base input.
     # Source capture digest and fetch time are preserved in the fixture. This
     # test writes no journal/evidence: a pure transition fold checks mechanics.
@@ -140,5 +141,9 @@ def test_historical_hold_gaps_are_measurements():
             gaps[f"{costs}/{variant}"] = str(Decimal(valuation["net_pnl"]) - hold)
     # No gap threshold: the comparator has no stop-risk sizing or expiry and
     # enters one bar earlier. Step 3 must disclose these structural differences.
-    print(json.dumps(gaps, sort_keys=True))
+    with caplog.at_level(logging.INFO):
+        logging.getLogger(__name__).info(
+            "Historical hold mechanics gaps: %s", json.dumps(gaps, sort_keys=True)
+        )
+    assert "base/at-cap" in caplog.text and "stress/wide-stop" in caplog.text
     assert len(gaps) == 4
