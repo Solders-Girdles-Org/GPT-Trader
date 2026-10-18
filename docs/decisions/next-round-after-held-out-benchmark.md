@@ -373,8 +373,10 @@ RJ declined the round-two card
 ([#1354](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1354)) as
 too costly for how unproven GPT-Trader still is. That means "not yet", not
 the "pause now" option, so the pause rule above is not triggered and no
-restart-watch item opens. The frozen window lapses unrun, and the built
-channel stays default-off. The next round is
+restart-watch item opens. The agent's reading in the pause rule (anything
+short of a pass pauses) lapsed unconfirmed. RJ's #1344 condition itself
+stands. The frozen window lapses unrun, and the built channel stays
+default-off. The next round is
 [cheap proofs before any paid AI test](cheap-proofs-before-paid-ai-test.md).
 
 ## Consequences

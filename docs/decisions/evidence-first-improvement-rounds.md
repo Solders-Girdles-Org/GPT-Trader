@@ -94,6 +94,7 @@ The stages, in order:
   [next-round-after-held-out-benchmark](next-round-after-held-out-benchmark.md#pause-rule-and-the-test-that-restarts-the-project).
 - 2026-10-18: RJ declined the round-two card as "not yet", and asked that
   any spend-gated test come only after its pieces are proven cheaply. The
+  proposed reading above lapsed unconfirmed; RJ's pause condition stands. The
   next round is
   [cheap proofs before any paid AI test](cheap-proofs-before-paid-ai-test.md).
 

@@ -65,8 +65,8 @@ What is proven and what is not, as of this record:
   cadence (weekly as the starting assumption) in one portfolio-level call for
   all eight coins per cost case. That is about a dozen calls per 35-day
   window instead of about 4,800, with a hard cap of roughly $20
-  *(estimate, assuming the author sees daily rather than hourly bars: about
-  40,000 bytes of context bounds its input at about 42,000 tokens by round
+  *(estimate, assuming the author sees 30 daily bars per coin rather than
+  hourly bars: about 40,000 bytes of context bounds its input at about 42,000 tokens by round
   two's per-byte method; at the cache-write rate, plus 16,000 output tokens at
   Fable 5.1's recorded price, that is about $1.30 a call, times 12 calls;
   step 2 below replaces this with an offline measurement)*. It
@@ -111,12 +111,17 @@ What is proven and what is not, as of this record:
    deterministic `ai-rulebook` channel that runs it in the experiment
    engine with the existing rails, plus an agent-written starting rulebook.
    It must be able to express "stay in cash", close equivalents of both
-   fixed rules, and a hold rule: enter at the cap with a wide stop and renew
-   at expiry. No rail is loosened. The engine's stop at entry and its
-   720-hour expiry stay, so the hold rule can approach the hold comparator
-   but not equal it. Step 1 measures that gap on round one's data, and step
-   3's card reports it. Proven by unit tests and by replaying round one's
-   recorded inputs as test data, not evidence.
+   fixed rules, and a hold rule that renews at expiry. No rail is loosened,
+   so the hold rule cannot equal hold-the-coin. Every entry risks at most 1%
+   of equity at its stop ([engine](../../src/gpt_trader/features/experiment/engine.py)
+   sizing), so a hold at the 20% cap needs a stop within about 5% of price,
+   and a wider stop means a smaller position. Positions also expire within
+   720 hours. Step 1 measures both variants (at the cap with a tight stop,
+   and smaller with a wide stop) against hold-the-coin on round one's data.
+   Step 3's card reports the gap, and the protocol may propose a rail
+   change for the hold rule, recorded before its window. Proven by unit
+   tests and by replaying round one's recorded inputs as test data, not
+   evidence.
 2. **Rulebook author turn (agent, no spend).** A portfolio-level request
    that sends recent closed bars for all coins, the accounts and the current
    rulebook, and reads back a validated rulebook. It uses an injected
@@ -134,10 +139,13 @@ What is proven and what is not, as of this record:
    and real token counts. Second, only if the smoke passes, the frozen
    forward run. The card shows the measured estimate and offers "not yet".
    It also proposes, with a recommendation, how a weak result is read under
-   RJ's pause condition below, for RJ to confirm.
+   RJ's pause condition below, for RJ to confirm. It states plainly that this
+   design is narrower than round two's trade manager, and offers Option B
+   instead.
 
-The reading, the bar and the void-and-refreeze rule follow round two's
-protocol unless step 3 records a change before its window. **RJ's pause
+The bar and the void-and-refreeze rule follow round two's protocol unless
+step 3 records a change before its window. Its pause line ("anything other
+than passes pauses") does not carry over. **RJ's pause
 condition stands:** if an AI that manages the trades "can't be built
 credibly with today's models", pause until a stronger model is available
 "rather than build something less"
@@ -147,8 +155,7 @@ short of a pass pauses) was the agent's proposal awaiting RJ's confirmation
 on the card, and it lapsed with the decline. Step 3's card proposes the
 reading for this design.
 
-**Reconsider** if step 1 cannot express the fixed rules closely or its hold
-rule trails the hold comparator by more than one round trip's costs, if the
+**Reconsider** if step 1 cannot express the fixed rules closely, if the
 offline estimate in step 2 exceeds about $50 for one window, or if the smoke
 shows the model cannot produce valid rulebooks reliably.
 
