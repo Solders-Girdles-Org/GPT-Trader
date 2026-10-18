@@ -210,7 +210,7 @@ def author_turn(request: dict[str, Any], transport: DecisionTransportProtocol) -
             reply, current, Decimal(request["context"]["limits"]["exposure_fraction"])
         )
         record["accepted"] = True
-    except (ValueError, TypeError) as error:
+    except (ValueError, TypeError, RecursionError) as error:
         record["error"] = str(error)
     return record
 

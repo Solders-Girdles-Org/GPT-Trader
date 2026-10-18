@@ -563,40 +563,69 @@ def _model_transport(
 
 
 def _author_settings_options(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--author-cadence-bars", type=int, default=168)
-    parser.add_argument("--author-history-days", type=int, default=30)
-    parser.add_argument("--author-model", default="claude-fable-5-1")
-    parser.add_argument("--author-effort", default="high")
-    parser.add_argument("--author-max-tokens", type=int, default=16000)
+    parser.add_argument("--author-cadence-bars", type=int, default=argparse.SUPPRESS)
+    parser.add_argument("--author-history-days", type=int, default=argparse.SUPPRESS)
+    parser.add_argument("--author-model", default=argparse.SUPPRESS)
+    parser.add_argument("--author-effort", default=argparse.SUPPRESS)
+    parser.add_argument("--author-max-tokens", type=int, default=argparse.SUPPRESS)
 
 
 def _author_settings(args: Namespace) -> tuple[Any, ManagerSettings]:
     from gpt_trader.features.experiment.rulebook_author import AuthorSettings
 
-    return AuthorSettings(args.author_cadence_bars, args.author_history_days), ManagerSettings(
-        model=args.author_model, effort=args.author_effort, max_tokens=args.author_max_tokens
+    return AuthorSettings(
+        getattr(args, "author_cadence_bars", 168), getattr(args, "author_history_days", 30)
+    ), ManagerSettings(
+        model=getattr(args, "author_model", "claude-fable-5-1"),
+        effort=getattr(args, "author_effort", "high"),
+        max_tokens=getattr(args, "author_max_tokens", 16000),
     )
 
 
 def handle_author_smoke(args: Namespace) -> CliResponse:
     from gpt_trader.features.experiment.author_runner import run_author_smoke
-    from gpt_trader.features.experiment.rulebook_author import reply_schema, validate_portfolio
+    from gpt_trader.features.experiment.rulebook_author import (
+        build_author_request,
+        reply_schema,
+        validate_portfolio,
+    )
 
-    sources = [_load_input(path, None) for path in args.input]
-    validate_portfolio(sources)
-    settings, manager = _author_settings(args)
-    if args.spend_ledger.resolve().is_relative_to(args.root.resolve()):
-        raise ValueError("Spend ledger must be outside smoke root and retained on resume")
-    ledger = SpendLedger(args.spend_ledger, parse_cap(args.spend_cap_usd))
-    transport = from_environment(
-        manager,
-        ledger,
-        reply_schema=reply_schema([s.symbol for s in sources]),
-        run=str(args.root.resolve()),
-    )
-    result = run_author_smoke(
-        sources, args.root, manager, transport, settings=settings, max_turns=args.max_turns
-    )
+    try:
+        sources = [_load_input(path, None) for path in args.input]
+        validate_portfolio(sources)
+        settings, manager = _author_settings(args)
+        if args.spend_ledger.resolve().is_relative_to(args.root.resolve()):
+            raise ValueError("Spend ledger must be outside smoke root and retained on resume")
+        ledger = SpendLedger(args.spend_ledger, parse_cap(args.spend_cap_usd))
+        schema = reply_schema([s.symbol for s in sources])
+        # First turn is flat, with no prior fills. As with run, check available
+        # room before constructing a client or writing a scratch journal.
+        accounts = {
+            source.symbol: {
+                key: initial_state(source)[key]
+                for key in ("cash", "quantity", "position", "halted")
+            }
+            for source in sources
+        }
+        rules = {source.symbol: source.payload["rulebooks"][0]["rules"] for source in sources}
+        first = build_author_request(sources, sources[0].scored_index, accounts, rules, settings)
+        least = worst_case_usd(wire_params(first, manager, schema))
+        if ledger.spent_usd() + least > ledger.cap_usd:
+            raise SpendCeilingReached(
+                f"Spend ledger has too little room for one call (up to ${least}); nothing was created or advanced"
+            )
+        transport = from_environment(
+            manager, ledger, reply_schema=schema, run=str(args.root.resolve())
+        )
+        result = run_author_smoke(
+            sources, args.root, manager, transport, settings=settings, max_turns=args.max_turns
+        )
+    except (SpendCeilingReached, TransportHalted) as error:
+        raise ExperimentCliError(CliErrorCode.OPERATION_FAILED, str(error)) from None
+    except ValueError as error:
+        raise ExperimentCliError(CliErrorCode.CONFIG_INVALID, str(error)) from None
+    except (sqlite3.DatabaseError, OSError) as error:
+        raise ExperimentCliError(CliErrorCode.OPERATION_FAILED, str(error)) from None
     return CliResponse.success_response("experiment author-smoke", data=result)
 
 
@@ -610,8 +639,11 @@ def handle_estimate(args: Namespace) -> CliResponse:
             [source] + [_load_input(path, None) for path in args.portfolio_input], manager, settings
         )
         return CliResponse.success_response("experiment estimate-spend", data=result)
-    if args.portfolio_input:
-        raise ValueError("--portfolio-input requires --author")
+    if args.portfolio_input or any(key.startswith("author_") for key in vars(args)):
+        raise ExperimentCliError(
+            CliErrorCode.INVALID_ARGUMENT,
+            "--portfolio-input and --author-* options require --author",
+        )
     if source.manager is None:
         raise ExperimentCliError(
             CliErrorCode.INVALID_ARGUMENT,

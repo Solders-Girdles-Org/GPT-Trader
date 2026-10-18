@@ -46,6 +46,8 @@ class AuthorStub:
         text = json.dumps({"rulebooks": rules})
         if self.mode == "malformed":
             text = "not json"
+        if self.mode == "nested":
+            text = "[" * 99_000
         return TransportReply(
             self.model,
             text,
@@ -100,7 +102,7 @@ def test_valid_cadence_resume_and_rules_reach_engine(portfolio, tmp_path):
     )
 
 
-@pytest.mark.parametrize("mode", ["invalid", "refusal", "failure", "malformed"])
+@pytest.mark.parametrize("mode", ["invalid", "refusal", "failure", "malformed", "nested"])
 def test_bad_turn_preserves_all_rules_and_replays(portfolio, tmp_path, mode):
     stub = AuthorStub(mode)
     result = run_author_smoke(portfolio, tmp_path / "smoke", ManagerSettings(), stub, max_turns=1)
