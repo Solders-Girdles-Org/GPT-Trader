@@ -87,7 +87,7 @@ REPLY_SCHEMA: dict[str, Any] = {
 }
 
 
-LABEL_COLUMNS = ("account", "decision_time")
+LABEL_COLUMNS = ("account", "decision_time", "run")
 
 
 def _columns(connection: sqlite3.Connection) -> set[str]:
@@ -230,7 +230,8 @@ class SpendLedger:
             "CREATE TABLE calls (id INTEGER PRIMARY KEY AUTOINCREMENT, "
             "model TEXT NOT NULL, reserved_at TEXT NOT NULL, reserved_usd TEXT NOT NULL, "
             "status TEXT NOT NULL, cost_usd TEXT, detail TEXT, "
-            "account TEXT NOT NULL DEFAULT '', decision_time TEXT NOT NULL DEFAULT '')"
+            "account TEXT NOT NULL DEFAULT '', decision_time TEXT NOT NULL DEFAULT '', "
+            "run TEXT NOT NULL DEFAULT '')"
         )
         connection.execute("INSERT INTO ceiling VALUES (1, ?, ?)", (str(self.cap_usd), _now()))
 
@@ -265,12 +266,18 @@ class SpendLedger:
             return [dict(row) for row in connection.execute("SELECT * FROM calls ORDER BY id")]
 
     def reserve(
-        self, model: str, amount: Decimal, *, account: str = "", decision_time: str = ""
+        self,
+        model: str,
+        amount: Decimal,
+        *,
+        account: str = "",
+        decision_time: str = "",
+        run: str = "",
     ) -> int:
         """Count ``amount`` before a call, or raise if it could pass the cap.
 
-        ``account`` and ``decision_time`` name the request, so a reading can match
-        every charged call to a journaled turn.
+        ``account``, ``decision_time`` and ``run`` (the run directory) name the
+        request, so a reading can match every charged call to a journaled turn.
         """
         if amount > self.cap_usd and not self._exists():
             raise SpendCeilingReached(
@@ -293,8 +300,8 @@ class SpendLedger:
                 )
             cursor = connection.execute(
                 "INSERT INTO calls (model, reserved_at, reserved_usd, status, account, "
-                "decision_time) VALUES (?, ?, ?, 'reserved', ?, ?)",
-                (model, _now(), str(amount), account, decision_time),
+                "decision_time, run) VALUES (?, ?, ?, 'reserved', ?, ?, ?)",
+                (model, _now(), str(amount), account, decision_time, run),
             )
             connection.execute("COMMIT")
             assert cursor.lastrowid is not None
@@ -338,9 +345,12 @@ def ledger_summary(path: Path) -> dict[str, Any]:
     accounts: dict[str, int] = {}
     latest: dict[str, datetime] = {}
     rewound: set[str] = set()
-    for _, status, _, _, account, decision_time in rows:
+    run_dirs: dict[str, set[str]] = {}
+    for _, status, _, _, account, decision_time, run in rows:
         statuses[status] = statuses.get(status, 0) + 1
         accounts[account] = accounts.get(account, 0) + 1
+        if run:
+            run_dirs.setdefault(account, set()).add(run)
         if not decision_time:
             continue
         # A resume asks the uncommitted bar again or a later one; only a second
@@ -350,7 +360,7 @@ def ledger_summary(path: Path) -> dict[str, Any]:
             rewound.add(account)
         latest[account] = max(moment, latest.get(account, moment))
     charged = sum(
-        (Decimal(cost if cost is not None else held) for _, _, held, cost, _, _ in rows),
+        (Decimal(cost if cost is not None else held) for _, _, held, cost, *_ in rows),
         Decimal(0),
     )
     return {
@@ -362,18 +372,23 @@ def ledger_summary(path: Path) -> dict[str, Any]:
         "models": sorted({row[0] for row in rows}),
         "calls_by_account": dict(sorted(accounts.items())),
         "rewound_accounts": sorted(rewound),
+        "runs_by_account": {account: sorted(dirs) for account, dirs in sorted(run_dirs.items())},
     }
 
 
 class AnthropicTransport:
     """One Messages API call per decision turn, counted against the spend ledger."""
 
-    def __init__(self, manager: ManagerSettings, ledger: SpendLedger, client: Any) -> None:
+    def __init__(
+        self, manager: ManagerSettings, ledger: SpendLedger, client: Any, run: str = ""
+    ) -> None:
         pricing_for(manager.model)
         self.manager = manager
         self.model = manager.model
         self.ledger = ledger
         self.client = client
+        # The run directory each call is charged to, so a second run is visible.
+        self.run = run
 
     def decide(self, request: dict[str, Any]) -> TransportReply:
         import anthropic
@@ -389,6 +404,7 @@ class AnthropicTransport:
                 context["symbol"], context["costs"]["fee_bps"], context["costs"]["slippage_bps"]
             ),
             decision_time=context["decision_time"],
+            run=self.run,
         )
         started = time.monotonic()
         try:

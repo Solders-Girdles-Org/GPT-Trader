@@ -212,14 +212,15 @@ states. The reading is judged on trading results alone. **Model spend** is
 reported beside it from the spend ledger, not the journals: a call whose
 billing is unknown records $0 in its journal turn but keeps its full
 reservation in the ledger, and a call whose bar never committed appears only
-there. Each ledger call records its account (symbol and cost case) and
-decision time. For each listed account, the read reports ledger calls
-beside journaled turns. A surplus is re-asked uncommitted bars, each of
+there. Each ledger call records its account (symbol and cost case), decision
+time and run directory. For each listed account, the read reports ledger
+calls beside journaled turns. A surplus is re-asked uncommitted bars, each of
 which the report explains by its crash or halt. Ledger calls for an account
 outside the runs file, fewer calls than turns (a turn charged to another
-ledger), and an account whose decision times go back to an earlier bar (a
-second run, since a resume only asks the same bar again or a later one) are
-listed as breaches. The read also lists every model string that answered;
+ledger), calls charged to a run directory other than the one listed (a
+second run), and an account whose decision times go back to an earlier bar
+(a resume only asks the same bar again or a later one) are listed as
+breaches. The read also lists every model string that answered;
 more than one (two dated snapshots, say) is reported beside the bar.
 
 ## If the spend stop ends the arm early

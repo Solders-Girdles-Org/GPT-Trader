@@ -111,14 +111,18 @@ def _ledger(tmp_path, calls):
     from gpt_trader.features.experiment.model_transport import SpendLedger, account_label
 
     start = aware_time(PROTOCOL["scored_from"])
+    cases = {costs["fee_bps"]: case for case, costs in PROTOCOL["cost_cases"].items()}
     ledger = SpendLedger(tmp_path / "spend.sqlite", Decimal("4720"))
-    for symbol, fee, slippage, count in calls:
+    for symbol, fee, slippage, count, *run in calls:
+        # The run directory _runs_file lists for this account, unless one is named.
+        root = run[0] if run else tmp_path / f"ai-trade-manager-{cases[fee]}-{symbol}"
         for turn in range(count):
             call = ledger.reserve(
                 "claude-fable-5-1",
                 Decimal("0.01"),
                 account=account_label(symbol, fee, slippage),
                 decision_time=(start + timedelta(hours=1 + 4 * min(turn, 209))).isoformat(),
+                run=str(root.resolve()),
             )
             ledger.settle(call, Decimal("0.005"), "replied")
     return ledger
@@ -204,4 +208,24 @@ def test_read_flags_a_second_run_of_an_account(tmp_path, capsys, monkeypatch):
     spend = json.loads(capsys.readouterr().out)["data"]["model_spend"]
     assert spend["breaches"] == [
         "decision times go back to an earlier bar, a second run: DOT-USD fee_bps=10 slippage_bps=5"
+    ]
+
+
+def test_read_flags_a_rerun_in_another_directory_after_its_first_turn(
+    tmp_path, capsys, monkeypatch
+):
+    every = [
+        (symbol, costs["fee_bps"], costs["slippage_bps"], 210)
+        for symbol in PROTOCOL["symbols"]
+        for costs in PROTOCOL["cost_cases"].values()
+    ]
+    # A first attempt committed one turn elsewhere; the listed run restarted from bar one.
+    abandoned = ("ETH-USD", "60", "10", 1, tmp_path / "abandoned")
+    ledger = _ledger(tmp_path, [abandoned, *every])
+    runs_file = _runs_file(tmp_path, monkeypatch, runs())
+    assert _read(runs_file, "--spend-ledger", str(ledger.path)) == 0
+    spend = json.loads(capsys.readouterr().out)["data"]["model_spend"]
+    assert spend["breaches"] == [
+        "calls charged to a run directory other than the listed one: "
+        "ETH-USD fee_bps=60 slippage_bps=10"
     ]

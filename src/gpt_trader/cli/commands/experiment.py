@@ -505,6 +505,7 @@ def _model_transport(
         # Neither creates a file: the ledger is written by its first reservation.
         ledger = SpendLedger(args.spend_ledger, parse_cap(args.spend_cap_usd))
         transport = from_environment(source.manager, ledger)
+        transport.run = str(root.resolve())
         # A new run's first turn is exact (no fill can precede it); a resume's next
         # turn is near it, and its real reservation is still checked at the call.
         first = build_request(source, source.scored_index, initial_state(source))
@@ -765,14 +766,16 @@ def _read_manager(args: Namespace, protocol: dict[str, Any], runs: dict[str, Any
             f"Runs file {args.runs} does not fit protocol {args.protocol}: {error}",
             path=str(args.runs),
         ) from None
-    turns = {
-        account_label(
-            report["symbol"], report["settings"]["fee_bps"], report["settings"]["slippage_bps"]
-        ): report["manager"]["turns"]
-        for case in reports[MANAGER_CHANNEL].values()
-        for report in case
-        if "not_run" not in report
-    }
+    turns: dict[str, int] = {}
+    listed: dict[str, str] = {}
+    for case, entries in runs[MANAGER_CHANNEL].items():
+        for entry, report in zip(entries, reports[MANAGER_CHANNEL][case], strict=True):
+            if _is_not_run(entry):
+                continue
+            settings = report["settings"]
+            account = account_label(report["symbol"], settings["fee_bps"], settings["slippage_bps"])
+            turns[account] = report["manager"]["turns"]
+            listed[account] = str(Path(entry).resolve())
     spend: dict[str, Any] = {"journal_turns": sum(turns.values()), "ledger": None}
     if args.spend_ledger is not None:
         try:
@@ -807,6 +810,11 @@ def _read_manager(args: Namespace, protocol: dict[str, Any], runs: dict[str, Any
             + [
                 f"decision times go back to an earlier bar, a second run: {name}"
                 for name in ledger["rewound_accounts"]
+            ]
+            + [
+                f"calls charged to a run directory other than the listed one: {name}"
+                for name, dirs in ledger["runs_by_account"].items()
+                if name in listed and dirs != [listed[name]]
             ],
         }
     result["model_spend"] = spend
