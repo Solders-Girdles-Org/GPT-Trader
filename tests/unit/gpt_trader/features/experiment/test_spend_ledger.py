@@ -170,3 +170,36 @@ def test_ledger_summary_reads_the_charge_without_writing(manager_input, ledger, 
     foreign.write_bytes(b"not a ledger")
     with pytest.raises(SpendLedgerError):
         ledger_summary(foreign)
+
+
+def test_a_ledger_from_before_request_labels_keeps_its_charges(manager_input, tmp_path):
+    import sqlite3
+    from contextlib import closing
+
+    from gpt_trader.features.experiment.model_transport import APPLICATION_ID, ledger_summary
+
+    path = tmp_path / "old.sqlite"
+    with closing(sqlite3.connect(path, isolation_level=None)) as connection:
+        connection.execute(f"PRAGMA application_id = {APPLICATION_ID}")
+        connection.execute(
+            "CREATE TABLE ceiling (id INTEGER PRIMARY KEY CHECK (id = 1), "
+            "cap_usd TEXT NOT NULL, created_at TEXT NOT NULL)"
+        )
+        connection.execute(
+            "CREATE TABLE calls (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "model TEXT NOT NULL, reserved_at TEXT NOT NULL, reserved_usd TEXT NOT NULL, "
+            "status TEXT NOT NULL, cost_usd TEXT, detail TEXT)"
+        )
+        connection.execute("INSERT INTO ceiling VALUES (1, '100', 'then')")
+        connection.execute(
+            "INSERT INTO calls (model, reserved_at, reserved_usd, status, cost_usd) "
+            "VALUES ('claude-fable-5-1', 'then', '0.5', 'replied', '0.25')"
+        )
+    assert ledger_summary(path)["calls_by_account"] == {"": 1}
+    ledger = SpendLedger(path, Decimal("100"))
+    transport(manager_input, ledger).decide(first_request(manager_input))
+    assert ledger.spent_usd() == Decimal("0.25") + Decimal("0.09")
+    assert ledger_summary(path)["calls_by_account"] == {
+        "": 1,
+        "BTC-USD fee_bps=10 slippage_bps=5": 1,
+    }

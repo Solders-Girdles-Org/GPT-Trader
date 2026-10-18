@@ -87,6 +87,13 @@ REPLY_SCHEMA: dict[str, Any] = {
 }
 
 
+LABEL_COLUMNS = ("account", "decision_time")
+
+
+def _columns(connection: sqlite3.Connection) -> set[str]:
+    return {row[1] for row in connection.execute("PRAGMA table_info(calls)")}
+
+
 def same_model(pinned: str, reported: str) -> bool:
     """The pinned model, or a dated snapshot of it (``<pinned>-YYYYMMDD``)."""
     return reported == pinned or re.fullmatch(re.escape(pinned) + r"-\d{8}", reported) is not None
@@ -207,6 +214,12 @@ class SpendLedger:
         tables = connection.execute("SELECT count(*) FROM sqlite_master").fetchone()[0]
         if tables:
             self._check(connection)
+            # A ledger from before calls named their request gains the columns,
+            # keeping every earlier charge; its old calls stay unlabelled.
+            for column in sorted(set(LABEL_COLUMNS) - _columns(connection)):
+                connection.execute(
+                    f"ALTER TABLE calls ADD COLUMN {column} TEXT NOT NULL DEFAULT ''"
+                )
             return
         connection.execute(f"PRAGMA application_id = {APPLICATION_ID}")
         connection.execute(
@@ -313,8 +326,9 @@ def ledger_summary(path: Path) -> dict[str, Any]:
             if ceiling is None:
                 raise SpendLedgerError(f"Spend ledger {path} has no cap")
             (cap,) = ceiling
+            account = "account" if "account" in _columns(connection) else "''"
             rows = connection.execute(
-                "SELECT model, status, reserved_usd, cost_usd, account FROM calls ORDER BY id"
+                f"SELECT model, status, reserved_usd, cost_usd, {account} FROM calls ORDER BY id"
             ).fetchall()
     except sqlite3.DatabaseError as error:
         raise SpendLedgerError(f"Could not read spend ledger {path}: {error}") from None
