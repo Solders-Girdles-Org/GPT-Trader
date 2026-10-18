@@ -130,6 +130,9 @@ def _ledger(tmp_path, calls):
 
 def _read(runs_file, *extra):
     command = ["experiment", "read", "--protocol", PROTOCOL_PATH, "--runs", str(runs_file)]
+    if "--spend-ledger" not in extra:
+        # Refusals of the runs file come before the ledger is opened.
+        extra = (*extra, "--spend-ledger", str(runs_file.parent / "unopened.sqlite"))
     return main([*command, "--source-sha256", DIGEST, *extra, "--format", "json"])
 
 
@@ -152,8 +155,9 @@ def test_read_applies_the_round_two_bar_and_reconciles_the_ledger(tmp_path, caps
     assert spend["breaches"] == []
     assert Decimal(spend["ledger"]["charged_usd"]) == ledger.spent_usd()
 
-    assert _read(runs_file) == 0
-    assert json.loads(capsys.readouterr().out)["data"]["model_spend"]["ledger"] is None
+    command = ["experiment", "read", "--protocol", PROTOCOL_PATH, "--runs", str(runs_file)]
+    assert main([*command, "--source-sha256", DIGEST, "--format", "json"]) == 1
+    assert "--spend-ledger" in json.loads(capsys.readouterr().out)["errors"][0]["message"]
 
 
 def test_read_flags_ledger_calls_outside_the_runs_file(tmp_path, capsys, monkeypatch):
@@ -164,7 +168,10 @@ def test_read_flags_ledger_calls_outside_the_runs_file(tmp_path, capsys, monkeyp
     ledger = _ledger(tmp_path, [("DOT-USD", "60", "10", 5), ("BTC-USD", "10", "5", 3)])
     runs_file = _runs_file(tmp_path, monkeypatch, runs(edit=not_started))
     assert _read(runs_file, "--spend-ledger", str(ledger.path)) == 0
-    breaches = json.loads(capsys.readouterr().out)["data"]["model_spend"]["breaches"]
+    result = json.loads(capsys.readouterr().out)["data"]
+    assert (result["verdict"], result["action"]) == ("void", "pause")
+    assert result["voided_verdict"] == "passes"
+    breaches = result["model_spend"]["breaches"]
     assert breaches[0].startswith("ledger calls for an account outside the runs file: DOT-USD")
     assert any("fewer ledger calls than journaled turns: BTC-USD" in item for item in breaches)
 
@@ -229,3 +236,17 @@ def test_read_flags_a_rerun_in_another_directory_after_its_first_turn(
         "calls charged to a run directory other than the listed one: "
         "ETH-USD fee_bps=60 slippage_bps=10"
     ]
+
+
+def test_a_run_directory_matches_only_itself_however_spelled(tmp_path):
+    from gpt_trader.cli.commands import experiment as command
+
+    run, other = tmp_path / "run", tmp_path / "other"
+    run.mkdir()
+    other.mkdir()
+    listed = str(run.resolve())
+    assert command._same_run([listed], listed)
+    assert command._same_run([str(run / ".." / "run")], listed)
+    assert not command._same_run([str(other.resolve())], listed)
+    assert not command._same_run([listed, str(other.resolve())], listed)
+    assert not command._same_run([str(tmp_path / "moved")], listed)

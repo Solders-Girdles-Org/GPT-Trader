@@ -12,8 +12,9 @@ manager symbol is scored when its run is complete, full length, ends at the
 cutoff, was decided only by the pinned model under the frozen settings, and
 lost no more than the protocol's share of its turns to failed calls. There is
 no round-trip minimum for the manager. A pass must beat the best comparator by
-more than one round trip's costs at the exposure cap on every compared symbol,
-so a channel that never trades, or trades once for a few cents, cannot pass.
+more than one round trip's costs at the exposure cap, summed over the compared
+symbols, so a channel that never trades, or trades once for a few cents, cannot
+pass.
 
 Every protocol symbol must appear once per channel and cost case: as a run's
 report, or as ``{"symbol": ..., "not_run": "<why>"}`` when no run exists (a

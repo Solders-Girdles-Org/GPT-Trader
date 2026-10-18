@@ -128,14 +128,17 @@ reading in [manager_reading.py](../../../src/gpt_trader/features/experiment/mana
 6. Re-derive every balance of all 48 runs independently in Decimal from the
    journal fills, without the engine's reconciliation, as round one did.
 7. Write a runs file mapping each channel and cost case to a list naming
-   **every** protocol symbol once: its run directory, or
+   **every** protocol symbol once: its run directory, at the path it ran
+   at and on the machine it ran on (never moved or copied; the read matches
+   it to the directory the ledger recorded for that account), or
    `{"symbol": "<SYMBOL>", "not_run": "<why>"}` for a refused fetch or an
    account the spend stop never started. The read refuses a list that
    leaves a symbol out, and refuses a rule marked not run while its symbol
    has a run anywhere else (only a refused fetch leaves a rule without a
    run). Then run
    `uv run gpt-trader experiment read --protocol config/experiments/round-two-2026-10-20/protocol.json --runs <runs.json> --source-sha256 <DIGEST> --spend-ledger <LEDGER> --format json`.
-   It refuses any run bound to another source digest. Post every case and
+   It refuses any run bound to another source digest, and refuses to read
+   without the ledger. Post every case and
    every symbol, including no-trade, loss, halt, open-at-cutoff, unscored,
    stopped and not-run rows. No case is dropped or rerun.
 
@@ -220,7 +223,12 @@ outside the runs file, fewer calls than turns (a turn charged to another
 ledger), calls charged to a run directory other than the one listed (a
 second run), and an account whose decision times go back to an earlier bar
 (a resume only asks the same bar again or a later one) are listed as
-breaches. The read also lists every model string that answered;
+breaches. **A breach voids the verdict:** the runs may not be the one run
+per case this protocol allows, so the read reports the verdict as *void*
+(the trading verdict beside it) and the arm pauses; nothing is rerun to
+repair it. *Strongest option rejected:* leaving only the breached account
+unscored, which would let a second run drop a losing coin from the pool.
+The read also lists every model string that answered;
 more than one (two dated snapshots, say) is reported beside the bar.
 
 ## If the spend stop ends the arm early

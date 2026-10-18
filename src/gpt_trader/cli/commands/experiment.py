@@ -379,8 +379,8 @@ def register(subparsers: Any) -> None:
     read.add_argument(
         "--spend-ledger",
         type=Path,
-        help="AI trade manager protocols: the run's one spend ledger, read without writing; "
-        "model spend is reported from it beside the bar",
+        help="AI trade manager protocols (required): the run's one spend ledger, read without "
+        "writing; model spend and any breach are reported from it, and a breach voids the verdict",
     )
     add_output_options(read)
     read.set_defaults(handler=_reported(handle_read))
@@ -672,6 +672,12 @@ def handle_read(args: Namespace) -> CliResponse:
                 f"Protocol {args.protocol} reads the {MANAGER_CHANNEL} channel; name the frozen "
                 "source digest with --source-sha256",
             )
+        if args.spend_ledger is None:
+            raise ExperimentCliError(
+                CliErrorCode.MISSING_ARGUMENT,
+                f"Protocol {args.protocol} reads the {MANAGER_CHANNEL} channel; name the run's "
+                "one spend ledger with --spend-ledger, so its breaches are checked",
+            )
     elif args.spend_ledger is not None or args.source_sha256 is not None:
         raise ExperimentCliError(
             CliErrorCode.INVALID_ARGUMENT,
@@ -749,6 +755,20 @@ def _is_not_run(entry: Any) -> bool:
     )
 
 
+def _same_run(recorded: list[str], listed: str) -> bool:
+    """Whether every call was charged to the listed run directory.
+
+    The transport records the resolved path; ``samefile`` also accepts the same
+    directory spelled in another letter case on a case-insensitive disk.
+    """
+    if recorded == [listed]:
+        return True
+    try:
+        return len(recorded) == 1 and os.path.samefile(recorded[0], listed)
+    except OSError:
+        return False
+
+
 def _read_manager(args: Namespace, protocol: dict[str, Any], runs: dict[str, Any]) -> CliResponse:
     """The round-two reading, with model spend from the one spend ledger beside it."""
     reports = {
@@ -776,48 +796,51 @@ def _read_manager(args: Namespace, protocol: dict[str, Any], runs: dict[str, Any
             account = account_label(report["symbol"], settings["fee_bps"], settings["slippage_bps"])
             turns[account] = report["manager"]["turns"]
             listed[account] = str(Path(entry).resolve())
-    spend: dict[str, Any] = {"journal_turns": sum(turns.values()), "ledger": None}
-    if args.spend_ledger is not None:
-        try:
-            ledger = ledger_summary(args.spend_ledger)
-        except SpendLedgerError as error:
-            raise ExperimentCliError(
-                CliErrorCode.CONFIG_INVALID, str(error), path=str(args.spend_ledger)
-            ) from None
-        calls = ledger["calls_by_account"]
-        # A call beyond its account's turns re-asked an uncommitted bar after a
-        # crash or halt, each of which the report must explain. A call for an
-        # account outside the runs file, or fewer calls than turns (a turn charged
-        # to another ledger), breaks the protocol.
-        accounts = {
-            account: {"ledger_calls": calls.get(account, 0), "journal_turns": count}
-            for account, count in sorted(turns.items())
-        }
-        unlisted = sorted(set(calls) - set(turns))
-        short = [
-            name for name, row in accounts.items() if row["ledger_calls"] < row["journal_turns"]
+    try:
+        ledger = ledger_summary(args.spend_ledger)
+    except SpendLedgerError as error:
+        raise ExperimentCliError(
+            CliErrorCode.CONFIG_INVALID, str(error), path=str(args.spend_ledger)
+        ) from None
+    calls = ledger["calls_by_account"]
+    # A call beyond its account's turns re-asked an uncommitted bar after a
+    # crash or halt, each of which the report must explain. A call for an
+    # account outside the runs file, or fewer calls than turns (a turn charged
+    # to another ledger), breaks the protocol.
+    accounts = {
+        account: {"ledger_calls": calls.get(account, 0), "journal_turns": count}
+        for account, count in sorted(turns.items())
+    }
+    unlisted = sorted(set(calls) - set(turns))
+    short = [name for name, row in accounts.items() if row["ledger_calls"] < row["journal_turns"]]
+    breaches = (
+        [f"ledger calls for an account outside the runs file: {name}" for name in unlisted]
+        + [f"fewer ledger calls than journaled turns: {name}" for name in short]
+        + [
+            f"decision times go back to an earlier bar, a second run: {name}"
+            for name in ledger["rewound_accounts"]
         ]
-        spend |= {
-            "ledger": ledger,
-            "accounts": accounts,
-            "re_asked_calls": sum(
-                max(0, row["ledger_calls"] - row["journal_turns"]) for row in accounts.values()
-            ),
-            "breaches": [
-                f"ledger calls for an account outside the runs file: {name}" for name in unlisted
-            ]
-            + [f"fewer ledger calls than journaled turns: {name}" for name in short]
-            + [
-                f"decision times go back to an earlier bar, a second run: {name}"
-                for name in ledger["rewound_accounts"]
-            ]
-            + [
-                f"calls charged to a run directory other than the listed one: {name}"
-                for name, dirs in ledger["runs_by_account"].items()
-                if name in listed and dirs != [listed[name]]
-            ],
-        }
-    result["model_spend"] = spend
+        + [
+            f"calls charged to a run directory other than the listed one: {name}"
+            for name, dirs in ledger["runs_by_account"].items()
+            if name in listed and not _same_run(dirs, listed[name])
+        ]
+    )
+    result["model_spend"] = {
+        "journal_turns": sum(turns.values()),
+        "ledger": ledger,
+        "accounts": accounts,
+        "re_asked_calls": sum(
+            max(0, row["ledger_calls"] - row["journal_turns"]) for row in accounts.values()
+        ),
+        "breaches": breaches,
+    }
+    # A breach means the runs may not be the one run per case the protocol
+    # allows, so no verdict stands on them; the arm pauses.
+    if breaches:
+        result["voided_verdict"] = result["verdict"]
+        result["verdict"] = "void"
+        result["action"] = "pause"
     return CliResponse.success_response(
         "experiment read",
         data=result if args.output_format == "json" else json.dumps(result, indent=1),
