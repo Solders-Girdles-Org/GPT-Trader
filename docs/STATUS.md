@@ -27,6 +27,13 @@ component disposition and the accepted [cutover](decisions/paper-runtime-cutover
 records the quiesced hourly paper job and its retained evidence. Source
 integration does not migrate or restart that job.
 
+The deterministic `ai-rulebook` channel adds an input-bound version schedule,
+closed-bar entries and exits, and atomic activation/replay through the same
+engine ([rulebook contract](paper_trading.md#declarative-rulebook-channel),
+[#1356](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1356)). Its
+starting rules are agent-written; the model-author turn remains separate work
+in [#1357](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1357).
+
 Latest retained-runtime source also includes [durable execution receipts](../src/gpt_trader/features/idea_execution/executor.py),
 [identified fill accounting](../src/gpt_trader/core/fill_accounting.py), and
 [targeted reductions](../src/gpt_trader/features/trade_ideas/position_operations.py).

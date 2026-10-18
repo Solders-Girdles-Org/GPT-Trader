@@ -26,6 +26,7 @@ from gpt_trader.features.experiment.ledger import (
     read_source,
     reconcile,
 )
+from gpt_trader.features.experiment.rulebook import RULEBOOK_CHANNEL, evaluate
 from gpt_trader.features.experiment.trade_manager import DecisionTransportProtocol, manage
 from gpt_trader.features.trade_ideas.snapshot import MarketSnapshot, SymbolSeries
 
@@ -92,9 +93,11 @@ def advance(
     fee = settings.fee_bps / 10000
     fills = []
     actions = []
-    if managed and state["manager"]["exit_pending"]:
+    control = state.get("manager") if managed else state.get("rulebook")
+    exit_reason = "manager exit" if managed else "rulebook exit"
+    if control is not None and control["exit_pending"]:
         # Only set while holding; nothing can close the position before this open.
-        state["manager"]["exit_pending"] = False
+        control["exit_pending"] = False
         fills.append(
             _fill(
                 source,
@@ -103,10 +106,10 @@ def advance(
                 side="sell",
                 quantity=Decimal(state["quantity"]),
                 price=candle.open * (1 - slip),
-                reason="manager exit",
+                reason=exit_reason,
             )
         )
-        actions.append("position settled: manager exit at next open")
+        actions.append(f"position settled: {exit_reason} at next open")
     pending = state["pending"]
     state["pending"] = None
     if pending and not state["halted"] and state["position"] is None:
@@ -181,7 +184,10 @@ def advance(
         state["halted"] = True
     proposal = None
     turn = None
-    if state["halted"]:
+    activation = None
+    if source.benchmark == RULEBOOK_CHANNEL and sequence >= source.scored_index:
+        decision, proposal, activation = evaluate(source, sequence, state)
+    elif state["halted"]:
         decision = "new entries halted by drawdown limit"
     elif managed and sequence >= source.scored_index:
         decision, proposal, turn, decided = manage(
@@ -236,6 +242,8 @@ def advance(
         "fills": fills,
         "state": state,
     }
+    if source.benchmark == RULEBOOK_CHANNEL:
+        event["rulebook_activation"] = activation
     if managed:
         event["turn"] = turn
     return event

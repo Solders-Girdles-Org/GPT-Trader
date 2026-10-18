@@ -88,6 +88,36 @@ The held-out benchmark protocol and its fetch and reading commands live in
 `experiment fetch-input` is the only experiment command that uses the network
 (public candles, no credentials).
 
+### Declarative rulebook channel
+
+`benchmark: "ai-rulebook"` selects the deterministic
+[rulebook evaluator](../src/gpt_trader/features/experiment/rulebook.py), without
+a model transport. `rulebooks` is an ordered list of
+`{"effective_from": "<bar ts>", "rules": {...}}`. The first version starts at
+`scored_from`; later versions activate at the close of their named bar, with
+consecutive `version` values. The schema and agent-written `STARTING_RULEBOOK`
+are defined in that module. Omitting `rulebooks` uses the starting rulebook.
+Unknown fields, unsupported schema versions and out-of-range parameters fail
+before a journal is opened.
+
+Rules select `trend` (fast/slow average crossover), `mean-reversion` (a negative
+population z-score), `hold` (enter whenever flat) or `cash` (exit and stay flat).
+An optional close-above-average filter controls entry. Signal exits use the
+next open; `cash` always exits, while other signal exits can be disabled.
+Stop, target, expiry and exposure are parameterized. Changing versions leaves
+an existing protective plan intact. A hold rule renews after expiry, inside the
+same stop-risk and exposure limits; it cannot reproduce hold-the-coin's
+unconstrained holding period and sizing. The
+[historical regression](../tests/unit/gpt_trader/features/experiment/test_rulebook_replay.py)
+reports that gap for tight and wide stops at base and stress costs, as a
+mechanics measurement without a performance threshold.
+
+Every activation is journaled in the same atomic bar transaction as its decision
+and fills. Inspection reports activated versions; replay rebuilds every decision
+from the input-bound schedule, and resume rejects changes to that schedule.
+This channel supplies fixed-rule mechanics only. It neither calls an AI author
+nor establishes model skill or permission for a research run.
+
 ### Verification and next use
 
 ```bash
