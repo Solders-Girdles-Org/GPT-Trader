@@ -67,7 +67,9 @@ inputs from a retained raw public Coinbase capture, `experiment verify-input`
 rebuilds inputs and run-bound inputs from that capture and refuses any
 difference, `experiment estimate-spend` bounds an AI trade manager input's
 model cost offline, and `experiment read` applies a
-committed protocol's predeclared reading.
+committed protocol's predeclared reading (`reading.py` for round one's rules,
+`manager_reading.py` for the AI trade manager, with model spend read from the
+spend ledger).
 
 **Paper and live spine.**
 

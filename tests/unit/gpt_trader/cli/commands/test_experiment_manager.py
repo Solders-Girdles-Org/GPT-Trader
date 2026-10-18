@@ -187,6 +187,8 @@ def test_cli_runs_through_the_transport_and_stops_loudly_at_the_cap(
     assert len(transport.client.messages.calls) == 2
     assert Decimal("0.42") < Decimal(transport.ledger.calls()[0]["reserved_usd"]) < Decimal("0.51")
     assert transport.ledger.spent_usd() == Decimal("0.18")
+    run_dir = str((tmp_path / "run").resolve())
+    assert [call["run"] for call in transport.ledger.calls()] == [run_dir, run_dir]
     resume = ["experiment", "run", "--root", str(tmp_path / "run"), *flags]
     assert main([*resume, "--spend-cap-usd", "0.60", "--format", "json"]) == 1
     assert "too little room for one call" in _error(capsys)["message"]

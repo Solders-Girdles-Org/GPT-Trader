@@ -298,7 +298,9 @@ def inspect_run(root: Path) -> dict[str, Any]:
                 "historical simulation with model decisions replayed from the journal; "
                 "not trading-readiness evidence"
             )
-            report["manager"] = manager_summary(events, state)
+            report["manager"] = manager_summary(events, state) | {
+                "settings": source.manager.to_dict()
+            }
         return report
 
 
