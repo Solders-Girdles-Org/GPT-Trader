@@ -22,7 +22,9 @@ superseded-by:
 > model is released (the agent's proposed reading, which RJ confirms). The
 > test uses the strongest model available when it is frozen. The API key,
 > spending cap and run come to RJ later as one card, which also offers
-> pausing now instead.
+> pausing now instead. **RJ declined that card on 2026-10-18 as "not yet"**:
+> the run does not happen, and the next round is
+> [cheap proofs before any paid AI test](cheap-proofs-before-paid-ai-test.md).
 
 ## Context
 
@@ -364,6 +366,18 @@ Read once, by the protocol W3 commits:
   cumulatively, passes and failures alike. The project restarts
   only on a pass, and a pass again means round three's confirmation, not
   proof.
+
+## Card answer (2026-10-18)
+
+RJ declined the round-two card
+([#1354](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1354)) as
+too costly for how unproven GPT-Trader still is. That means "not yet", not
+the "pause now" option, so the pause rule above is not triggered and no
+restart-watch item opens. The agent's reading in the pause rule (anything
+short of a pass pauses) lapsed unconfirmed. RJ's #1344 condition itself
+stands. The frozen window lapses unrun, and the built channel stays
+default-off. The next round is
+[cheap proofs before any paid AI test](cheap-proofs-before-paid-ai-test.md).
 
 ## Consequences
 
