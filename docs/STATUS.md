@@ -31,8 +31,14 @@ The deterministic `ai-rulebook` channel adds an input-bound version schedule,
 closed-bar entries and exits, and atomic activation/replay through the same
 engine ([rulebook contract](paper_trading.md#declarative-rulebook-channel),
 [#1356](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1356)). Its
-starting rules are agent-written; the model-author turn remains separate work
-in [#1357](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1357).
+starting rules are agent-written. The [portfolio author](paper_trading.md#portfolio-rulebook-author-default-off)
+adds a strict per-coin rewrite schema, weekly closed-daily-bar context, an offline
+spend bound and a replayable scratch-only smoke runner with the existing spend
+ceiling ([#1357](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1357)).
+Only synthetic/stub plumbing is tested; real token counts, reply quality and
+forward performance remain unmeasured. The next agent work is step 3's protocol
+and one RJ card under the [cheap-proofs decision](decisions/cheap-proofs-before-paid-ai-test.md);
+no credential, model spend, fetch or research run is authorized by these builds.
 
 Latest retained-runtime source also includes [durable execution receipts](../src/gpt_trader/features/idea_execution/executor.py),
 [identified fill accounting](../src/gpt_trader/core/fill_accounting.py), and

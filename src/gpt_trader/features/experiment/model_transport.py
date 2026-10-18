@@ -116,7 +116,9 @@ class SpendLedgerError(ValueError):
     """The spend ledger cannot be used as given."""
 
 
-def wire_params(request: dict[str, Any], manager: ManagerSettings) -> dict[str, Any]:
+def wire_params(
+    request: dict[str, Any], manager: ManagerSettings, reply_schema: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """The Messages API arguments for one decision request; thinking is always on."""
     return {
         "model": manager.model,
@@ -129,7 +131,10 @@ def wire_params(request: dict[str, Any], manager: ManagerSettings) -> dict[str, 
         "inference_geo": "global",
         "output_config": {
             "effort": manager.effort,
-            "format": {"type": "json_schema", "schema": REPLY_SCHEMA},
+            "format": {
+                "type": "json_schema",
+                "schema": REPLY_SCHEMA if reply_schema is None else reply_schema,
+            },
         },
     }
 
@@ -380,10 +385,16 @@ class AnthropicTransport:
     """One Messages API call per decision turn, counted against the spend ledger."""
 
     def __init__(
-        self, manager: ManagerSettings, ledger: SpendLedger, client: Any, run: str = ""
+        self,
+        manager: ManagerSettings,
+        ledger: SpendLedger,
+        client: Any,
+        run: str = "",
+        reply_schema: dict[str, Any] | None = None,
     ) -> None:
         pricing_for(manager.model)
         self.manager = manager
+        self.reply_schema = reply_schema
         self.model = manager.model
         self.ledger = ledger
         self.client = client
@@ -393,7 +404,7 @@ class AnthropicTransport:
     def decide(self, request: dict[str, Any]) -> TransportReply:
         import anthropic
 
-        params = wire_params(request, self.manager)
+        params = wire_params(request, self.manager, self.reply_schema)
         input_price, output_price = pricing_for(self.model)
         reserved = worst_case_usd(params)
         context = request["context"]
@@ -473,7 +484,12 @@ class AnthropicTransport:
 
 
 def from_environment(
-    manager: ManagerSettings, ledger: SpendLedger, environ: Mapping[str, str] = os.environ
+    manager: ManagerSettings,
+    ledger: SpendLedger,
+    environ: Mapping[str, str] = os.environ,
+    *,
+    reply_schema: dict[str, Any] | None = None,
+    run: str = "",
 ) -> AnthropicTransport:
     """The real transport: the official SDK, no SDK retries, credential from the environment."""
     key = environ.get(CREDENTIAL_ENV, "")
@@ -493,7 +509,7 @@ def from_environment(
     client = anthropic.Anthropic(
         api_key=key, base_url=BASE_URL, max_retries=0, timeout=TIMEOUT_SECONDS
     )
-    return AnthropicTransport(manager, ledger, client)
+    return AnthropicTransport(manager, ledger, client, run=run, reply_schema=reply_schema)
 
 
 def parse_cap(raw: str) -> Decimal:

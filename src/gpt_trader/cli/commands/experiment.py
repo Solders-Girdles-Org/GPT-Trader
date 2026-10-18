@@ -23,6 +23,7 @@ from gpt_trader.features.experiment.inputs import (
     BENCHMARKS,
     MANAGER_CHANNEL,
     ExperimentInput,
+    ManagerSettings,
     parse_input,
     with_benchmark,
 )
@@ -344,8 +345,36 @@ def register(subparsers: Any) -> None:
         "cost (no credential, network or model call)",
     )
     estimate.add_argument("--input", type=Path, required=True)
+    estimate.add_argument(
+        "--author",
+        action="store_true",
+        help="Estimate portfolio rulebook author, no simulation or model call",
+    )
+    estimate.add_argument(
+        "--portfolio-input",
+        type=Path,
+        action="append",
+        default=[],
+        help="Additional ai-rulebook symbols in the same cost case",
+    )
+    _author_settings_options(estimate)
     add_output_options(estimate)
     estimate.set_defaults(handler=_reported(handle_estimate))
+    smoke = commands.add_parser(
+        "author-smoke",
+        help="Explicitly opted-in plumbing smoke on known bars, never evidence; requires RJ's spend approval",
+    )
+    smoke.add_argument("--input", type=Path, action="append", required=True)
+    smoke.add_argument(
+        "--root", type=Path, required=True, help="Empty scratch directory, outside runtime_data"
+    )
+    smoke.add_argument("--model-transport", choices=["anthropic"], required=True)
+    smoke.add_argument("--spend-ledger", type=Path, required=True)
+    smoke.add_argument("--spend-cap-usd", required=True)
+    smoke.add_argument("--max-turns", type=int, default=3, choices=[1, 2, 3])
+    _author_settings_options(smoke)
+    add_output_options(smoke)
+    smoke.set_defaults(handler=_reported(handle_author_smoke))
     verify = commands.add_parser(
         "verify-input",
         help="Rebuild inputs from their raw capture and refuse any difference",
@@ -533,8 +562,88 @@ def _model_transport(
         ) from None
 
 
+def _author_settings_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--author-cadence-bars", type=int, default=argparse.SUPPRESS)
+    parser.add_argument("--author-history-days", type=int, default=argparse.SUPPRESS)
+    parser.add_argument("--author-model", default=argparse.SUPPRESS)
+    parser.add_argument("--author-effort", default=argparse.SUPPRESS)
+    parser.add_argument("--author-max-tokens", type=int, default=argparse.SUPPRESS)
+
+
+def _author_settings(args: Namespace) -> tuple[Any, ManagerSettings]:
+    from gpt_trader.features.experiment.rulebook_author import AuthorSettings
+
+    return AuthorSettings(
+        getattr(args, "author_cadence_bars", 168), getattr(args, "author_history_days", 30)
+    ), ManagerSettings(
+        model=getattr(args, "author_model", "claude-fable-5-1"),
+        effort=getattr(args, "author_effort", "high"),
+        max_tokens=getattr(args, "author_max_tokens", 16000),
+    )
+
+
+def handle_author_smoke(args: Namespace) -> CliResponse:
+    from gpt_trader.features.experiment.author_runner import run_author_smoke
+    from gpt_trader.features.experiment.rulebook_author import (
+        build_author_request,
+        reply_schema,
+        validate_portfolio,
+    )
+
+    try:
+        sources = [_load_input(path, None) for path in args.input]
+        validate_portfolio(sources)
+        settings, manager = _author_settings(args)
+        if args.spend_ledger.resolve().is_relative_to(args.root.resolve()):
+            raise ValueError("Spend ledger must be outside smoke root and retained on resume")
+        ledger = SpendLedger(args.spend_ledger, parse_cap(args.spend_cap_usd))
+        schema = reply_schema([s.symbol for s in sources])
+        # First turn is flat, with no prior fills. As with run, check available
+        # room before constructing a client or writing a scratch journal.
+        accounts = {
+            source.symbol: {
+                key: initial_state(source)[key]
+                for key in ("cash", "quantity", "position", "halted")
+            }
+            for source in sources
+        }
+        rules = {source.symbol: source.payload["rulebooks"][0]["rules"] for source in sources}
+        first = build_author_request(sources, sources[0].scored_index, accounts, rules, settings)
+        least = worst_case_usd(wire_params(first, manager, schema))
+        if ledger.spent_usd() + least > ledger.cap_usd:
+            raise SpendCeilingReached(
+                f"Spend ledger has too little room for one call (up to ${least}); nothing was created or advanced"
+            )
+        transport = from_environment(
+            manager, ledger, reply_schema=schema, run=str(args.root.resolve())
+        )
+        result = run_author_smoke(
+            sources, args.root, manager, transport, settings=settings, max_turns=args.max_turns
+        )
+    except (SpendCeilingReached, TransportHalted) as error:
+        raise ExperimentCliError(CliErrorCode.OPERATION_FAILED, str(error)) from None
+    except ValueError as error:
+        raise ExperimentCliError(CliErrorCode.CONFIG_INVALID, str(error)) from None
+    except (sqlite3.DatabaseError, OSError) as error:
+        raise ExperimentCliError(CliErrorCode.OPERATION_FAILED, str(error)) from None
+    return CliResponse.success_response("experiment author-smoke", data=result)
+
+
 def handle_estimate(args: Namespace) -> CliResponse:
     source = _load_input(args.input, None)
+    if args.author:
+        from gpt_trader.features.experiment.rulebook_author import estimate_author_spend
+
+        settings, manager = _author_settings(args)
+        result = estimate_author_spend(
+            [source] + [_load_input(path, None) for path in args.portfolio_input], manager, settings
+        )
+        return CliResponse.success_response("experiment estimate-spend", data=result)
+    if args.portfolio_input or any(key.startswith("author_") for key in vars(args)):
+        raise ExperimentCliError(
+            CliErrorCode.INVALID_ARGUMENT,
+            "--portfolio-input and --author-* options require --author",
+        )
     if source.manager is None:
         raise ExperimentCliError(
             CliErrorCode.INVALID_ARGUMENT,
