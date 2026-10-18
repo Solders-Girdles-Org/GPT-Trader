@@ -45,8 +45,8 @@ STARTING_RULEBOOK = Rulebook()
 
 
 def parse_rulebook(raw: Any, cap: Decimal) -> Rulebook:
-    if not isinstance(raw, dict) or set(raw) - set(Rulebook.__dataclass_fields__):
-        raise ValueError("Unknown rulebook fields")
+    if not isinstance(raw, dict) or set(raw) != set(Rulebook.__dataclass_fields__):
+        raise ValueError("Rulebook requires exactly the schema fields")
     rule = Rulebook(**raw)
     for name, lower, upper in (
         ("schema_version", 1, 1),

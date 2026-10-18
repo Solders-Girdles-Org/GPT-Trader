@@ -114,7 +114,7 @@ def test_hold_expiry_renews_and_cash_never_enters(experiment_payload):
 @pytest.mark.parametrize("costs,stop", [(False, "0.04"), (True, "0.03"), (False, "0.15")])
 def test_exposure_and_stop_risk_with_costs(experiment_payload, costs, stop):
     if costs:
-        experiment_payload["settings"] = {"fee_bps": "50", "slippage_bps": "20"}
+        experiment_payload["settings"] = {"fee_bps": "60", "slippage_bps": "10"}
     parsed = source(experiment_payload, entry="hold", stop_fraction=stop)
     event = walk(parsed)[1]
     fill = event["fills"][0]
@@ -168,3 +168,42 @@ def test_scored_boundary_does_not_trade_in_warmup(experiment_payload):
     assert events[5]["rulebook_activation"]["rules"]["version"] == 1
     assert events[5]["fills"] == []
     assert events[6]["fills"][0]["side"] == "buy"
+
+
+def test_missing_safety_field_is_rejected():
+    rules = STARTING_RULEBOOK.to_dict()
+    del rules["stop_fraction"]
+    with pytest.raises(ValueError, match="exactly"):
+        parse_rulebook(rules, Decimal("0.20"))
+
+
+def test_signal_exit_toggle_and_cash_override(experiment_payload):
+    parsed = source(experiment_payload, entry="hold", stop_fraction="0.15", target_fraction="100")
+    held = walk(parsed)[1]["state"]
+    # New trend rules see fast <= slow on the flat history and can exit a
+    # position opened by the prior hold version; disabling that exit keeps it.
+    for enabled in (False, True):
+        payload = deepcopy(parsed.payload)
+        payload["rulebooks"].append(
+            {
+                "effective_from": payload["candles"][2]["ts"],
+                "rules": {
+                    **STARTING_RULEBOOK.to_dict(),
+                    "entry": "trend",
+                    "fast_bars": 1,
+                    "slow_bars": 2,
+                    "version": 2,
+                    "exit_on_signal": enabled,
+                },
+            }
+        )
+        updated = parse_input(payload)
+        event = advance(updated, 2, held)
+        assert event["state"]["rulebook"]["exit_pending"] is enabled
+        next_ = advance(updated, 3, event["state"])
+        assert bool(next_["fills"]) is enabled
+    payload["rulebooks"][1]["rules"].update(
+        entry="cash", exit_on_signal=False, trend_filter_bars=500
+    )
+    event = advance(parse_input(payload), 2, held)
+    assert event["state"]["rulebook"]["exit_pending"]

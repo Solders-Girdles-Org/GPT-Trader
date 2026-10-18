@@ -95,12 +95,13 @@ def test_rulebook_journal_tamper_rejected(experiment_payload, tmp_path):
 
 def test_historical_hold_gaps_are_measurements(caplog):
     # Exact OHLCV rows 336:480 from retained round-one BTC baseline-base input.
-    # Source capture digest and fetch time are preserved in the fixture. This
+    # Source capture digest and fetch time are preserved. scored_from is reset
+    # to the slice start and recorded_at to its final bar close. This
     # test writes no journal/evidence: a pure transition fold checks mechanics.
     path = Path(__file__).resolve().parents[4] / "fixtures/experiment/round-one-btc-rising.json"
     payload = json.loads(path.read_text())
     gaps = {}
-    for costs, fee, slip, tight in (("base", "10", "5", "0.04"), ("stress", "50", "20", "0.03")):
+    for costs, fee, slip, tight in (("base", "10", "5", "0.04"), ("stress", "60", "10", "0.03")):
         for variant, stop in (("at-cap", tight), ("wide-stop", "0.15")):
             raw = {
                 **payload,

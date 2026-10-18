@@ -97,7 +97,8 @@ a model transport. `rulebooks` is an ordered list of
 `scored_from`; later versions activate at the close of their named bar, with
 consecutive `version` values. The schema and agent-written `STARTING_RULEBOOK`
 are defined in that module. Omitting `rulebooks` uses the starting rulebook.
-Unknown fields, unsupported schema versions and out-of-range parameters fail
+Explicit versions supply every schema field; defaults apply only when the whole
+schedule is omitted. Unknown fields, unsupported schema versions and out-of-range parameters fail
 before a journal is opened.
 
 Rules select `trend` (fast/slow average crossover), `mean-reversion` (a negative
