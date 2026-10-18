@@ -119,6 +119,65 @@ from the input-bound schedule, and resume rejects changes to that schedule.
 This channel supplies fixed-rule mechanics only. It neither calls an AI author
 nor establishes model skill or permission for a research run.
 
+### Portfolio rulebook author (default-off)
+
+The [author](../src/gpt_trader/features/experiment/rulebook_author.py) sends one
+request for up to eight symbols in **one cost case**, weekly (168 scored hourly
+bars) by default. It includes up to 30 complete UTC daily bars per coin, current
+simulated accounts, costs, limits and complete current rulebooks. Partial days
+and future bars are omitted. The reply must cover every coin, pass `parse_rulebook`
+and increment each version exactly once. Refusal, truncation, malformed output
+or transport failure keeps every previous rule and records the reason.
+
+The [smoke runner](../src/gpt_trader/features/experiment/author_runner.py) applies
+accepted rules at the decision bar's close through the existing simulator;
+fills still occur at the next open and existing protection stays intact. Its
+SQLite journal commits all coins and the author turn atomically per bar. It
+binds source identities, implementation, settings, cap and ledger path. Replay
+rebuilds requests, replies, rules and simulated events; committed turns are
+never sent again. A call interrupted before commit may be reasked, with its
+original reservation still counted in the external spend ledger.
+
+`experiment author-smoke` is limited to one to three turns on known inputs.
+It requires `--input` for each `ai-rulebook` input, `--root` for an empty scratch
+directory outside any `runtime_data` tree, `--model-transport anthropic`,
+`--spend-ledger` outside that root, and `--spend-cap-usd`. It writes
+`NOT-EVIDENCE.txt` and journal metadata `not_evidence: true`; it produces no
+performance reading or forward evidence. All resumes retain the same ledger
+and cap. The transport reuses the existing Anthropic client, no-retry policy,
+pricing and durable pre-call reservation. A spend stop propagates loudly.
+**Any real call, credential or spend still requires RJ's explicit approval.**
+Stub tests require none. This item does not add a forward-run command.
+
+For an offline bound, use `experiment estimate-spend --author --input first.json`
+and repeat `--portfolio-input other.json` for other coins in the same cost case.
+Inputs name `ai-rulebook` and one starting rulebook. Author flags set cadence,
+history days, model, effort and max output tokens explicitly; defaults are
+168, 30, `claude-fable-5-1`, `high`, 16000. This constructs contexts only: it
+never simulates trades, creates a client, reads credentials or writes a ledger.
+The account-plus-rulebook context is bounded at 16000 UTF-8 bytes, enforced
+before every real request. A larger context halts instead of truncating.
+
+Offline measurement on 2026-10-18 rebuilt round one's eight retained baseline
+inputs per cost case in memory as `ai-rulebook` inputs (same bars, scored window
+and settings; originals unchanged). These span a 35-day scored window:
+
+| Cost case | Weekly turns | Largest context bytes | Largest input-token bound | Window bound USD |
+| --- | ---: | ---: | ---: | ---: |
+| Base | 5 | 46809 | 55693 | 6.6504875 |
+| Stress | 5 | 46811 | 55695 | 6.6506125 |
+| Both | 10 | | | **13.3011000** |
+
+This replaces the decision's rough $20 estimate with a **$13.31 rounded-up
+forward-window bound on these recorded inputs**, using the recorded Fable price
+([$10/$50 per million input/output tokens](https://platform.claude.com/docs/en/models/fable-5-1/overview)), cache-write input multiplier 1.25,
+request-byte token bound plus 2000 overhead, and 16000 output tokens per turn.
+It is below the decision's $50 reconsideration line. Actual token counts remain
+unmeasured. New window data may change byte sizes: recompute before the card.
+Smoke and interrupted/repeated calls are additional spend; the ledger's shared
+hard cap includes them. The protocol/card must state that allowance. No paid
+smoke or evidence run has occurred. Tests prove plumbing, not model quality.
+
 ### Verification and next use
 
 ```bash
