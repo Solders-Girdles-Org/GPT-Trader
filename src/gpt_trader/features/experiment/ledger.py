@@ -165,6 +165,8 @@ def initial_state(source: ExperimentInput) -> dict[str, Any]:
             "rulebook_version": 1,
             "exit_pending": False,
         }
+    if source.benchmark == "ai-rulebook":
+        state["rulebook"] = {"version": 0, "exit_pending": False}
     return state
 
 
@@ -293,6 +295,15 @@ def inspect_run(root: Path) -> dict[str, Any]:
             ],
             "evidence_class": "deterministic historical simulation; no AI decisions or trading-readiness evidence",
         }
+        if source.benchmark == "ai-rulebook":
+            report["rulebook"] = {
+                "version": state["rulebook"]["version"],
+                "activations": [
+                    event["rulebook_activation"]
+                    for event in events
+                    if event.get("rulebook_activation")
+                ],
+            }
         if source.manager is not None:
             report["evidence_class"] = (
                 "historical simulation with model decisions replayed from the journal; "

@@ -14,14 +14,19 @@ from typing import Any
 
 from gpt_trader.core import Candle
 from gpt_trader.core.fill_accounting import aware_time, decimal_value, semantic_checksum
+from gpt_trader.features.experiment.rulebook import (
+    RULEBOOK_CHANNEL,
+    STARTING_RULEBOOK,
+    parse_versions,
+)
 
 ENGINE_VERSION = "recorded-spot-v2"
-# Decision channels a run may select: two deterministic rules and the AI trade
+# Decision channels: baseline rules, the structured rulebook, and the AI trade
 # manager (``trade_manager.py``), which only an input naming it selects. The
 # choice is bound into the input identity, so a journal can never change
 # channel on resume.
 MANAGER_CHANNEL = "ai-trade-manager"
-BENCHMARKS = ("baseline", "mean-reversion", MANAGER_CHANNEL)
+BENCHMARKS = ("baseline", "mean-reversion", MANAGER_CHANNEL, RULEBOOK_CHANNEL)
 DEFAULT_BENCHMARK = "baseline"
 
 # Starting rulebook for the AI trade manager. The round-two protocol
@@ -148,6 +153,7 @@ def parse_input(payload: dict[str, Any]) -> ExperimentInput:
         "benchmark",
         "scored_from",
         "manager",
+        "rulebooks",
     } or not required <= set(payload):
         raise ValueError("Experiment requires schema_version, source, symbol, recorded_at, candles")
     if payload["schema_version"] != 1:
@@ -221,6 +227,24 @@ def parse_input(payload: dict[str, Any]) -> ExperimentInput:
         if not matches:
             raise ValueError("scored_from must be the start time of a supplied bar")
         scored_index = matches[0]
+    rulebooks = None
+    if benchmark == RULEBOOK_CHANNEL:
+        rulebooks = parse_versions(
+            payload.get(
+                "rulebooks",
+                [
+                    {
+                        "effective_from": rows[scored_index]["ts"],
+                        "rules": STARTING_RULEBOOK.to_dict(),
+                    }
+                ],
+            ),
+            rows,
+            scored_index,
+            settings.exposure_fraction,
+        )
+    elif "rulebooks" in payload:
+        raise ValueError("Rulebooks apply only to the ai-rulebook channel")
     # Store a detached copy: later caller mutation must not change the experiment identity.
     normalized = json.loads(json.dumps(payload))
     normalized["settings"] = settings.to_dict()
@@ -228,6 +252,8 @@ def parse_input(payload: dict[str, Any]) -> ExperimentInput:
     normalized["scored_from"] = normalized["candles"][scored_index]["ts"]
     if manager is not None:
         normalized["manager"] = manager.to_dict()
+    if rulebooks is not None:
+        normalized["rulebooks"] = rulebooks
     return ExperimentInput(normalized, tuple(candles), settings, benchmark, scored_index, manager)
 
 
