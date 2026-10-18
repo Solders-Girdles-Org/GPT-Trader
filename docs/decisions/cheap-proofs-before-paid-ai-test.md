@@ -16,7 +16,7 @@ superseded-by:
 > That cuts model calls from about 4,800 to about a dozen. Each piece gets
 > proven before anything is spent: first the rules engine, at no cost, then
 > a test call of a few dollars to show the real model works, then a forward
-> test capped at about $20. Every paid step still needs RJ's go.
+> test capped at about $20. The two paid steps need RJ's go, on one card.
 
 ## Context
 
@@ -65,26 +65,35 @@ What is proven and what is not, as of this record:
   cadence (weekly as the starting assumption) in one portfolio-level call for
   all eight coins per cost case. That is about a dozen calls per 35-day
   window instead of about 4,800, with a hard cap of roughly $20
-  *(estimate: about 30,000 input tokens bounded at the cache-write rate plus
-  16,000 output tokens at Fable 5.1's recorded price is about $1.20 a call,
-  times 12 calls; W2 below replaces this with an offline measurement)*. It
+  *(estimate, assuming the author sees daily rather than hourly bars: about
+  40,000 bytes of context bounds its input at about 42,000 tokens by round
+  two's per-byte method; at the cache-write rate, plus 16,000 output tokens at
+  Fable 5.1's recorded price, that is about $1.30 a call, times 12 calls;
+  step 2 below replaces this with an offline measurement)*. It
   meets RJ's condition that the AI may "choose, write or change its own
   rules". The AI does not just suggest trades: its rules run without a
   person. Model spend no longer swamps the result. A cheap design can be read
   on several fresh windows, which guards against a lucky single reading
   better than one expensive run. The cost is a few agent-days of building.
   The AI also gives up bar-by-bar judgment, which round one's costs argue
-  against anyway.
+  against anyway. *Strongest objection:* RJ's #1344 condition to pause
+  "rather than build something less". A weekly author choosing among rule
+  templates is a narrower design than round two's trade manager. The agent's
+  answer: the AI still decides alone what to trade, when and how much, and
+  RJ said "the rules can be anything we want". Because the design is
+  narrower, step 3's card says so plainly, and RJ can choose Option B there
+  instead.
 - **Option B — The built channel at weekly cadence (strongest alternative).**
   `cadence_bars` already accepts 168, so the reviewed W1–W3 code could run
-  per coin once a week plus fill turns, with no new build. That is roughly
-  100–240 calls: about $20–60 expected and a cap in the low hundreds *(scaled
-  from the protocol's per-turn figures; fill turns are the uncertain part)*.
-  Rejected because the cap stays in the range RJ calls real money. Between
-  weekly turns the AI can act only through the stop, target and expiry of
-  one open trade, and cost still grows with coins and fills. It becomes the
-  better choice if RJ prefers the soonest reading with no new code and
-  accepts a cap of about $150–250.
+  per coin once a week, plus a turn on every fill (each of which may enter
+  or exit), with no new build. If fills are rare (about 1–10 per account),
+  that is roughly 100–240 calls and about $20–60 expected. A cap sized like
+  the protocol's, with 90 fill turns per account, would be about $1,500
+  *(scaled from the protocol's per-turn figures; fill turns are the
+  uncertain part)*. Rejected because the cap stays in the range RJ calls real
+  money, and cost still grows with coins and fills. It becomes the better
+  choice if RJ prefers the soonest reading with no new code and accepts a cap
+  in the hundreds with a tighter fill-turn allowance.
 - **Option C — The four-hourly design on a cheaper model.** Same call count,
   a lower price. Rejected: it still spends hundreds over 4,800 calls. A weaker
   model also cannot answer RJ's question about what today's models can do.
@@ -101,10 +110,13 @@ What is proven and what is not, as of this record:
 1. **Rulebook engine (agent, no spend).** A structured rulebook format and a
    deterministic `ai-rulebook` channel that runs it in the experiment
    engine with the existing rails, plus an agent-written starting rulebook.
-   It must be able to express "hold at the cap", "stay in cash" and close
-   equivalents of both fixed rules, so the AI can always match the
-   comparators and must beat them. Proven by unit tests and by replaying
-   round one's recorded inputs as test data, not evidence.
+   It must be able to express "stay in cash", close equivalents of both
+   fixed rules, and a hold rule: enter at the cap with a wide stop and renew
+   at expiry. No rail is loosened. The engine's stop at entry and its
+   720-hour expiry stay, so the hold rule can approach the hold comparator
+   but not equal it. Step 1 measures that gap on round one's data, and step
+   3's card reports it. Proven by unit tests and by replaying round one's
+   recorded inputs as test data, not evidence.
 2. **Rulebook author turn (agent, no spend).** A portfolio-level request
    that sends recent closed bars for all coins, the accounts and the current
    rulebook, and reads back a validated rulebook. It uses an injected
@@ -121,15 +133,22 @@ What is proven and what is not, as of this record:
    smoke, which proves the real transport, reply parsing, the spend ledger
    and real token counts. Second, only if the smoke passes, the frozen
    forward run. The card shows the measured estimate and offers "not yet".
+   It also proposes, with a recommendation, how a weak result is read under
+   RJ's pause condition below, for RJ to confirm.
 
 The reading, the bar and the void-and-refreeze rule follow round two's
-protocol unless step 3 records a change before its window. A weak result
-opens the next round under
-[improvement rounds](evidence-first-improvement-rounds.md) condition 3.
-Round two's pause rule was written for a funded run and is not triggered by
-RJ declining it. It is not carried forward unless RJ reinstates it.
+protocol unless step 3 records a change before its window. **RJ's pause
+condition stands:** if an AI that manages the trades "can't be built
+credibly with today's models", pause until a stronger model is available
+"rather than build something less"
+([#1344](next-round-after-held-out-benchmark.md#decision)). RJ declining the
+card did not trigger it. Round two's reading of that condition (anything
+short of a pass pauses) was the agent's proposal awaiting RJ's confirmation
+on the card, and it lapsed with the decline. Step 3's card proposes the
+reading for this design.
 
-**Reconsider** if step 1 cannot express the comparators faithfully, if the
+**Reconsider** if step 1 cannot express the fixed rules closely or its hold
+rule trails the hold comparator by more than one round trip's costs, if the
 offline estimate in step 2 exceeds about $50 for one window, or if the smoke
 shows the model cannot produce valid rulebooks reliably.
 
