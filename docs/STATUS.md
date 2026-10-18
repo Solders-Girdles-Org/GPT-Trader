@@ -64,9 +64,11 @@ and cap, and no model call has been made. W3 froze the round-two protocol
 for the window 2026-10-20 to 2026-11-24
 ([protocol](../config/experiments/round-two-2026-10-20/PROTOCOL.md),
 [#1352](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1352)).
-Next is RJ's one card for the credential, spending cap and run, under
-[#1252](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1252); no
-model call or spend happens before it. Do not start the old runtime,
+The build umbrella [#1252](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1252)
+hands off to [RJ's one approval card](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1354)
+for the credential, $4,540 total cap and single run. The card records the frozen
+source digest, one shared spend-ledger path, expected spend and pause option;
+no model call, credential use, fetch or research run starts before RJ's go. Do not start the old runtime,
 use its approval grants for the new product, or infer a deployment from this
 page.
 
