@@ -37,7 +37,7 @@ from gpt_trader.features.experiment.inputs import (
 )
 from gpt_trader.features.experiment.ledger import ExperimentIntegrityError, encode
 
-CONTEXT_VERSION = "ai-trade-manager-context/1"
+CONTEXT_VERSION = "ai-trade-manager-context/2"
 MAX_REASON_CHARS = 500
 MAX_EXPIRY_HOURS = 720
 # Transport stop reasons that mean the model declined to decide.
@@ -49,7 +49,11 @@ exit at the next bar's open with the fees and slippage in the context, sizes an
 entry no larger than the exposure cap and the stop risk allow, halts new entries
 after the drawdown limit, and keeps the stop you set at entry as a hard exit.
 You see only bars that have closed. Holding cash and keeping a position are
-normal choices; every round trip pays the costs twice.
+normal choices; every round trip pays the costs twice. Your result is read once,
+at the window's end in the context, net of every cost and with anything still
+held valued at its sale price after costs. It is compared with cash, with
+holding the coin at the exposure cap from the window's first bar, and with the
+fixed trading rules run beside you, all on the same account size, costs and limits.
 
 Reply with one JSON object and nothing else:
 {{{{
@@ -168,6 +172,10 @@ def build_request(source: ExperimentInput, sequence: int, state: dict[str, Any])
     context = {
         "symbol": source.symbol,
         "decision_time": (candle.ts + timedelta(hours=1)).isoformat(),
+        "window": {
+            "starts_at": source.payload["scored_from"],
+            "ends_at": (source.candles[-1].ts + timedelta(hours=1)).isoformat(),
+        },
         "bars": source.payload["candles"][first : sequence + 1],
         "account": {
             "cash": state["cash"],

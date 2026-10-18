@@ -32,6 +32,7 @@ from gpt_trader.features.experiment.ledger import (
     inspect_run,
     run_input,
 )
+from gpt_trader.features.experiment.manager_reading import read_round_two
 from gpt_trader.features.experiment.model_transport import (
     CREDENTIAL_ENV,
     SpendCeilingReached,
@@ -40,6 +41,7 @@ from gpt_trader.features.experiment.model_transport import (
     TransportHalted,
     estimate_spend,
     from_environment,
+    ledger_summary,
     parse_cap,
     wire_params,
     worst_case_usd,
@@ -75,11 +77,14 @@ READ_PROTOCOL_KEYS = (
     "min_scored_symbols",
     "min_round_trips",
 )
+# A protocol with "reading": "ai-trade-manager" is read by manager_reading.py.
+MANAGER_READ_KEYS = ("manager", "max_failed_turn_fraction")
 PROTOCOL_SHAPES: dict[str, type] = {
     "symbols": list,
     "benchmarks": list,
     "settings": dict,
     "cost_cases": dict,
+    "manager": dict,
 }
 CAPTURE_KEYS = ("schema", "granularity", "start", "end", "requests")
 
@@ -358,6 +363,12 @@ def register(subparsers: Any) -> None:
         required=True,
         help='JSON mapping {"<rule>": {"<cost case>": [experiment roots]}}',
     )
+    read.add_argument(
+        "--spend-ledger",
+        type=Path,
+        help="AI trade manager protocols: the run's one spend ledger, read without writing; "
+        "model spend is reported from it beside the bar",
+    )
     add_output_options(read)
     read.set_defaults(handler=_reported(handle_read))
 
@@ -544,6 +555,13 @@ def handle_fetch(args: Namespace) -> CliResponse:
             f"Fetch requires a new, empty evidence directory; {args.out} is not one",
             path=str(args.out),
         )
+    if MANAGER_CHANNEL in protocol["benchmarks"] and not isinstance(protocol.get("manager"), dict):
+        raise ExperimentCliError(
+            CliErrorCode.CONFIG_INVALID,
+            f"Protocol {args.protocol} names the {MANAGER_CHANNEL} channel but no 'manager' "
+            "settings to freeze into its inputs",
+            path=str(args.protocol),
+        )
     try:
         start, end = aware_time(protocol["warmup_start"]), aware_time(protocol["cutoff"])
     except (ValueError, TypeError) as error:
@@ -561,6 +579,7 @@ def handle_fetch(args: Namespace) -> CliResponse:
                 scored_from=protocol["scored_from"],
                 benchmark=rule,
                 settings={**protocol["settings"], **costs},
+                manager=protocol["manager"] if rule == MANAGER_CHANNEL else None,
             )
             for rule in protocol["benchmarks"]
             for case, costs in protocol["cost_cases"].items()
@@ -616,6 +635,21 @@ def handle_verify(args: Namespace) -> CliResponse:
 
 def handle_read(args: Namespace) -> CliResponse:
     protocol = _read_protocol(args.protocol, READ_PROTOCOL_KEYS)
+    manager_reading = protocol.get("reading") == MANAGER_CHANNEL
+    if manager_reading:
+        protocol = _read_protocol(args.protocol, READ_PROTOCOL_KEYS + MANAGER_READ_KEYS)
+        if MANAGER_CHANNEL not in protocol["benchmarks"]:
+            raise ExperimentCliError(
+                CliErrorCode.CONFIG_INVALID,
+                f"Protocol {args.protocol} reads the {MANAGER_CHANNEL} channel but does not "
+                "name it among its benchmarks",
+                path=str(args.protocol),
+            )
+    elif args.spend_ledger is not None:
+        raise ExperimentCliError(
+            CliErrorCode.INVALID_ARGUMENT,
+            f"--spend-ledger applies only to a protocol that reads the {MANAGER_CHANNEL} channel",
+        )
     if not {"baseline", "mean-reversion"} <= set(protocol["benchmarks"]) or not {
         "base",
         "stress",
@@ -642,6 +676,8 @@ def handle_read(args: Namespace) -> CliResponse:
             "each a list of experiment roots",
             path=str(args.runs),
         )
+    if manager_reading:
+        return _read_manager(args, protocol, runs)
     try:
         cases = {
             rule: {
@@ -668,6 +704,43 @@ def handle_read(args: Namespace) -> CliResponse:
         "verdicts": verdicts,
         "action": combined_action(verdicts["mean-reversion"], verdicts["baseline"]),
     }
+    return CliResponse.success_response(
+        "experiment read",
+        data=result if args.output_format == "json" else json.dumps(result, indent=1),
+    )
+
+
+def _read_manager(
+    args: Namespace, protocol: dict[str, Any], runs: dict[str, dict[str, list[str]]]
+) -> CliResponse:
+    """The round-two reading, with model spend from the one spend ledger beside it."""
+    reports = {
+        rule: {case: [_inspect(Path(root)) for root in roots] for case, roots in cases.items()}
+        for rule, cases in runs.items()
+    }
+    try:
+        result = read_round_two(reports, protocol)
+    except (ValueError, KeyError) as error:
+        raise ExperimentCliError(
+            CliErrorCode.VALIDATION_ERROR,
+            f"Runs file {args.runs} does not fit protocol {args.protocol}: {error}",
+            path=str(args.runs),
+        ) from None
+    turns = sum(
+        report["manager"]["turns"] for case in reports[MANAGER_CHANNEL].values() for report in case
+    )
+    spend: dict[str, Any] = {"journal_turns": turns, "ledger": None}
+    if args.spend_ledger is not None:
+        try:
+            ledger = ledger_summary(args.spend_ledger)
+        except SpendLedgerError as error:
+            raise ExperimentCliError(
+                CliErrorCode.CONFIG_INVALID, str(error), path=str(args.spend_ledger)
+            ) from None
+        # More calls than journaled turns are re-asked uncommitted bars or runs
+        # outside the runs file; fewer means some turn was charged to another ledger.
+        spend |= {"ledger": ledger, "ledger_calls_minus_journal_turns": ledger["calls"] - turns}
+    result["model_spend"] = spend
     return CliResponse.success_response(
         "experiment read",
         data=result if args.output_format == "json" else json.dumps(result, indent=1),

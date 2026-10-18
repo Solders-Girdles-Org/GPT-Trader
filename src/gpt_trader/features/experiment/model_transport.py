@@ -278,6 +278,44 @@ class SpendLedger:
             )
 
 
+def ledger_summary(path: Path) -> dict[str, Any]:
+    """Read a spend ledger without writing it: its cap, total charge and calls by status.
+
+    Round two reports model spend from here, not from the journals: a call whose
+    billing is unknown, or whose bar never committed, is charged here only.
+    """
+    if not path.is_file() or path.stat().st_size == 0:
+        raise SpendLedgerError(f"Spend ledger {path} does not exist")
+    uri = f"{path.resolve().as_uri()}?mode=ro"
+    try:
+        with closing(sqlite3.connect(uri, uri=True, timeout=30)) as connection:
+            if connection.execute("PRAGMA application_id").fetchone()[0] != APPLICATION_ID:
+                raise SpendLedgerError(f"{path} is not a spend ledger")
+            ceiling = connection.execute("SELECT cap_usd FROM ceiling WHERE id = 1").fetchone()
+            if ceiling is None:
+                raise SpendLedgerError(f"Spend ledger {path} has no cap")
+            (cap,) = ceiling
+            rows = connection.execute(
+                "SELECT model, status, reserved_usd, cost_usd FROM calls ORDER BY id"
+            ).fetchall()
+    except sqlite3.DatabaseError as error:
+        raise SpendLedgerError(f"Could not read spend ledger {path}: {error}") from None
+    statuses: dict[str, int] = {}
+    for _, status, _, _ in rows:
+        statuses[status] = statuses.get(status, 0) + 1
+    charged = sum(
+        (Decimal(cost if cost is not None else held) for _, _, held, cost in rows), Decimal(0)
+    )
+    return {
+        "path": str(path),
+        "cap_usd": cap,
+        "charged_usd": str(charged),
+        "calls": len(rows),
+        "calls_by_status": dict(sorted(statuses.items())),
+        "models": sorted({model for model, _, _, _ in rows}),
+    }
+
+
 class AnthropicTransport:
     """One Messages API call per decision turn, counted against the spend ledger."""
 

@@ -106,3 +106,24 @@ def test_verify_refuses_any_input_its_capture_does_not_rebuild():
     other_capture = data.replace(b"5.5", b"5.6")
     with pytest.raises(ValueError, match="candles, source"):
         verify_input_payload(other_capture, payload)
+
+
+def test_manager_settings_are_built_into_the_input_and_verified():
+    data = capture(range(6))
+    scored_from = (START + timedelta(hours=3)).isoformat()
+    frozen = {"cadence_bars": 4, "effort": "high", "max_tokens": 16000}
+    payload = build_input_payload(
+        data,
+        scored_from=scored_from,
+        benchmark="ai-trade-manager",
+        settings=SETTINGS,
+        manager=frozen,
+    )
+    assert parse_input(payload).manager.max_tokens == 16000
+    verify_input_payload(data, json.loads(json.dumps(payload)))
+    # Verify rebuilds from the input's own settings; drift from the frozen
+    # protocol is refused by the round-two reading instead.
+    edited = json.loads(json.dumps(payload))
+    edited["candles"][4]["close"] = "101"
+    with pytest.raises(ValueError, match="differs from its capture: candles"):
+        verify_input_payload(data, edited)

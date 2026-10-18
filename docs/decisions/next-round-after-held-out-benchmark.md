@@ -158,6 +158,8 @@ What supports building now:
   frontier-tier model; it is not the default because it needs a separate
   paid OpenAI API credential. The card offers it as an optional second arm
   on the same frozen window, read separately under the same protocol.
+  *(W3 found it cannot join this window: see
+  [round-two protocol](#round-two-protocol-w3).)*
 - **It is cheap.** At Claude Fable 5.1's list price ($10 input / $50 output
   per million tokens, Anthropic API documentation read 2026-10-17) and an
   *assumed* 6,000 input and 3,000 output tokens per decision (thinking is
@@ -193,8 +195,8 @@ What supports building now:
   about $0.53 a turn)*. At the input bound and the assumed 3,000 output
   tokens a turn costs about $0.25, about $850 *(derived)*, against the
   earlier $710. These figures replace the assumed 6,000 input tokens; W3
-  reruns the command on its frozen inputs for the card, and adds turns for
-  fills.
+  reran the command on its frozen settings and added turns for fills
+  ([round-two protocol](#round-two-protocol-w3)).
 
 What argues against expecting a pass (public evidence, gathered 2026-10-17;
 facts from the sources, judgments marked):
@@ -288,6 +290,40 @@ as today.
    alternative, a wall-clock run that calls the model every few hours for
    five weeks, needs a scheduled service but also captures live latency and
    outages; it stays available if RJ prefers it.
+
+### Round-two protocol (W3)
+
+Frozen on 2026-10-18 in
+[config/experiments/round-two-2026-10-20/PROTOCOL.md](../../config/experiments/round-two-2026-10-20/PROTOCOL.md)
+([#1352](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1352)),
+which owns the details; the main points:
+
+- **Window** 2026-10-20T00:00Z to 2026-11-24T00:00Z, run afterwards on its
+  recorded bars. **Source** frozen at the `main` commit that merges the
+  protocol, bound into every run through the journal's source hash.
+- **Model and prompt.** Claude Fable 5.1 at effort `high`, `max_tokens`
+  16,000, a turn every four hours plus one on each fill, 48 bars of context.
+  The prompt now also states the window and how the result is read.
+- **The bar.** Pooled over the compared symbols (at least 7 of 8), under
+  both cost cases, above cash, hold-the-coin and mean reversion, and
+  baseline if baseline survives costs on this window. No trade minimum
+  for the manager, since never trading earns cash's zero. A symbol with more
+  than 5% of its turns lost to failed calls is not scored; refused and
+  malformed replies count as the model's own no-trade decisions. Each case
+  runs once; a resume in the same directory is not a rerun.
+- **Spend** is reported beside the bar from the one spend ledger. The
+  ceiling for the card's cap is about $4,720 (4,800 turns, including 90 fill
+  turns per account, at a worst case of about $0.98); expected spend is
+  about $860 *(derived; real counts come only from the approved run)*.
+  Accounts the spend stop ends are not scored; the reading is otherwise
+  unchanged.
+- **A defect found after the window opens** is never patched into the run;
+  if it could change a request, a decision's effect or a reported number,
+  the attempt is void and re-frozen for a fresh window.
+- **GPT-6 Astra cannot join this window.** The frozen commit has no OpenAI
+  transport, and adding one would change the source hash. If RJ wants that
+  arm, both arms are re-frozen together for a later window. This narrows
+  item 4 above, which offered it on the same window.
 
 ### Pause rule and the test that restarts the project
 

@@ -144,3 +144,24 @@ def test_a_ledger_interrupted_mid_write_is_recovered_not_refused(manager_input, 
     assert ledger.path.with_name(ledger.path.name + "-journal").exists()  # a hot journal
     reopened = SpendLedger(ledger.path, Decimal("100"))
     assert reopened.spent_usd() == Decimal("0.09")
+
+
+def test_ledger_summary_reads_the_charge_without_writing(manager_input, ledger, tmp_path):
+    from gpt_trader.features.experiment.model_transport import ledger_summary
+
+    with pytest.raises(SpendLedgerError, match="does not exist"):
+        ledger_summary(ledger.path)
+    transport(manager_input, ledger).decide(first_request(manager_input))
+    held = transport(manager_input, ledger, KeyboardInterrupt())
+    with pytest.raises(KeyboardInterrupt):
+        held.decide(first_request(manager_input))
+    before = ledger.path.read_bytes()
+    summary = ledger_summary(ledger.path)
+    assert ledger.path.read_bytes() == before
+    assert summary["cap_usd"] == "100" and summary["calls"] == 2
+    assert summary["calls_by_status"] == {"replied": 1, "reserved": 1}
+    assert Decimal(summary["charged_usd"]) == ledger.spent_usd()
+    foreign = tmp_path / "foreign.sqlite"
+    foreign.write_bytes(b"not a ledger")
+    with pytest.raises(SpendLedgerError):
+        ledger_summary(foreign)
