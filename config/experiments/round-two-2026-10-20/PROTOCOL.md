@@ -131,7 +131,9 @@ reading in [manager_reading.py](../../../src/gpt_trader/features/experiment/mana
    **every** protocol symbol once: its run directory, or
    `{"symbol": "<SYMBOL>", "not_run": "<why>"}` for a refused fetch or an
    account the spend stop never started. The read refuses a list that
-   leaves a symbol out. Then run
+   leaves a symbol out, and refuses a rule marked not run while its symbol
+   has a run anywhere else (only a refused fetch leaves a rule without a
+   run). Then run
    `uv run gpt-trader experiment read --protocol config/experiments/round-two-2026-10-20/protocol.json --runs <runs.json> --source-sha256 <DIGEST> --spend-ledger <LEDGER> --format json`.
    It refuses any run bound to another source digest. Post every case and
    every symbol, including no-trade, loss, halt, open-at-cutoff, unscored,
@@ -163,8 +165,9 @@ a 10% drawdown halt:
   of 8 symbols scored and 30 pooled round trips, net above zero and above
   hold-the-coin). Both rules' round-one verdicts are reported.
 - **Margin.** "Above" means above by more than one round trip's costs at
-  the exposure cap on every compared symbol: $200 × 2 × (fee + slippage)
-  per symbol, so $4.80 at base costs and $22.40 at stress over 8 symbols. A
+  the exposure cap, summed over the compared symbols: $200 × 2 × (fee +
+  slippage) per symbol, so $4.80 at base costs and $22.40 at stress over 8
+  symbols. A
   smaller lead is less than what one trade per coin costs, so it is read as
   not beating that comparator.
 - **Outcome.** *Pass*: at least 7 compared symbols and above every
@@ -213,8 +216,11 @@ there. Each ledger call records its account (symbol and cost case) and
 decision time. For each listed account, the read reports ledger calls
 beside journaled turns. A surplus is re-asked uncommitted bars, each of
 which the report explains by its crash or halt. Ledger calls for an account
-outside the runs file, or fewer calls than turns (a turn charged to another
-ledger), are listed as breaches.
+outside the runs file, fewer calls than turns (a turn charged to another
+ledger), and an account whose decision times go back to an earlier bar (a
+second run, since a resume only asks the same bar again or a later one) are
+listed as breaches. The read also lists every model string that answered;
+more than one (two dated snapshots, say) is reported beside the bar.
 
 ## If the spend stop ends the arm early
 
@@ -270,7 +276,7 @@ The worst case per turn is the input bound at the cache-write rate the spend
 stop reserves ($12.50 per million) plus 16,000 output tokens at $50 per
 million. The rulebook column assumes plain text; a rulebook full of
 characters that JSON escapes (quotes, line breaks, non-ASCII) could reach
-about 48,000 bytes and about $1.50 a turn. Each call is still reserved from
+about 48,000 bytes and about $1.53 a turn. Each call is still reserved from
 its own bytes, so the spend stop holds either way.
 
 **Turns for fills:** each bar with a fill adds at most one turn. The
@@ -287,7 +293,7 @@ call replies, so a cap stops the arm only when real spend nears it.
 
 **Expected spend is far lower:** at an *assumed* 3,000 output tokens and the
 mean input bound, a turn costs about $0.26: about $860 for the 3,360 cadence
-turns, and about $1,250 if every allowed fill turn is used *(derived; real
+turns, and about $1,230 if every allowed fill turn is used *(derived; real
 input tokens are likely well under the byte bound)*. A test account is
 $1,000, so model spend would swamp any trading result there; at a larger
 account size it would not. The card says so plainly.

@@ -326,19 +326,32 @@ def ledger_summary(path: Path) -> dict[str, Any]:
             if ceiling is None:
                 raise SpendLedgerError(f"Spend ledger {path} has no cap")
             (cap,) = ceiling
-            account = "account" if "account" in _columns(connection) else "''"
+            labels = ", ".join(
+                column if column in _columns(connection) else "''" for column in LABEL_COLUMNS
+            )
             rows = connection.execute(
-                f"SELECT model, status, reserved_usd, cost_usd, {account} FROM calls ORDER BY id"
+                f"SELECT model, status, reserved_usd, cost_usd, {labels} FROM calls ORDER BY id"
             ).fetchall()
     except sqlite3.DatabaseError as error:
         raise SpendLedgerError(f"Could not read spend ledger {path}: {error}") from None
     statuses: dict[str, int] = {}
     accounts: dict[str, int] = {}
-    for _, status, _, _, account in rows:
+    latest: dict[str, datetime] = {}
+    rewound: set[str] = set()
+    for _, status, _, _, account, decision_time in rows:
         statuses[status] = statuses.get(status, 0) + 1
         accounts[account] = accounts.get(account, 0) + 1
+        if not decision_time:
+            continue
+        # A resume asks the uncommitted bar again or a later one; only a second
+        # run of the account goes back to an earlier bar.
+        moment = datetime.fromisoformat(decision_time)
+        if account in latest and moment < latest[account]:
+            rewound.add(account)
+        latest[account] = max(moment, latest.get(account, moment))
     charged = sum(
-        (Decimal(cost if cost is not None else held) for _, _, held, cost, _ in rows), Decimal(0)
+        (Decimal(cost if cost is not None else held) for _, _, held, cost, _, _ in rows),
+        Decimal(0),
     )
     return {
         "path": str(path),
@@ -346,8 +359,9 @@ def ledger_summary(path: Path) -> dict[str, Any]:
         "charged_usd": str(charged),
         "calls": len(rows),
         "calls_by_status": dict(sorted(statuses.items())),
-        "models": sorted({model for model, _, _, _, _ in rows}),
+        "models": sorted({row[0] for row in rows}),
         "calls_by_account": dict(sorted(accounts.items())),
+        "rewound_accounts": sorted(rewound),
     }
 
 

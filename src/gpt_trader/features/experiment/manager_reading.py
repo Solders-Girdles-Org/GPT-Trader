@@ -210,6 +210,21 @@ def read_round_two(
                         f"{entry['symbol']} {entry['benchmark']} run is bound to source "
                         f"{entry['implementation_sha256']}, not the frozen {source_sha256}"
                     )
+    # A rule run needs no model, so only a refused fetch leaves it without one,
+    # and then that symbol has no run in any channel or case.
+    for rule in BAR_RULES:
+        for entries in runs[rule].values():
+            for entry in entries:
+                if "not_run" in entry and any(
+                    "not_run" not in other and other["symbol"] == entry["symbol"]
+                    for channel in runs.values()
+                    for others in channel.values()
+                    for other in others
+                ):
+                    raise ValueError(
+                        f"{entry['symbol']} {rule} is not run while another channel or case "
+                        "has a run; a rule is not run only when its symbol's fetch was refused"
+                    )
     rules = {
         rule: {
             case: _rule_outcome(runs[rule][case], protocol, rule=rule, case=case)
@@ -239,6 +254,16 @@ def read_round_two(
     return {
         "protocol": protocol["protocol"],
         "source_sha256": source_sha256,
+        # Every model string that answered; more than one is reported beside the bar.
+        "models_observed": sorted(
+            {
+                model
+                for entries in runs[MANAGER_CHANNEL].values()
+                for entry in entries
+                if "not_run" not in entry
+                for model in entry["manager"]["models"]
+            }
+        ),
         "bar": ["cash", "hold_the_coin", *bar_rules],
         "manager": cases,
         "verdict": verdict,

@@ -317,7 +317,7 @@ which owns the details; the main points:
 - **Spend** is reported beside the bar from the one spend ledger, matched
   call by call to journaled turns. The card's cap is at most about $4,540,
   by item 4's formula over 4,800 turns (including 90 fill turns per
-  account); expected spend is about $860 to $1,250 *(derived; real counts
+  account); expected spend is about $860 to $1,230 *(derived; real counts
   come only from the approved run)*.
   Accounts the spend stop ends are not scored; the reading is otherwise
   unchanged.

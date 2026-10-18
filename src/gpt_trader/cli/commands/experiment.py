@@ -803,7 +803,11 @@ def _read_manager(args: Namespace, protocol: dict[str, Any], runs: dict[str, Any
             "breaches": [
                 f"ledger calls for an account outside the runs file: {name}" for name in unlisted
             ]
-            + [f"fewer ledger calls than journaled turns: {name}" for name in short],
+            + [f"fewer ledger calls than journaled turns: {name}" for name in short]
+            + [
+                f"decision times go back to an earlier bar, a second run: {name}"
+                for name in ledger["rewound_accounts"]
+            ],
         }
     result["model_spend"] = spend
     return CliResponse.success_response(

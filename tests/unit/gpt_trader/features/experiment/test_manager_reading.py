@@ -209,17 +209,26 @@ def test_every_symbol_must_be_listed_as_a_run_or_as_not_run():
     def not_started(grouped):
         stress = grouped["ai-trade-manager"]["stress"]
         stress[-1] = {"symbol": stress[-1]["symbol"], "not_run": "spend stop: never started"}
-        grouped["baseline"]["base"][0] = {"symbol": SYMBOLS[0], "not_run": "fetch refused: gap"}
+        for channel in grouped.values():
+            for entries in channel.values():
+                entries[0] = {"symbol": SYMBOLS[0], "not_run": "fetch refused: gap"}
 
     result = read(runs(edit=not_started))
     stress = result["manager"]["stress"]
-    assert len(stress["compared_symbols"]) == 7 and stress["outcome"] == "pass"
+    assert len(stress["compared_symbols"]) == 6 and stress["outcome"] == "inconclusive"
     assert stress["symbols"][-1] == {
         "symbol": SYMBOLS[-1],
         "scored": False,
         "not_run": "spend stop: never started",
     }
     assert len(result["rules"]["baseline"]["base"]["symbols"]) == 8
+    assert result["models_observed"] == ["claude-fable-5-1"]
+
+    def rule_only(grouped):
+        grouped["baseline"]["base"][0] = {"symbol": SYMBOLS[0], "not_run": "fetch refused: gap"}
+
+    with pytest.raises(ValueError, match="fetch was refused"):
+        read(runs(edit=rule_only))
 
     def bare(grouped):
         grouped["ai-trade-manager"]["base"][0] = {"symbol": SYMBOLS[0], "not_run": " "}
