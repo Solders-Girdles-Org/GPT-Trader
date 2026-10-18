@@ -65,10 +65,13 @@ for the window 2026-10-20 to 2026-11-24
 ([protocol](../config/experiments/round-two-2026-10-20/PROTOCOL.md),
 [#1352](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1352)).
 The build umbrella [#1252](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1252)
-hands off to [RJ's one approval card](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1354)
-for the credential, $4,540 total cap and single run. The card records the frozen
-source digest, one shared spend-ledger path, expected spend and pause option;
-no model call, credential use, fetch or research run starts before RJ's go. Do not start the old runtime,
+closed. On 2026-10-18 RJ declined the round-two card
+([#1354](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1354)) as
+"not yet": the frozen window lapses unrun, and no credential, spend ledger,
+fetch or model call was made. The next round is
+[cheap proofs before any paid AI test](decisions/cheap-proofs-before-paid-ai-test.md):
+an AI-written rulebook, run by the engine without model calls, proven at no
+spend before a dollar-sized card. Do not start the old runtime,
 use its approval grants for the new product, or infer a deployment from this
 page.
 
