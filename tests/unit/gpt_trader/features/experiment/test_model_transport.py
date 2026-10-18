@@ -236,3 +236,13 @@ def test_a_reply_from_another_model_stops_the_run(manager_input, ledger):
     # Its real billing is unknown, so it keeps the worst-case reservation.
     (call,) = ledger.calls()
     assert ledger.spent_usd() == Decimal(call["reserved_usd"]) > Decimal("0.09")
+
+
+def test_a_dated_snapshot_of_the_pinned_model_is_the_pinned_model(manager_input, ledger):
+    for reported in ("claude-fable-5-1-20261001", "claude-fable-5-1-x", "claude-fable-5-10"):
+        sender = transport(manager_input, ledger, message(model=reported))
+        if reported.endswith("20261001"):
+            assert sender.decide(first_request(manager_input)).model == reported
+        else:
+            with pytest.raises(TransportHalted, match="not the pinned"):
+                sender.decide(first_request(manager_input))

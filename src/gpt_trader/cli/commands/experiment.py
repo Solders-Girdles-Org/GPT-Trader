@@ -10,6 +10,7 @@ import os
 import sqlite3
 from argparse import Namespace
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -39,6 +40,7 @@ from gpt_trader.features.experiment.model_transport import (
     SpendLedger,
     SpendLedgerError,
     TransportHalted,
+    account_label,
     estimate_spend,
     from_environment,
     ledger_summary,
@@ -87,6 +89,12 @@ PROTOCOL_SHAPES: dict[str, type] = {
     "manager": dict,
 }
 CAPTURE_KEYS = ("schema", "granularity", "start", "end", "requests")
+# A fetch waits this long past the cutoff, so the exchange has finalized the last bar.
+FETCH_SETTLE = timedelta(hours=2)
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
 
 
 class ExperimentCliError(Exception):
@@ -364,6 +372,11 @@ def register(subparsers: Any) -> None:
         help='JSON mapping {"<rule>": {"<cost case>": [experiment roots]}}',
     )
     read.add_argument(
+        "--source-sha256",
+        help="AI trade manager protocols: the frozen commit's source digest from the card; "
+        "every run must be bound to it",
+    )
+    read.add_argument(
         "--spend-ledger",
         type=Path,
         help="AI trade manager protocols: the run's one spend ledger, read without writing; "
@@ -570,6 +583,13 @@ def handle_fetch(args: Namespace) -> CliResponse:
             f"Protocol {args.protocol} has an invalid warmup_start or cutoff: {error}",
             path=str(args.protocol),
         ) from None
+    if _utc_now() < end + FETCH_SETTLE:
+        raise ExperimentCliError(
+            CliErrorCode.VALIDATION_ERROR,
+            f"Protocol {args.protocol} cutoff is {end.isoformat()}; its last bar may not be final "
+            f"until {(end + FETCH_SETTLE).isoformat()}, so nothing was fetched",
+            path=str(args.protocol),
+        )
     capture = asyncio.run(capture_public_hourly_candles(args.symbol, start, end))
     # Validate every input before writing anything, so a gap leaves no evidence half-made.
     try:
@@ -645,10 +665,17 @@ def handle_read(args: Namespace) -> CliResponse:
                 "name it among its benchmarks",
                 path=str(args.protocol),
             )
-    elif args.spend_ledger is not None:
+        if not args.source_sha256:
+            raise ExperimentCliError(
+                CliErrorCode.MISSING_ARGUMENT,
+                f"Protocol {args.protocol} reads the {MANAGER_CHANNEL} channel; name the frozen "
+                "source digest with --source-sha256",
+            )
+    elif args.spend_ledger is not None or args.source_sha256 is not None:
         raise ExperimentCliError(
             CliErrorCode.INVALID_ARGUMENT,
-            f"--spend-ledger applies only to a protocol that reads the {MANAGER_CHANNEL} channel",
+            "--spend-ledger and --source-sha256 apply only to a protocol that reads the "
+            f"{MANAGER_CHANNEL} channel",
         )
     if not {"baseline", "mean-reversion"} <= set(protocol["benchmarks"]) or not {
         "base",
@@ -665,7 +692,10 @@ def handle_read(args: Namespace) -> CliResponse:
         not isinstance(cases, dict)
         or set(cases) != set(protocol["cost_cases"])
         or any(
-            not isinstance(roots, list) or not all(isinstance(root, str) for root in roots)
+            not isinstance(roots, list)
+            or not all(
+                isinstance(root, str) or (manager_reading and _is_not_run(root)) for root in roots
+            )
             for roots in cases.values()
         )
         for cases in runs.values()
@@ -710,26 +740,40 @@ def handle_read(args: Namespace) -> CliResponse:
     )
 
 
-def _read_manager(
-    args: Namespace, protocol: dict[str, Any], runs: dict[str, dict[str, list[str]]]
-) -> CliResponse:
+def _is_not_run(entry: Any) -> bool:
+    return (
+        isinstance(entry, dict)
+        and set(entry) == {"symbol", "not_run"}
+        and all(isinstance(value, str) for value in entry.values())
+    )
+
+
+def _read_manager(args: Namespace, protocol: dict[str, Any], runs: dict[str, Any]) -> CliResponse:
     """The round-two reading, with model spend from the one spend ledger beside it."""
     reports = {
-        rule: {case: [_inspect(Path(root)) for root in roots] for case, roots in cases.items()}
+        rule: {
+            case: [entry if _is_not_run(entry) else _inspect(Path(entry)) for entry in entries]
+            for case, entries in cases.items()
+        }
         for rule, cases in runs.items()
     }
     try:
-        result = read_round_two(reports, protocol)
+        result = read_round_two(reports, protocol, source_sha256=args.source_sha256)
     except (ValueError, KeyError) as error:
         raise ExperimentCliError(
             CliErrorCode.VALIDATION_ERROR,
             f"Runs file {args.runs} does not fit protocol {args.protocol}: {error}",
             path=str(args.runs),
         ) from None
-    turns = sum(
-        report["manager"]["turns"] for case in reports[MANAGER_CHANNEL].values() for report in case
-    )
-    spend: dict[str, Any] = {"journal_turns": turns, "ledger": None}
+    turns = {
+        account_label(
+            report["symbol"], report["settings"]["fee_bps"], report["settings"]["slippage_bps"]
+        ): report["manager"]["turns"]
+        for case in reports[MANAGER_CHANNEL].values()
+        for report in case
+        if "not_run" not in report
+    }
+    spend: dict[str, Any] = {"journal_turns": sum(turns.values()), "ledger": None}
     if args.spend_ledger is not None:
         try:
             ledger = ledger_summary(args.spend_ledger)
@@ -737,9 +781,30 @@ def _read_manager(
             raise ExperimentCliError(
                 CliErrorCode.CONFIG_INVALID, str(error), path=str(args.spend_ledger)
             ) from None
-        # More calls than journaled turns are re-asked uncommitted bars or runs
-        # outside the runs file; fewer means some turn was charged to another ledger.
-        spend |= {"ledger": ledger, "ledger_calls_minus_journal_turns": ledger["calls"] - turns}
+        calls = ledger["calls_by_account"]
+        # A call beyond its account's turns re-asked an uncommitted bar after a
+        # crash or halt, each of which the report must explain. A call for an
+        # account outside the runs file, or fewer calls than turns (a turn charged
+        # to another ledger), breaks the protocol.
+        accounts = {
+            account: {"ledger_calls": calls.get(account, 0), "journal_turns": count}
+            for account, count in sorted(turns.items())
+        }
+        unlisted = sorted(set(calls) - set(turns))
+        short = [
+            name for name, row in accounts.items() if row["ledger_calls"] < row["journal_turns"]
+        ]
+        spend |= {
+            "ledger": ledger,
+            "accounts": accounts,
+            "re_asked_calls": sum(
+                max(0, row["ledger_calls"] - row["journal_turns"]) for row in accounts.values()
+            ),
+            "breaches": [
+                f"ledger calls for an account outside the runs file: {name}" for name in unlisted
+            ]
+            + [f"fewer ledger calls than journaled turns: {name}" for name in short],
+        }
     result["model_spend"] = spend
     return CliResponse.success_response(
         "experiment read",

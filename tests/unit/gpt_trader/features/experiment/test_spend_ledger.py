@@ -160,6 +160,11 @@ def test_ledger_summary_reads_the_charge_without_writing(manager_input, ledger, 
     assert ledger.path.read_bytes() == before
     assert summary["cap_usd"] == "100" and summary["calls"] == 2
     assert summary["calls_by_status"] == {"replied": 1, "reserved": 1}
+    assert summary["calls_by_account"] == {"BTC-USD fee_bps=10 slippage_bps=5": 2}
+    assert (
+        ledger.calls()[0]["decision_time"]
+        == first_request(manager_input)["context"]["decision_time"]
+    )
     assert Decimal(summary["charged_usd"]) == ledger.spent_usd()
     foreign = tmp_path / "foreign.sqlite"
     foreign.write_bytes(b"not a ledger")

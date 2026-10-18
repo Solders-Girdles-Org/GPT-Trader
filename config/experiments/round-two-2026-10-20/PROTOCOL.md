@@ -26,16 +26,18 @@ reading in [manager_reading.py](../../../src/gpt_trader/features/experiment/mana
 - **Dates.** Scored bars run from 2026-10-20T00:00Z up to the cutoff
   2026-11-24T00:00Z: 35 days, 840 hourly bars. 72 warm-up bars from
   2026-10-17T00:00Z come first, so each input has 912 bars. Warm-up bars are
-  history only: no decision is taken on them. They predate the freeze; the
-  manager sees at most 48 of them, as context, at its first turns.
+  history only: no decision is taken on them. They close before the window
+  opens, and most close after the freeze, so nothing can be tuned to them;
+  the manager sees up to 48 of them, as context, at its first turns.
 - **Why these dates.** The decision fixes the start as the first 00:00 UTC at
   least one day after W3 merges. These dates hold only if this file reaches
   `main` before 2026-10-19T00:00Z. If it merges later, the dates must be
   moved by that rule in this file before merge; a file on `main` with a
   start less than a day after its merge commit is void.
 - **When it runs.** After the cutoff, on the window's recorded bars, and
-  only after RJ's go on the card. Fetch no earlier than 2026-11-24T02:00Z, so
-  the last bar is final. RJ's go may come before or after the cutoff.
+  only after RJ's go on the card. `fetch-input` refuses to run before
+  2026-11-24T02:00Z, two hours after the cutoff, so the last bar is final.
+  RJ's go may come before or after the cutoff.
 
 ## Frozen source and settings
 
@@ -62,8 +64,10 @@ reading in [manager_reading.py](../../../src/gpt_trader/features/experiment/mana
   ending at the decision bar.
 - **Model.** `claude-fable-5-1`, the strongest model in the frontier tier of
   RJ's workspace model stack on RJ's Claude API credits at the freeze. The
-  ID has no snapshot suffix; the transport stops the run if a reply names
-  any other model. Effort `high`; `max_tokens` 16,000, thinking included.
+  ID has no snapshot suffix (Anthropic's model table lists it as complete);
+  a reply naming it or a dated snapshot of it (`claude-fable-5-1-YYYYMMDD`)
+  counts as the pinned model, and the transport stops the run if a reply
+  names any other model. Effort `high`; `max_tokens` 16,000, thinking included.
   Thinking is always on for this model and is not configurable. No tools, no
   refusal fallback (it would answer with another model), standard capacity,
   global inference, structured output in the reply shape `parse_reply`
@@ -78,7 +82,11 @@ reading in [manager_reading.py](../../../src/gpt_trader/features/experiment/mana
 
 ## Run procedure (only after RJ's go on the card)
 
-1. Check out the frozen commit and run `uv sync --all-extras --dev`.
+1. Check out the frozen commit into a clean directory and run
+   `uv sync --all-extras --dev`. Before any model call, confirm that
+   `git status` shows no change or untracked file and that the checkout's
+   source digest (`implementation_digest()` in `inputs.py`) equals the one on
+   the card; a stray `.py` file under `src/gpt_trader/` would change it.
 2. For each of the 8 symbols, into a new empty directory:
    `uv run gpt-trader experiment fetch-input --protocol config/experiments/round-two-2026-10-20/protocol.json --symbol <SYMBOL> --out <evidence>/<SYMBOL>`.
    This writes `capture.json` and six inputs (three channels × two cost
@@ -103,8 +111,15 @@ reading in [manager_reading.py](../../../src/gpt_trader/features/experiment/mana
      halt (credential, model or request error) is resumed in the same
      directory with the same ledger and cap. Resuming is not a rerun: the
      journal replays every committed turn from its record and never asks
-     for it again. Starting a new directory for an input that already has
-     one is a rerun and is not allowed.
+     for it again, and only the uncommitted bar is asked again. Starting a
+     new directory for an input that already has one is a rerun and is not
+     allowed.
+   - **A halt that recurs is not resumed again.** A halt whose cause is
+     outside the code (a revoked key, exhausted credits, an account limit)
+     is fixed there and resumed. A halt that recurs on its first resume
+     with the same cause, and any halt for a cost above its reservation, is
+     a run-path defect: that account is not resumed, and the defect rules
+     below apply.
    - **The spend stop is final.** If the spend stop ends a run, that run is
      not resumed under a higher cap or a new ledger. It, and any run not yet
      started, stays incomplete.
@@ -112,11 +127,15 @@ reading in [manager_reading.py](../../../src/gpt_trader/features/experiment/mana
    symbol's capture with `experiment verify-input`; refuse any difference.
 6. Re-derive every balance of all 48 runs independently in Decimal from the
    journal fills, without the engine's reconciliation, as round one did.
-7. Write a runs file mapping each channel and cost case to its run
-   directories, and run
-   `uv run gpt-trader experiment read --protocol config/experiments/round-two-2026-10-20/protocol.json --runs <runs.json> --spend-ledger <LEDGER> --format json`.
-   Post every case and every symbol, including no-trade, loss, halt,
-   open-at-cutoff, unscored and stopped rows. No case is dropped or rerun.
+7. Write a runs file mapping each channel and cost case to a list naming
+   **every** protocol symbol once: its run directory, or
+   `{"symbol": "<SYMBOL>", "not_run": "<why>"}` for a refused fetch or an
+   account the spend stop never started. The read refuses a list that
+   leaves a symbol out. Then run
+   `uv run gpt-trader experiment read --protocol config/experiments/round-two-2026-10-20/protocol.json --runs <runs.json> --source-sha256 <DIGEST> --spend-ledger <LEDGER> --format json`.
+   It refuses any run bound to another source digest. Post every case and
+   every symbol, including no-trade, loss, halt, open-at-cutoff, unscored,
+   stopped and not-run rows. No case is dropped or rerun.
 
 ## The reading
 
@@ -143,15 +162,28 @@ a 10% drawdown halt:
   itself: it passes under both cost cases by round one's reading (at least 7
   of 8 symbols scored and 30 pooled round trips, net above zero and above
   hold-the-coin). Both rules' round-one verdicts are reported.
+- **Margin.** "Above" means above by more than one round trip's costs at
+  the exposure cap on every compared symbol: $200 × 2 × (fee + slippage)
+  per symbol, so $4.80 at base costs and $22.40 at stress over 8 symbols. A
+  smaller lead is less than what one trade per coin costs, so it is read as
+  not beating that comparator.
 - **Outcome.** *Pass*: at least 7 compared symbols and above every
-  comparator. *Trails*: at least 7 compared symbols and at or below any
-  comparator; the report names which. *Inconclusive*: fewer than 7.
-- **No trade minimum for the manager.** Round one's 30-round-trip floor does
-  not apply to it. Holding is the comparator, so a channel that rarely
-  trades is still read against what it could have earned: a manager that
-  never trades earns $0, which never beats cash, and one that buys and holds
-  is judged against holding. Its round trips are reported. Five weeks can
-  show that the manager fails to beat these comparators, not prove skill.
+  comparator by the margin. *Trails*: at least 7 compared symbols and not
+  above some comparator by the margin; the report names which.
+  *Inconclusive*: fewer than 7.
+- **When a rarely trading manager's reading counts.** Always, given the
+  coverage above: round one's 30-round-trip floor does not apply to the
+  manager, and its round trips are reported. In a rising window a manager
+  that rarely trades is judged against holding, which it must beat. In a
+  falling window, holding and the rules lose, so the bar becomes a profit
+  above the margin: a manager that stays out and makes a few well-chosen
+  trades can pass. Staying out of a falling market is part of managing
+  trades, and round three's fresh window is the guard against a lucky
+  pass. A manager that never trades, or trades for a few cents, cannot
+  pass. *Strongest option rejected:* a minimum number of round trips. It
+  would block a pass earned by correctly staying out, and any count on five
+  weeks is arbitrary. Five weeks can show that the manager fails to beat
+  these comparators, not prove skill.
 
 **Failed calls.** A failed call (timeout, connection error, rate limit,
 overload or server error) makes that turn a permanent no-trade turn: no
@@ -177,9 +209,12 @@ states. The reading is judged on trading results alone. **Model spend** is
 reported beside it from the spend ledger, not the journals: a call whose
 billing is unknown records $0 in its journal turn but keeps its full
 reservation in the ledger, and a call whose bar never committed appears only
-there. The read reports the ledger's charge, its calls by status, and ledger
-calls minus journaled turns (re-asked uncommitted bars; a negative number
-means some turn was charged elsewhere, which is reported as a breach).
+there. Each ledger call records its account (symbol and cost case) and
+decision time. For each listed account, the read reports ledger calls
+beside journaled turns. A surplus is re-asked uncommitted bars, each of
+which the report explains by its crash or halt. Ledger calls for an account
+outside the runs file, or fewer calls than turns (a turn charged to another
+ledger), are listed as breaches.
 
 ## If the spend stop ends the arm early
 
@@ -210,6 +245,7 @@ frozen source is never patched for this run.
   such as the live runtime): recorded, no action.
 - **Fetch tooling:** fixable before any input exists (run procedure,
   step 2).
+- **A recurring halt** (run procedure, step 4) is a run-path defect.
 - **Reading arithmetic:** this file wins over the code. The reading this
   file states is computed from the frozen checkout's `experiment inspect`
   reports and reported beside the code's reading.
@@ -232,18 +268,29 @@ bound; it is known only from the first approved call.
 
 The worst case per turn is the input bound at the cache-write rate the spend
 stop reserves ($12.50 per million) plus 16,000 output tokens at $50 per
-million. **Turns for fills:** each entry or exit fill adds at most one turn.
-The cap allows 90 fill turns per account (up to 45 round trips per coin,
+million. The rulebook column assumes plain text; a rulebook full of
+characters that JSON escapes (quotes, line breaks, non-ASCII) could reach
+about 48,000 bytes and about $1.50 a turn. Each call is still reserved from
+its own bytes, so the spend stop holds either way.
+
+**Turns for fills:** each bar with a fill adds at most one turn. The
+estimate allows 90 fill turns per account (up to 45 round trips per coin,
 more than twice round one's busiest rule, about 19), so at most 300 turns
-per account and 4,800 in all. **The cap's ceiling is about $4,720**
-*(derived: 4,800 turns × $0.983)*. The card may set a lower cap; a call is
-sent only while the ledger's charge plus its own worst case fits, so a lower
-cap stops the arm only if real spend runs near it. **Expected spend is far
-lower**: at an *assumed* 3,000 output tokens and the input bound, a turn
-costs about $0.26, about $860 for 3,360 turns *(derived; real input tokens
-are likely well under the byte bound)*. A test account is $1,000, so model
-spend would swamp any trading result there; at a larger account size it
-would not. The card says so plainly.
+per account and 4,800 in all.
+
+**The cap's ceiling is about $4,540**, by the decision record's formula,
+maximum turns × (input bound × input price + `max_tokens` × output price):
+4,800 × (14,634 × $10 + 16,000 × $50) per million *(derived)*. The card's
+cap is at most that. The stop reserves each call at the cache-write rate,
+about $0.98, and replaces the reservation with the measured cost once the
+call replies, so a cap stops the arm only when real spend nears it.
+
+**Expected spend is far lower:** at an *assumed* 3,000 output tokens and the
+mean input bound, a turn costs about $0.26: about $860 for the 3,360 cadence
+turns, and about $1,250 if every allowed fill turn is used *(derived; real
+input tokens are likely well under the byte bound)*. A test account is
+$1,000, so model spend would swamp any trading result there; at a larger
+account size it would not. The card says so plainly.
 
 ## GPT-6 Astra
 
@@ -258,3 +305,14 @@ Recorded bars replayed after the window closes rule out training on the
 window and tuning on its outcome. They do not reproduce live latency,
 outages or slippage. Five weeks on eight correlated coins is one market
 regime, so a pass is a first reading, not proof.
+
+The bar is easier in a falling window than in a rising one, and these
+handicaps are inherited from round one's rails:
+- Every manager entry carries a stop. At 1% stop risk, the full 20%
+  exposure needs a stop within about 5% of the price at base costs, or about
+  3.7% at stress costs; a wider stop means a smaller position.
+- A position expires after at most 720 hours, against an 840-hour window.
+- Hold-the-coin has neither limit.
+
+So in a rising window, matching holding is structurally hard. The
+comparator rules share the same rails.

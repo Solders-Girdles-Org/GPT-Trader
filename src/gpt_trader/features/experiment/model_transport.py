@@ -23,6 +23,7 @@ Nothing here runs without an explicit opt-in; tests inject a stub client.
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 import time
 from collections.abc import Iterator, Mapping
@@ -84,6 +85,16 @@ REPLY_SCHEMA: dict[str, Any] = {
     "required": ["action", "reason"],
     "additionalProperties": False,
 }
+
+
+def same_model(pinned: str, reported: str) -> bool:
+    """The pinned model, or a dated snapshot of it (``<pinned>-YYYYMMDD``)."""
+    return reported == pinned or re.fullmatch(re.escape(pinned) + r"-\d{8}", reported) is not None
+
+
+def account_label(symbol: str, fee_bps: str, slippage_bps: str) -> str:
+    """One account's name in the spend ledger: its symbol and cost case."""
+    return f"{symbol} fee_bps={fee_bps} slippage_bps={slippage_bps}"
 
 
 class SpendCeilingReached(Exception):
@@ -205,7 +216,8 @@ class SpendLedger:
         connection.execute(
             "CREATE TABLE calls (id INTEGER PRIMARY KEY AUTOINCREMENT, "
             "model TEXT NOT NULL, reserved_at TEXT NOT NULL, reserved_usd TEXT NOT NULL, "
-            "status TEXT NOT NULL, cost_usd TEXT, detail TEXT)"
+            "status TEXT NOT NULL, cost_usd TEXT, detail TEXT, "
+            "account TEXT NOT NULL DEFAULT '', decision_time TEXT NOT NULL DEFAULT '')"
         )
         connection.execute("INSERT INTO ceiling VALUES (1, ?, ?)", (str(self.cap_usd), _now()))
 
@@ -239,8 +251,14 @@ class SpendLedger:
             connection.row_factory = sqlite3.Row
             return [dict(row) for row in connection.execute("SELECT * FROM calls ORDER BY id")]
 
-    def reserve(self, model: str, amount: Decimal) -> int:
-        """Count ``amount`` before a call, or raise if it could pass the cap."""
+    def reserve(
+        self, model: str, amount: Decimal, *, account: str = "", decision_time: str = ""
+    ) -> int:
+        """Count ``amount`` before a call, or raise if it could pass the cap.
+
+        ``account`` and ``decision_time`` name the request, so a reading can match
+        every charged call to a journaled turn.
+        """
         if amount > self.cap_usd and not self._exists():
             raise SpendCeilingReached(
                 f"Spend ceiling reached: one call could cost up to ${amount}, above the "
@@ -261,9 +279,9 @@ class SpendLedger:
                     f"reserved and the next call could cost up to ${amount}; it was not sent"
                 )
             cursor = connection.execute(
-                "INSERT INTO calls (model, reserved_at, reserved_usd, status) "
-                "VALUES (?, ?, ?, 'reserved')",
-                (model, _now(), str(amount)),
+                "INSERT INTO calls (model, reserved_at, reserved_usd, status, account, "
+                "decision_time) VALUES (?, ?, ?, 'reserved', ?, ?)",
+                (model, _now(), str(amount), account, decision_time),
             )
             connection.execute("COMMIT")
             assert cursor.lastrowid is not None
@@ -296,15 +314,17 @@ def ledger_summary(path: Path) -> dict[str, Any]:
                 raise SpendLedgerError(f"Spend ledger {path} has no cap")
             (cap,) = ceiling
             rows = connection.execute(
-                "SELECT model, status, reserved_usd, cost_usd FROM calls ORDER BY id"
+                "SELECT model, status, reserved_usd, cost_usd, account FROM calls ORDER BY id"
             ).fetchall()
     except sqlite3.DatabaseError as error:
         raise SpendLedgerError(f"Could not read spend ledger {path}: {error}") from None
     statuses: dict[str, int] = {}
-    for _, status, _, _ in rows:
+    accounts: dict[str, int] = {}
+    for _, status, _, _, account in rows:
         statuses[status] = statuses.get(status, 0) + 1
+        accounts[account] = accounts.get(account, 0) + 1
     charged = sum(
-        (Decimal(cost if cost is not None else held) for _, _, held, cost in rows), Decimal(0)
+        (Decimal(cost if cost is not None else held) for _, _, held, cost, _ in rows), Decimal(0)
     )
     return {
         "path": str(path),
@@ -312,7 +332,8 @@ def ledger_summary(path: Path) -> dict[str, Any]:
         "charged_usd": str(charged),
         "calls": len(rows),
         "calls_by_status": dict(sorted(statuses.items())),
-        "models": sorted({model for model, _, _, _ in rows}),
+        "models": sorted({model for model, _, _, _, _ in rows}),
+        "calls_by_account": dict(sorted(accounts.items())),
     }
 
 
@@ -332,7 +353,15 @@ class AnthropicTransport:
         params = wire_params(request, self.manager)
         input_price, output_price = pricing_for(self.model)
         reserved = worst_case_usd(params)
-        call = self.ledger.reserve(self.model, reserved)
+        context = request["context"]
+        call = self.ledger.reserve(
+            self.model,
+            reserved,
+            account=account_label(
+                context["symbol"], context["costs"]["fee_bps"], context["costs"]["slippage_bps"]
+            ),
+            decision_time=context["decision_time"],
+        )
         started = time.monotonic()
         try:
             response = self.client.messages.create(**params)
@@ -378,7 +407,7 @@ class AnthropicTransport:
         }
         # Spend billed outside the price table, or for another model, is unknown:
         # keep the reservation.
-        foreign = reply.model != self.model
+        foreign = not same_model(self.model, reply.model)
         charged = max(cost, reserved) if unpriced or foreign else cost
         self.ledger.settle(call, charged, "replied", reply.stop_reason)
         if foreign:

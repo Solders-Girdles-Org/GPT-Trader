@@ -6,14 +6,19 @@ from decimal import Decimal
 from pathlib import Path
 
 from gpt_trader.cli import main
-from tests.unit.gpt_trader.features.experiment.test_manager_reading import runs
+from gpt_trader.core.fill_accounting import aware_time
+from tests.unit.gpt_trader.features.experiment.test_manager_reading import DIGEST, runs
 
 PROTOCOL_PATH = "config/experiments/round-two-2026-10-20/protocol.json"
 PROTOCOL = json.loads(Path(PROTOCOL_PATH).read_text(encoding="utf-8"))
 
 
-def _fake_capture(monkeypatch):
+def _fake_capture(monkeypatch, *, hours_after_cutoff=3):
+    from gpt_trader.cli.commands import experiment as command
     from gpt_trader.features.recorder import candle_capture
+
+    now = aware_time(PROTOCOL["cutoff"]) + timedelta(hours=hours_after_cutoff)
+    monkeypatch.setattr(command, "_utc_now", lambda: now)
 
     async def fake_capture(symbol, start, end, **_):
         candles = [
@@ -61,6 +66,14 @@ def test_fetch_freezes_the_manager_settings_into_every_manager_input(tmp_path, c
     assert result["turns_without_fills"] == 210 and result["max_tokens"] == 16000
 
 
+def test_fetch_waits_until_the_last_bar_is_final(tmp_path, capsys, monkeypatch):
+    _fake_capture(monkeypatch, hours_after_cutoff=1)
+    args = ["experiment", "fetch-input", "--protocol", PROTOCOL_PATH, "--symbol", "BTC-USD"]
+    assert main([*args, "--out", str(tmp_path / "early"), "--format", "json"]) == 1
+    assert "may not be final" in json.loads(capsys.readouterr().out)["errors"][0]["message"]
+    assert not (tmp_path / "early").exists()
+
+
 def test_fetch_refuses_a_manager_protocol_without_manager_settings(tmp_path, capsys, monkeypatch):
     _fake_capture(monkeypatch)
     protocol = {key: value for key, value in PROTOCOL.items() if key != "manager"}
@@ -79,49 +92,100 @@ def _runs_file(tmp_path, monkeypatch, grouped):
     for rule, cases in grouped.items():
         mapping[rule] = {}
         for case, rows in cases.items():
-            roots = [str(tmp_path / f"{rule}-{case}-{row['symbol']}") for row in rows]
-            reports.update(zip(roots, rows, strict=True))
-            mapping[rule][case] = roots
+            entries = []
+            for row in rows:
+                if "not_run" in row:
+                    entries.append(row)
+                    continue
+                root = str(tmp_path / f"{rule}-{case}-{row['symbol']}")
+                reports[root] = row
+                entries.append(root)
+            mapping[rule][case] = entries
     monkeypatch.setattr(command, "_inspect", lambda root: reports[str(root)])
     path = tmp_path / "runs.json"
     path.write_text(json.dumps(mapping), encoding="utf-8")
     return path
 
 
-def test_read_applies_the_round_two_bar_and_reports_spend_from_the_ledger(
-    tmp_path, capsys, monkeypatch
-):
-    from gpt_trader.features.experiment.model_transport import SpendLedger
+def _ledger(tmp_path, calls):
+    from gpt_trader.features.experiment.model_transport import SpendLedger, account_label
 
-    manager_ledger = SpendLedger(tmp_path / "spend.sqlite", Decimal("4720"))
-    call = manager_ledger.reserve("claude-fable-5-1", Decimal("0.98"))
-    manager_ledger.settle(call, None, "timeout")
+    ledger = SpendLedger(tmp_path / "spend.sqlite", Decimal("4720"))
+    for symbol, fee, slippage, count in calls:
+        for turn in range(count):
+            call = ledger.reserve(
+                "claude-fable-5-1",
+                Decimal("0.01"),
+                account=account_label(symbol, fee, slippage),
+                decision_time=str(turn),
+            )
+            ledger.settle(call, Decimal("0.005"), "replied")
+    return ledger
+
+
+def _read(runs_file, *extra):
+    command = ["experiment", "read", "--protocol", PROTOCOL_PATH, "--runs", str(runs_file)]
+    return main([*command, "--source-sha256", DIGEST, *extra, "--format", "json"])
+
+
+def test_read_applies_the_round_two_bar_and_reconciles_the_ledger(tmp_path, capsys, monkeypatch):
+    every = [
+        (symbol, costs["fee_bps"], costs["slippage_bps"], 210)
+        for symbol in PROTOCOL["symbols"]
+        for costs in PROTOCOL["cost_cases"].values()
+    ]
+    # One re-asked bar on the first account, after a crash before its commit.
+    every[0] = (*every[0][:3], 211)
+    ledger = _ledger(tmp_path, every)
     runs_file = _runs_file(tmp_path, monkeypatch, runs())
-    read = ["experiment", "read", "--protocol", PROTOCOL_PATH, "--runs", str(runs_file)]
-    assert main([*read, "--spend-ledger", str(manager_ledger.path), "--format", "json"]) == 0
+    assert _read(runs_file, "--spend-ledger", str(ledger.path)) == 0
     result = json.loads(capsys.readouterr().out)["data"]
     assert (result["verdict"], result["action"]) == ("passes", "propose-round-three")
+    assert result["source_sha256"] == DIGEST
     spend = result["model_spend"]
-    assert spend["journal_turns"] == 16 * 210
-    assert Decimal(spend["ledger"]["charged_usd"]) == manager_ledger.spent_usd()
-    assert spend["ledger_calls_minus_journal_turns"] == 1 - 16 * 210
+    assert spend["journal_turns"] == 16 * 210 and spend["re_asked_calls"] == 1
+    assert spend["breaches"] == []
+    assert Decimal(spend["ledger"]["charged_usd"]) == ledger.spent_usd()
 
-    assert main([*read, "--format", "json"]) == 0
+    assert _read(runs_file) == 0
     assert json.loads(capsys.readouterr().out)["data"]["model_spend"]["ledger"] is None
 
 
-def test_read_refuses_misfit_runs_and_a_ledger_for_round_one(tmp_path, capsys, monkeypatch):
+def test_read_flags_ledger_calls_outside_the_runs_file(tmp_path, capsys, monkeypatch):
+    def not_started(grouped):
+        stress = grouped["ai-trade-manager"]["stress"]
+        stress[-1] = {"symbol": stress[-1]["symbol"], "not_run": "spend stop: never started"}
+
+    ledger = _ledger(tmp_path, [("DOT-USD", "60", "10", 5), ("BTC-USD", "10", "5", 3)])
+    runs_file = _runs_file(tmp_path, monkeypatch, runs(edit=not_started))
+    assert _read(runs_file, "--spend-ledger", str(ledger.path)) == 0
+    breaches = json.loads(capsys.readouterr().out)["data"]["model_spend"]["breaches"]
+    assert breaches[0].startswith("ledger calls for an account outside the runs file: DOT-USD")
+    assert any("fewer ledger calls than journaled turns: BTC-USD" in item for item in breaches)
+
+
+def test_read_refuses_misfit_runs_a_missing_digest_and_round_one_flags(
+    tmp_path, capsys, monkeypatch
+):
     def drifted(grouped):
         grouped["ai-trade-manager"]["base"][0]["manager"]["settings"]["max_tokens"] = 8000
 
     runs_file = _runs_file(tmp_path, monkeypatch, runs(edit=drifted))
-    read = ["experiment", "read", "--protocol", PROTOCOL_PATH, "--runs", str(runs_file)]
-    assert main([*read, "--format", "json"]) == 1
-    error = json.loads(capsys.readouterr().out)["errors"][0]
-    assert "frozen ai-trade-manager settings" in error["message"]
+    assert _read(runs_file) == 1
+    assert (
+        "frozen ai-trade-manager settings"
+        in json.loads(capsys.readouterr().out)["errors"][0]["message"]
+    )
+    command = ["experiment", "read", "--protocol", PROTOCOL_PATH, "--runs", str(runs_file)]
+    assert main([*command, "--format", "json"]) == 1
+    assert "--source-sha256" in json.loads(capsys.readouterr().out)["errors"][0]["message"]
+
+    def omitted(grouped):
+        grouped["mean-reversion"]["base"].pop()
+
+    assert _read(_runs_file(tmp_path, monkeypatch, runs(edit=omitted))) == 1
+    assert "exactly once" in json.loads(capsys.readouterr().out)["errors"][0]["message"]
     held_out = "config/experiments/held-out-2026-09-06/protocol.json"
     command = ["experiment", "read", "--protocol", held_out, "--runs", str(runs_file)]
     assert main([*command, "--spend-ledger", str(tmp_path / "x"), "--format", "json"]) == 1
-    assert (
-        "--spend-ledger applies only" in json.loads(capsys.readouterr().out)["errors"][0]["message"]
-    )
+    assert "apply only" in json.loads(capsys.readouterr().out)["errors"][0]["message"]

@@ -306,15 +306,19 @@ which owns the details; the main points:
   The prompt now also states the window and how the result is read.
 - **The bar.** Pooled over the compared symbols (at least 7 of 8), under
   both cost cases, above cash, hold-the-coin and mean reversion, and
-  baseline if baseline survives costs on this window. No trade minimum
-  for the manager, since never trading earns cash's zero. A symbol with more
-  than 5% of its turns lost to failed calls is not scored; refused and
-  malformed replies count as the model's own no-trade decisions. Each case
-  runs once; a resume in the same directory is not a rerun.
-- **Spend** is reported beside the bar from the one spend ledger. The
-  ceiling for the card's cap is about $4,720 (4,800 turns, including 90 fill
-  turns per account, at a worst case of about $0.98); expected spend is
-  about $860 *(derived; real counts come only from the approved run)*.
+  baseline if baseline survives costs on this window, each by more than
+  one round trip's costs per symbol ($4.80 base, $22.40 stress). No trade
+  minimum for the manager: in a falling window a few well-chosen trades can
+  pass, and round three guards against luck. A symbol with more than 5% of
+  its turns lost to failed calls is not scored; refused and malformed
+  replies count as the model's own no-trade decisions. Every symbol is
+  listed in the reading, as a run or as not run. Each case runs once; a
+  resume in the same directory is not a rerun.
+- **Spend** is reported beside the bar from the one spend ledger, matched
+  call by call to journaled turns. The card's cap is at most about $4,540,
+  by item 4's formula over 4,800 turns (including 90 fill turns per
+  account); expected spend is about $860 to $1,250 *(derived; real counts
+  come only from the approved run)*.
   Accounts the spend stop ends are not scored; the reading is otherwise
   unchanged.
 - **A defect found after the window opens** is never patched into the run;
