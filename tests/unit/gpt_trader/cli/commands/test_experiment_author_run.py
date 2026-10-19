@@ -1,9 +1,11 @@
 """Author forward-run path through the CLI: frozen inputs, stub transport, read-only report."""
 
 import json
+from datetime import timedelta
 from decimal import Decimal
 
 from gpt_trader.cli import main
+from gpt_trader.core.fill_accounting import aware_time
 from gpt_trader.features.experiment.rulebook import STARTING_RULEBOOK
 from gpt_trader.features.experiment.trade_manager import TransportReply
 from tests.unit.gpt_trader.cli.commands.test_experiment_round_two import PROTOCOL, _fake_capture
@@ -121,6 +123,33 @@ def test_run_refuses_inputs_not_frozen_by_protocol(tmp_path, capsys, monkeypatch
     inside = [*command[:3], str(original), *command[4:-1], str(tmp_path / "run" / "s.sqlite")]
     assert main([*inside, "--spend-cap-usd", "20", "--format", "json"]) == 1
     assert "outside" in json.loads(capsys.readouterr().out)["errors"][0]["message"]
+
+
+def test_run_refuses_inputs_outside_the_protocol_window(tmp_path, capsys, monkeypatch):
+    from gpt_trader.cli.commands import experiment
+
+    _fake_capture(monkeypatch)
+    code, out = _fetch(tmp_path, _protocol(tmp_path), "BTC-USD")
+    assert code == 0
+    payload = json.loads((out / "ai-rulebook-base.json").read_text())
+    # Same scored start and frozen rules, but bars past the cutoff: never run.
+    later = aware_time(PROTOCOL["cutoff"])
+    payload["candles"].append({**payload["candles"][-1], "ts": later.isoformat()})
+    payload["recorded_at"] = (later + timedelta(hours=1)).isoformat()
+    longer = tmp_path / "longer.json"
+    longer.write_text(json.dumps(payload))
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("client must not be created")
+
+    monkeypatch.setattr(experiment, "from_environment", forbidden)
+    capsys.readouterr()
+    command = ["experiment", "author-run", "--protocol", str(tmp_path / "protocol.json")]
+    command += ["--input", str(longer), "--root", str(tmp_path / "run")]
+    command += ["--model-transport", "anthropic", "--spend-ledger", str(tmp_path / "s.sqlite")]
+    assert main([*command, "--spend-cap-usd", "20", "--format", "json"]) == 1
+    assert "window differ" in json.loads(capsys.readouterr().out)["errors"][0]["message"]
+    assert not (tmp_path / "run").exists()
 
 
 def test_fetch_refuses_rulebook_protocol_without_author(tmp_path, capsys, monkeypatch):

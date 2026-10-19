@@ -675,10 +675,12 @@ def _protocol_portfolio(
             or source.payload["rulebooks"][0]["rules"] != rules
             or source.settings not in cases
             or aware_time(source.payload["scored_from"]) != aware_time(protocol["scored_from"])
+            or source.candles[0].ts != aware_time(protocol["warmup_start"])
+            or source.candles[-1].ts + timedelta(hours=1) != aware_time(protocol["cutoff"])
         ):
             raise ValueError(
                 f"{source.symbol} input is not an ai-rulebook input of protocol {path} "
-                "(symbol, starting rulebook, settings or scored window differ)"
+                "(symbol, starting rulebook, settings or window differ)"
             )
     return settings, manager
 
