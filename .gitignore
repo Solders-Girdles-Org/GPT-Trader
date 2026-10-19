@@ -43,6 +43,11 @@ config/experiments/held-out-2026-09-06/*
 config/experiments/round-two-2026-10-20/*
 !config/experiments/round-two-2026-10-20/PROTOCOL.md
 !config/experiments/round-two-2026-10-20/protocol.json
+!config/experiments/rulebook-author-2026-10-22/
+config/experiments/rulebook-author-2026-10-22/*
+!config/experiments/rulebook-author-2026-10-22/PROTOCOL.md
+!config/experiments/rulebook-author-2026-10-22/protocol.json
+!config/experiments/rulebook-author-2026-10-22/CARD.md
 
 # Ephemeral per-task planning/audit artifacts (see docs/INFORMATION_ARCHITECTURE.md)
 work/

@@ -1,0 +1,65 @@
+{
+  "protocol": "rulebook-author-2026-10-22",
+  "authority": "docs/decisions/cheap-proofs-before-paid-ai-test.md",
+  "reading": "ai-rulebook-author",
+  "symbols": [
+    "BTC-USD",
+    "ETH-USD",
+    "LTC-USD",
+    "SOL-USD",
+    "XRP-USD",
+    "LINK-USD",
+    "AVAX-USD",
+    "DOT-USD"
+  ],
+  "warmup_start": "2026-09-22T00:00:00+00:00",
+  "scored_from": "2026-10-22T00:00:00+00:00",
+  "cutoff": "2026-11-26T00:00:00+00:00",
+  "bars_per_symbol": 1560,
+  "benchmarks": [
+    "ai-rulebook",
+    "mean-reversion",
+    "baseline"
+  ],
+  "settings": {
+    "initial_cash": "1000",
+    "risk_fraction": "0.01",
+    "exposure_fraction": "0.20",
+    "drawdown_fraction": "0.10"
+  },
+  "cost_cases": {
+    "base": {
+      "fee_bps": "10",
+      "slippage_bps": "5"
+    },
+    "stress": {
+      "fee_bps": "60",
+      "slippage_bps": "10"
+    }
+  },
+  "author": {
+    "starting_rulebook": {
+      "schema_version": 1,
+      "version": 1,
+      "entry": "cash",
+      "fast_bars": 10,
+      "slow_bars": 50,
+      "reversion_bars": 20,
+      "entry_z": "2",
+      "trend_filter_bars": 0,
+      "exposure_fraction": "0.20",
+      "stop_fraction": "0.04",
+      "target_fraction": "0.08",
+      "expiry_hours": 48,
+      "exit_on_signal": true
+    },
+    "cadence_bars": 168,
+    "history_days": 30,
+    "model": "claude-fable-5-1",
+    "effort": "high",
+    "max_tokens": 16000
+  },
+  "max_failed_turns": 1,
+  "min_scored_symbols": 7,
+  "min_round_trips": 30
+}

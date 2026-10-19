@@ -408,6 +408,7 @@ def inspect_author(root: Path) -> dict[str, Any]:
                 "account": account,
                 "end_valuation": end_valuation(scheduled, events, account),
                 "rulebook": {
+                    "starting": source.payload["rulebooks"][0]["rules"],
                     "version": state["rulebook"]["version"],
                     "activations": [
                         event["rulebook_activation"]

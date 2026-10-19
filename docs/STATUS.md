@@ -38,9 +38,12 @@ ceiling ([#1357](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1357))
 Only synthetic/stub plumbing is tested; real token counts, reply quality and
 forward performance remain unmeasured. The [full-window author run](paper_trading.md#full-window-author-run-default-off)
 and its read-only per-coin report are the forward run path
-([#1364](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1364)). The next agent work
-is step 3's protocol and one RJ card under the [cheap-proofs decision](decisions/cheap-proofs-before-paid-ai-test.md);
-no credential, model spend, fetch or research run is authorized by these builds.
+([#1364](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1364)). Step 3 of the
+[cheap-proofs decision](decisions/cheap-proofs-before-paid-ai-test.md) froze the
+[rulebook-author protocol](../config/experiments/rulebook-author-2026-10-22/PROTOCOL.md)
+(window 2026-10-22 to 2026-11-26), its reading and a [card draft](../config/experiments/rulebook-author-2026-10-22/CARD.md)
+for RJ ([#1363](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1363)). The card is
+not yet answered; no credential, model spend, fetch or research run is authorized by these builds.
 
 Latest retained-runtime source also includes [durable execution receipts](../src/gpt_trader/features/idea_execution/executor.py),
 [identified fill accounting](../src/gpt_trader/core/fill_accounting.py), and

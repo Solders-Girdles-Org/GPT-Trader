@@ -170,6 +170,11 @@ shows the model cannot produce valid rulebooks reliably.
   ([#1356](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1356),
   [#1357](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1357)).
   Step 3 is filed when they merge.
+- Step 3 ([#1363](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1363)) first
+  needed a full-window run path, which step 2 did not include
+  ([#1364](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1364)). Its frozen
+  [protocol](../../config/experiments/rulebook-author-2026-10-22/PROTOCOL.md) and
+  [card draft](../../config/experiments/rulebook-author-2026-10-22/CARD.md) followed.
 - Any paid model use, including the smoke, needs RJ's go on the card.
 
 ## Safety boundary
