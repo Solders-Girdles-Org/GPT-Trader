@@ -11,6 +11,7 @@ import sqlite3
 from argparse import Namespace
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -24,6 +25,7 @@ from gpt_trader.features.experiment.inputs import (
     MANAGER_CHANNEL,
     ExperimentInput,
     ManagerSettings,
+    Settings,
     parse_input,
     with_benchmark,
 )
@@ -50,6 +52,7 @@ from gpt_trader.features.experiment.model_transport import (
     worst_case_usd,
 )
 from gpt_trader.features.experiment.reading import case_outcome, combined_action, rule_verdict
+from gpt_trader.features.experiment.rulebook import RULEBOOK_CHANNEL
 from gpt_trader.features.experiment.trade_manager import (
     DecisionTransportProtocol,
     TransportUnavailableError,
@@ -375,6 +378,26 @@ def register(subparsers: Any) -> None:
     _author_settings_options(smoke)
     add_output_options(smoke)
     smoke.set_defaults(handler=_reported(handle_author_smoke))
+    author_run = commands.add_parser(
+        "author-run",
+        help="Full-window rulebook author run of one portfolio in one cost case, with the "
+        "protocol's frozen author settings; any real call requires RJ's spend approval",
+    )
+    author_run.add_argument("--protocol", type=Path, required=True)
+    author_run.add_argument("--input", type=Path, action="append", required=True)
+    author_run.add_argument("--root", type=Path, required=True, help="New or resumed run directory")
+    author_run.add_argument("--model-transport", choices=["anthropic"], required=True)
+    author_run.add_argument("--spend-ledger", type=Path, required=True)
+    author_run.add_argument("--spend-cap-usd", required=True)
+    author_run.add_argument("--max-bars", type=int, default=None)
+    add_output_options(author_run)
+    author_run.set_defaults(handler=_reported(handle_author_run))
+    author_inspect = commands.add_parser(
+        "author-inspect", help="Read-only per-coin report of a full author run's journal"
+    )
+    author_inspect.add_argument("--root", type=Path, required=True)
+    add_output_options(author_inspect)
+    author_inspect.set_defaults(handler=_reported(handle_author_inspect))
     verify = commands.add_parser(
         "verify-input",
         help="Rebuild inputs from their raw capture and refuse any difference",
@@ -582,41 +605,43 @@ def _author_settings(args: Namespace) -> tuple[Any, ManagerSettings]:
     )
 
 
+def _author_transport(
+    args: Namespace, sources: list[ExperimentInput], settings: Any, manager: ManagerSettings
+) -> Any:
+    """Check ledger placement and room for one call, then build the real transport."""
+    from gpt_trader.features.experiment.rulebook_author import build_author_request, reply_schema
+
+    if args.spend_ledger.resolve().is_relative_to(args.root.resolve()):
+        raise ValueError("Spend ledger must be outside the run root and retained on resume")
+    ledger = SpendLedger(args.spend_ledger, parse_cap(args.spend_cap_usd))
+    schema = reply_schema([s.symbol for s in sources])
+    # First turn is flat, with no prior fills. As with run, check available
+    # room before constructing a client or writing a journal.
+    accounts = {
+        source.symbol: {
+            key: initial_state(source)[key] for key in ("cash", "quantity", "position", "halted")
+        }
+        for source in sources
+    }
+    rules = {source.symbol: source.payload["rulebooks"][0]["rules"] for source in sources}
+    first = build_author_request(sources, sources[0].scored_index, accounts, rules, settings)
+    least = worst_case_usd(wire_params(first, manager, schema))
+    if ledger.spent_usd() + least > ledger.cap_usd:
+        raise SpendCeilingReached(
+            f"Spend ledger has too little room for one call (up to ${least}); nothing was created or advanced"
+        )
+    return from_environment(manager, ledger, reply_schema=schema, run=str(args.root.resolve()))
+
+
 def handle_author_smoke(args: Namespace) -> CliResponse:
     from gpt_trader.features.experiment.author_runner import run_author_smoke
-    from gpt_trader.features.experiment.rulebook_author import (
-        build_author_request,
-        reply_schema,
-        validate_portfolio,
-    )
+    from gpt_trader.features.experiment.rulebook_author import validate_portfolio
 
     try:
         sources = [_load_input(path, None) for path in args.input]
         validate_portfolio(sources)
         settings, manager = _author_settings(args)
-        if args.spend_ledger.resolve().is_relative_to(args.root.resolve()):
-            raise ValueError("Spend ledger must be outside smoke root and retained on resume")
-        ledger = SpendLedger(args.spend_ledger, parse_cap(args.spend_cap_usd))
-        schema = reply_schema([s.symbol for s in sources])
-        # First turn is flat, with no prior fills. As with run, check available
-        # room before constructing a client or writing a scratch journal.
-        accounts = {
-            source.symbol: {
-                key: initial_state(source)[key]
-                for key in ("cash", "quantity", "position", "halted")
-            }
-            for source in sources
-        }
-        rules = {source.symbol: source.payload["rulebooks"][0]["rules"] for source in sources}
-        first = build_author_request(sources, sources[0].scored_index, accounts, rules, settings)
-        least = worst_case_usd(wire_params(first, manager, schema))
-        if ledger.spent_usd() + least > ledger.cap_usd:
-            raise SpendCeilingReached(
-                f"Spend ledger has too little room for one call (up to ${least}); nothing was created or advanced"
-            )
-        transport = from_environment(
-            manager, ledger, reply_schema=schema, run=str(args.root.resolve())
-        )
+        transport = _author_transport(args, sources, settings, manager)
         result = run_author_smoke(
             sources, args.root, manager, transport, settings=settings, max_turns=args.max_turns
         )
@@ -627,6 +652,71 @@ def handle_author_smoke(args: Namespace) -> CliResponse:
     except (sqlite3.DatabaseError, OSError) as error:
         raise ExperimentCliError(CliErrorCode.OPERATION_FAILED, str(error)) from None
     return CliResponse.success_response("experiment author-smoke", data=result)
+
+
+def _protocol_portfolio(
+    protocol: dict[str, Any], sources: list[ExperimentInput], path: Path
+) -> tuple[Any, ManagerSettings]:
+    """Refuse inputs that are not this protocol's frozen ai-rulebook inputs for one case."""
+    from gpt_trader.features.experiment.rulebook_author import protocol_author, validate_portfolio
+
+    validate_portfolio(sources)
+    first = sources[0]
+    settings, manager, rules = protocol_author(
+        protocol.get("author"), first.settings.exposure_fraction
+    )
+    cases = [
+        Settings(**{k: Decimal(v) for k, v in {**protocol["settings"], **costs}.items()})
+        for costs in protocol["cost_cases"].values()
+    ]
+    for source in sources:
+        if (
+            source.symbol not in protocol["symbols"]
+            or source.payload["rulebooks"][0]["rules"] != rules
+            or source.settings not in cases
+            or aware_time(source.payload["scored_from"]) != aware_time(protocol["scored_from"])
+        ):
+            raise ValueError(
+                f"{source.symbol} input is not an ai-rulebook input of protocol {path} "
+                "(symbol, starting rulebook, settings or scored window differ)"
+            )
+    return settings, manager
+
+
+def handle_author_run(args: Namespace) -> CliResponse:
+    from gpt_trader.features.experiment.author_runner import run_author
+
+    protocol = _read_protocol(args.protocol, FETCH_PROTOCOL_KEYS + ("author",))
+    try:
+        sources = [_load_input(path, None) for path in args.input]
+        settings, manager = _protocol_portfolio(protocol, sources, args.protocol)
+        transport = _author_transport(args, sources, settings, manager)
+        result = run_author(
+            sources, args.root, manager, transport, settings=settings, max_bars=args.max_bars
+        )
+    except (SpendCeilingReached, TransportHalted) as error:
+        raise ExperimentCliError(CliErrorCode.OPERATION_FAILED, str(error)) from None
+    except ExperimentIntegrityError as error:
+        raise ExperimentCliError(CliErrorCode.VALIDATION_ERROR, str(error)) from None
+    except ValueError as error:
+        raise ExperimentCliError(CliErrorCode.CONFIG_INVALID, str(error)) from None
+    except (sqlite3.DatabaseError, OSError) as error:
+        raise ExperimentCliError(CliErrorCode.OPERATION_FAILED, str(error)) from None
+    return CliResponse.success_response("experiment author-run", data=result)
+
+
+def handle_author_inspect(args: Namespace) -> CliResponse:
+    from gpt_trader.features.experiment.author_runner import inspect_author
+
+    try:
+        result = inspect_author(args.root)
+    except ExperimentIntegrityError as error:
+        raise ExperimentCliError(CliErrorCode.VALIDATION_ERROR, str(error)) from None
+    except ValueError as error:
+        raise ExperimentCliError(CliErrorCode.RUN_NOT_FOUND, str(error)) from None
+    except (sqlite3.DatabaseError, OSError) as error:
+        raise ExperimentCliError(CliErrorCode.OPERATION_FAILED, str(error)) from None
+    return CliResponse.success_response("experiment author-inspect", data=result)
 
 
 def handle_estimate(args: Namespace) -> CliResponse:
@@ -678,6 +768,21 @@ def handle_fetch(args: Namespace) -> CliResponse:
             f"Fetch requires a new, empty evidence directory; {args.out} is not one",
             path=str(args.out),
         )
+    starting_rules = None
+    if RULEBOOK_CHANNEL in protocol["benchmarks"]:
+        from gpt_trader.features.experiment.rulebook_author import protocol_author
+
+        try:
+            _, _, starting_rules = protocol_author(
+                protocol.get("author"), Decimal(protocol["settings"]["exposure_fraction"])
+            )
+        except (ValueError, TypeError, KeyError, ArithmeticError) as error:
+            raise ExperimentCliError(
+                CliErrorCode.CONFIG_INVALID,
+                f"Protocol {args.protocol} names the {RULEBOOK_CHANNEL} channel without valid "
+                f"'author' settings to freeze into its inputs: {error}",
+                path=str(args.protocol),
+            ) from None
     if MANAGER_CHANNEL in protocol["benchmarks"] and not isinstance(protocol.get("manager"), dict):
         raise ExperimentCliError(
             CliErrorCode.CONFIG_INVALID,
@@ -710,6 +815,9 @@ def handle_fetch(args: Namespace) -> CliResponse:
                 benchmark=rule,
                 settings={**protocol["settings"], **costs},
                 manager=protocol["manager"] if rule == MANAGER_CHANNEL else None,
+                rulebooks=[{"effective_from": protocol["scored_from"], "rules": starting_rules}]
+                if rule == RULEBOOK_CHANNEL
+                else None,
             )
             for rule in protocol["benchmarks"]
             for case, costs in protocol["cost_cases"].items()

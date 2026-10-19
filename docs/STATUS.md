@@ -36,8 +36,10 @@ adds a strict per-coin rewrite schema, weekly closed-daily-bar context, an offli
 spend bound and a replayable scratch-only smoke runner with the existing spend
 ceiling ([#1357](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1357)).
 Only synthetic/stub plumbing is tested; real token counts, reply quality and
-forward performance remain unmeasured. The next agent work is step 3's protocol
-and one RJ card under the [cheap-proofs decision](decisions/cheap-proofs-before-paid-ai-test.md);
+forward performance remain unmeasured. The [full-window author run](paper_trading.md#full-window-author-run-default-off)
+and its read-only per-coin report are the forward run path
+([#1364](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1364)). The next agent work
+is step 3's protocol and one RJ card under the [cheap-proofs decision](decisions/cheap-proofs-before-paid-ai-test.md);
 no credential, model spend, fetch or research run is authorized by these builds.
 
 Latest retained-runtime source also includes [durable execution receipts](../src/gpt_trader/features/idea_execution/executor.py),
