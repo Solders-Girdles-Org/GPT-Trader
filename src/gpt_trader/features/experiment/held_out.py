@@ -59,6 +59,7 @@ def build_input_payload(
     benchmark: str,
     settings: dict[str, str],
     manager: dict[str, Any] | None = None,
+    rulebooks: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """One validated experiment input per channel and cost case, from one capture."""
     capture, bars = capture_bars(capture_bytes)
@@ -78,6 +79,8 @@ def build_input_payload(
     }
     if manager is not None:
         payload["manager"] = manager
+    if rulebooks is not None:
+        payload["rulebooks"] = rulebooks
     parse_input(payload)
     return payload
 
@@ -90,6 +93,7 @@ def verify_input_payload(capture_bytes: bytes, payload: dict[str, Any]) -> None:
         benchmark=str(payload.get("benchmark")),
         settings=payload.get("settings", {}),
         manager=payload.get("manager"),
+        rulebooks=payload.get("rulebooks"),
     )
     differing = sorted(
         key

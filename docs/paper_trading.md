@@ -147,7 +147,7 @@ performance reading or forward evidence. All resumes retain the same ledger
 and cap. The transport reuses the existing Anthropic client, no-retry policy,
 pricing and durable pre-call reservation. A spend stop propagates loudly.
 **Any real call, credential or spend still requires RJ's explicit approval.**
-Stub tests require none. This item does not add a forward-run command.
+Stub tests require none. The full-window run is `experiment author-run` (below).
 
 For an offline bound, use `experiment estimate-spend --author --input first.json`
 and repeat `--portfolio-input other.json` for other coins in the same cost case.
@@ -177,6 +177,31 @@ unmeasured. New window data may change byte sizes: recompute before the card.
 Smoke and interrupted/repeated calls are additional spend; the ledger's shared
 hard cap includes them. The protocol/card must state that allowance. No paid
 smoke or evidence run has occurred. Tests prove plumbing, not model quality.
+
+### Full-window author run (default-off)
+
+`experiment author-run --protocol <protocol.json>` runs one portfolio in one cost
+case over every bar of its inputs, through the same
+[runner](../src/gpt_trader/features/experiment/author_runner.py) as the smoke:
+one atomic SQLite bar per commit, committed turns replayed and never re-sent,
+and the same pre-call room check, ledger placement and spend stop. The cadence,
+history days, model, effort, `max_tokens` and starting rulebook come only from
+the protocol's `author` block. Each `--input` must be that protocol's frozen
+`ai-rulebook` input: `fetch-input` writes the starting rulebook into each one.
+The journal's metadata binds every input payload, the source digest, the engine
+version, the settings and the ledger's path and cap. A resume with any
+difference is refused, and the journal's rows are immutable. `--max-bars` stops
+partway; resuming continues the same journal.
+
+`experiment author-inspect --root <run>` writes nothing. It rebuilds each input
+from the journal, refuses a different source digest, replays every bar and turn
+and reconciles each coin's account from its fills. It reports per coin: end
+valuation, hold-the-coin, rulebook activations. For the author it reports turns
+(accepted, rejected for an invalid, refused or truncated reply, failed for no
+reply), the models that answered, tokens and journaled cost. A smoke journal is
+refused, because it is not evidence. Neither command reads a protocol's
+thresholds; the reading belongs to the protocol that freezes them. **Any real
+call, credential or spend still requires RJ's explicit approval.**
 
 ### Verification and next use
 

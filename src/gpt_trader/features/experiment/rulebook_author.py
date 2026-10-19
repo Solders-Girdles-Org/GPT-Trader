@@ -53,6 +53,29 @@ class AuthorSettings:
                 raise ValueError(f"Author {name} must be an integer from 1 to {upper}")
 
 
+AUTHOR_PROTOCOL_KEYS = frozenset(
+    {"starting_rulebook", "cadence_bars", "history_days", "model", "effort", "max_tokens"}
+)
+
+
+def protocol_author(
+    raw: Any, cap: Decimal
+) -> tuple[AuthorSettings, ManagerSettings, dict[str, Any]]:
+    """A protocol's frozen ``author`` block: cadence, transport settings, starting rules."""
+    if not isinstance(raw, dict) or set(raw) != AUTHOR_PROTOCOL_KEYS:
+        raise ValueError(
+            "Protocol author settings require exactly " + ", ".join(sorted(AUTHOR_PROTOCOL_KEYS))
+        )
+    rules = parse_rulebook(raw["starting_rulebook"], cap)
+    if rules.version != 1:
+        raise ValueError("The protocol's starting rulebook must be version 1")
+    return (
+        AuthorSettings(raw["cadence_bars"], raw["history_days"]),
+        ManagerSettings(model=raw["model"], effort=raw["effort"], max_tokens=raw["max_tokens"]),
+        rules.to_dict(),
+    )
+
+
 def validate_portfolio(sources: list[ExperimentInput]) -> None:
     if not sources or len(sources) > 8 or len({s.symbol for s in sources}) != len(sources):
         raise ValueError("Supply one to eight distinct symbols in one cost case")
