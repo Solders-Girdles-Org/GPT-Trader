@@ -200,7 +200,11 @@ valuation, hold-the-coin, rulebook activations. For the author it reports turns
 (accepted, rejected for an invalid, refused or truncated reply, failed for no
 reply), the models that answered, tokens and journaled cost. A smoke journal is
 refused, because it is not evidence. Neither command reads a protocol's
-thresholds; the reading belongs to the protocol that freezes them. **Any real
+thresholds. A protocol with `"reading": "ai-rulebook-author"` is read by
+`experiment read` through [author_reading.py](../src/gpt_trader/features/experiment/author_reading.py):
+its runs file maps `ai-rulebook` to one author run per cost case, and the
+rules to per-symbol lists as in round two. `--source-sha256` and the one
+`--spend-ledger` are required. **Any real
 call, credential or spend still requires RJ's explicit approval.**
 
 ### Verification and next use

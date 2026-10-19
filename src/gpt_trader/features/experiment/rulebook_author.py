@@ -38,6 +38,13 @@ stop; it is not equivalent to passive holding. Costs apply on both sides.
 You may keep parameters or rewrite them. Never write code or call tools.
 Reply only with JSON: {"rulebooks": {"SYMBOL-USD": <complete next rulebook>}}.
 The current rulebooks show every required field. Decimal fields stay strings.
+How you are judged, after the window in the context closes, for each cost case:
+the sum over all symbols of each account's net P&L, with anything still held
+valued at its sale value after costs. It must beat each of these, summed over
+the same symbols, by more than one round trip's costs at the exposure cap per
+symbol: staying in cash; buying each coin at the window's first open at the
+exposure cap and holding it; and the fixed mean-reversion rule (and the
+moving-average crossover rule, if it survives costs on this window).
 """
 
 
@@ -155,8 +162,12 @@ def build_author_request(
     return {
         "instructions": INSTRUCTIONS,
         "context": {
-            "schema": "rulebook-author/1",
+            "schema": "rulebook-author/2",
             "symbol": "portfolio:" + ",".join(sorted(rules)),
+            "window": {
+                "scored_from": first.candles[first.scored_index].ts.isoformat(),
+                "cutoff": (first.candles[-1].ts + timedelta(hours=1)).isoformat(),
+            },
             "decision_time": (first.candles[sequence].ts + timedelta(hours=1)).isoformat(),
             "costs": {k: str(getattr(first.settings, k)) for k in ("fee_bps", "slippage_bps")},
             "limits": first.settings.to_dict(),

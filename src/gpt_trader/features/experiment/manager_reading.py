@@ -141,6 +141,18 @@ def manager_case_outcome(
     """
     reports, not_run = split_entries(reports, protocol, label=f"{MANAGER_CHANNEL} {case}")
     rows = manager_rows(reports, protocol, case=case) + [not_run_row(entry) for entry in not_run]
+    return pooled_case(rows, rules, protocol, case=case, bar_rules=bar_rules)
+
+
+def pooled_case(
+    rows: list[dict[str, Any]],
+    rules: dict[str, dict[str, Any]],
+    protocol: dict[str, Any],
+    *,
+    case: str,
+    bar_rules: tuple[str, ...],
+) -> dict[str, Any]:
+    """Pool a channel's scored rows against cash, hold and the bar's rules, by the margin."""
     scored = {row["symbol"]: row for row in rows if row["scored"]}
     for rule in bar_rules:
         rule_scored = {row["symbol"] for row in rules[rule]["symbols"] if row["scored"]}

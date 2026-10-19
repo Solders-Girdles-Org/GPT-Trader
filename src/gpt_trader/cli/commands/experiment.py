@@ -875,6 +875,8 @@ def handle_verify(args: Namespace) -> CliResponse:
 
 def handle_read(args: Namespace) -> CliResponse:
     protocol = _read_protocol(args.protocol, READ_PROTOCOL_KEYS)
+    if protocol.get("reading") == "ai-rulebook-author":
+        return _read_author(args, protocol)
     manager_reading = protocol.get("reading") == MANAGER_CHANNEL
     if manager_reading:
         protocol = _read_protocol(args.protocol, READ_PROTOCOL_KEYS + MANAGER_READ_KEYS)
@@ -1015,6 +1017,22 @@ def _read_manager(args: Namespace, protocol: dict[str, Any], runs: dict[str, Any
             account = account_label(report["symbol"], settings["fee_bps"], settings["slippage_bps"])
             turns[account] = report["manager"]["turns"]
             listed[account] = str(Path(entry).resolve())
+    result["model_spend"] = _model_spend(args, turns, listed)
+    # A breach means the runs may not be the one run per case the protocol
+    # allows, so no verdict stands on them; the arm pauses. "breached" is not a
+    # void attempt (a run-path defect), which earns a fresh window.
+    if result["model_spend"]["breaches"]:
+        result["trading_verdict"] = result["verdict"]
+        result["verdict"] = "breached"
+        result["action"] = "pause"
+    return CliResponse.success_response(
+        "experiment read",
+        data=result if args.output_format == "json" else json.dumps(result, indent=1),
+    )
+
+
+def _model_spend(args: Namespace, turns: dict[str, int], listed: dict[str, str]) -> dict[str, Any]:
+    """Model spend from the one ledger, checked against each account's journaled turns."""
     try:
         ledger = ledger_summary(args.spend_ledger)
     except SpendLedgerError as error:
@@ -1045,7 +1063,7 @@ def _read_manager(args: Namespace, protocol: dict[str, Any], runs: dict[str, Any
             if name in listed and not _same_run(dirs, listed[name])
         ]
     )
-    result["model_spend"] = {
+    return {
         "journal_turns": sum(turns.values()),
         "ledger": ledger,
         "accounts": accounts,
@@ -1054,14 +1072,104 @@ def _read_manager(args: Namespace, protocol: dict[str, Any], runs: dict[str, Any
         ),
         "breaches": breaches,
     }
+
+
+def _read_author(args: Namespace, protocol: dict[str, Any]) -> CliResponse:
+    """The rulebook-author reading, with model spend from the one spend ledger beside it."""
+    from gpt_trader.features.experiment.author_reading import read_rulebook_author
+    from gpt_trader.features.experiment.author_runner import inspect_author
+
+    protocol = _read_protocol(args.protocol, READ_PROTOCOL_KEYS + ("author", "max_failed_turns"))
+    if not args.source_sha256 or args.spend_ledger is None:
+        raise ExperimentCliError(
+            CliErrorCode.MISSING_ARGUMENT,
+            f"Protocol {args.protocol} reads the rulebook author; name the frozen source digest "
+            "with --source-sha256 and the one spend ledger with --spend-ledger",
+        )
+    runs = _read_json(args.runs, "Runs file")
+    cases = set(protocol["cost_cases"])
+    if (
+        set(protocol["benchmarks"]) != {RULEBOOK_CHANNEL, "mean-reversion", "baseline"}
+        or set(runs) != set(protocol["benchmarks"])
+        or cases != {"base", "stress"}
+        or any(not isinstance(runs[name], dict) or set(runs[name]) != cases for name in runs)
+        or any(
+            not (isinstance(entry, str) or _is_author_not_run(entry))
+            for entry in runs[RULEBOOK_CHANNEL].values()
+        )
+        or any(
+            not isinstance(roots, list)
+            or not all(isinstance(root, str) or _is_not_run(root) for root in roots)
+            for rule in ("mean-reversion", "baseline")
+            for roots in runs[rule].values()
+        )
+    ):
+        raise ExperimentCliError(
+            CliErrorCode.VALIDATION_ERROR,
+            f"Runs file {args.runs} must map {RULEBOOK_CHANNEL} to one author run per cost "
+            "case and each rule to a list of runs per cost case",
+            path=str(args.runs),
+        )
+    reports: dict[str, dict[str, Any]] = {
+        rule: {
+            case: [entry if _is_not_run(entry) else _inspect(Path(entry)) for entry in entries]
+            for case, entries in runs[rule].items()
+        }
+        for rule in ("mean-reversion", "baseline")
+    }
+    reports[RULEBOOK_CHANNEL] = {}
+    for case, entry in runs[RULEBOOK_CHANNEL].items():
+        if isinstance(entry, dict):
+            reports[RULEBOOK_CHANNEL][case] = entry
+            continue
+        try:
+            reports[RULEBOOK_CHANNEL][case] = inspect_author(Path(entry))
+        except (ValueError, sqlite3.DatabaseError, OSError) as error:
+            raise ExperimentCliError(
+                CliErrorCode.VALIDATION_ERROR, f"Author run {entry}: {error}", root=entry
+            ) from None
+    try:
+        result = read_rulebook_author(reports, protocol, source_sha256=args.source_sha256)
+    except (ValueError, KeyError) as error:
+        raise ExperimentCliError(
+            CliErrorCode.VALIDATION_ERROR,
+            f"Runs file {args.runs} does not fit protocol {args.protocol}: {error}",
+            path=str(args.runs),
+        ) from None
+    turns: dict[str, int] = {}
+    listed: dict[str, str] = {}
+    ledgers = set()
+    for case, entry in runs[RULEBOOK_CHANNEL].items():
+        if isinstance(entry, dict):
+            continue
+        report = reports[RULEBOOK_CHANNEL][case]
+        settings = report["symbols"][0]["settings"]
+        portfolio = "portfolio:" + ",".join(sorted(row["symbol"] for row in report["symbols"]))
+        account = account_label(portfolio, settings["fee_bps"], settings["slippage_bps"])
+        turns[account] = report["author"]["turns"]
+        listed[account] = str(Path(entry).resolve())
+        ledgers.add((report["ledger"] or {}).get("path"))
+    result["model_spend"] = _model_spend(args, turns, listed)
+    if ledgers and ledgers != {str(args.spend_ledger.resolve())}:
+        result["model_spend"]["breaches"].append(
+            "an author run is bound to a spend ledger other than the one named"
+        )
     # A breach means the runs may not be the one run per case the protocol
-    # allows, so no verdict stands on them; the arm pauses. "breached" is not a
-    # void attempt (a run-path defect), which earns a fresh window.
-    if breaches:
+    # allows, so no verdict stands on them. It says nothing about the model.
+    if result["model_spend"]["breaches"]:
         result["trading_verdict"] = result["verdict"]
         result["verdict"] = "breached"
-        result["action"] = "pause"
+        result["action"] = "no-reading"
     return CliResponse.success_response(
         "experiment read",
         data=result if args.output_format == "json" else json.dumps(result, indent=1),
+    )
+
+
+def _is_author_not_run(entry: Any) -> bool:
+    return (
+        isinstance(entry, dict)
+        and set(entry) == {"not_run"}
+        and isinstance(entry["not_run"], str)
+        and bool(entry["not_run"].strip())
     )
