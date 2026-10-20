@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from gpt_trader.features.experiment.inputs import ExperimentInput
 
 RULEBOOK_CHANNEL = "ai-rulebook"
+ENTRY_RULES = ("trend", "mean-reversion", "hold", "cash")
 
 
 @dataclass(frozen=True)
@@ -62,7 +63,7 @@ def parse_rulebook(raw: Any, cap: Decimal) -> Rulebook:
             raise ValueError(f"Rulebook {name} must be an integer from {lower} to {upper}")
     if rule.fast_bars >= rule.slow_bars:
         raise ValueError("Rulebook fast_bars must be below slow_bars")
-    if rule.entry not in ("trend", "mean-reversion", "hold", "cash"):
+    if rule.entry not in ENTRY_RULES:
         raise ValueError("Unknown rulebook entry rule")
     if type(rule.exit_on_signal) is not bool:
         raise ValueError("Rulebook exit_on_signal must be boolean")

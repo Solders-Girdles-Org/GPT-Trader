@@ -20,7 +20,7 @@ from gpt_trader.features.experiment.model_transport import (
     wire_params,
     worst_case_usd,
 )
-from gpt_trader.features.experiment.rulebook import Rulebook, parse_rulebook
+from gpt_trader.features.experiment.rulebook import ENTRY_RULES, Rulebook, parse_rulebook
 from gpt_trader.features.experiment.trade_manager import (
     DecisionTransportProtocol,
     TransportError,
@@ -99,7 +99,7 @@ def validate_portfolio(sources: list[ExperimentInput]) -> None:
 
 
 def reply_schema(symbols: list[str]) -> dict[str, Any]:
-    fields = {
+    fields: dict[str, dict[str, Any]] = {
         name: {
             "type": "boolean"
             if type(value) is bool
@@ -109,6 +109,9 @@ def reply_schema(symbols: list[str]) -> dict[str, Any]:
         }
         for name, value in Rulebook().to_dict().items()
     }
+    # The parser's names only: the #1367 smoke's model wrote "reversion" and
+    # "mean_reversion" for "mean-reversion" when this was a free string.
+    fields["entry"]["enum"] = list(ENTRY_RULES)
     rule = {
         "type": "object",
         "properties": fields,
