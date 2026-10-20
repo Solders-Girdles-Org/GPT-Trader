@@ -115,12 +115,15 @@ def reply_schema(symbols: list[str]) -> dict[str, Any]:
         "required": list(fields),
         "additionalProperties": False,
     }
+    # One shared definition: the rule inlined once per coin compiles to a grammar
+    # past the API's size limit (HTTP 400), found by the #1367 smoke.
     return {
         "type": "object",
+        "$defs": {"rulebook": rule},
         "properties": {
             "rulebooks": {
                 "type": "object",
-                "properties": {s: rule for s in sorted(symbols)},
+                "properties": {s: {"$ref": "#/$defs/rulebook"} for s in sorted(symbols)},
                 "required": sorted(symbols),
                 "additionalProperties": False,
             }

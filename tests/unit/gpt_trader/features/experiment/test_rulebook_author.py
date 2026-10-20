@@ -15,6 +15,7 @@ from gpt_trader.features.experiment.model_transport import (
     SpendCeilingReached,
     SpendLedger,
 )
+from gpt_trader.features.experiment.rulebook import Rulebook
 from gpt_trader.features.experiment.rulebook_author import (
     AuthorSettings,
     build_author_request,
@@ -173,6 +174,29 @@ def test_offline_estimate_bounds_actual_request(portfolio):
         )
         <= estimate["input_token_bound_max"]
     )
+
+
+def test_reply_schema_defines_the_rule_once():
+    # Inlining the rule once per coin compiled past the API's grammar limit
+    # (HTTP 400 on the #1367 smoke's first call); one shared definition compiles.
+    symbols = [
+        "AVAX-USD",
+        "BTC-USD",
+        "DOT-USD",
+        "ETH-USD",
+        "LINK-USD",
+        "LTC-USD",
+        "SOL-USD",
+        "XRP-USD",
+    ]
+    schema = reply_schema(list(reversed(symbols)))
+    rule = schema["$defs"]["rulebook"]
+    assert rule["required"] == list(Rulebook().to_dict())
+    assert rule["additionalProperties"] is False
+    rulebooks = schema["properties"]["rulebooks"]
+    assert rulebooks["required"] == symbols
+    assert rulebooks["properties"] == {s: {"$ref": "#/$defs/rulebook"} for s in symbols}
+    assert json.dumps(schema).count('"entry_z"') == 2  # properties and required, once
 
 
 def test_portfolio_rejects_mixed_costs_and_duplicate_symbols(portfolio):

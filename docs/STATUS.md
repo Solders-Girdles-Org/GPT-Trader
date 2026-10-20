@@ -50,8 +50,10 @@ RJ's Max plan, and the card's three departures and weak-result reading are confi
 call, the Console must show three things: the key belongs to the organization linked to the Max
 plan, that organization has no purchased credit, and auto-reload is off. If any of them can't be
 confirmed, work stops and goes back to RJ through Lead. No agent buys credits or changes billing
-settings. An agent cannot read the Console, so that check is waiting on RJ; no model call has been
-made.
+settings. RJ confirmed all three on 2026-10-20. The smoke's first call was then rejected unbilled
+(the reply schema's grammar was too large), so the protocol was
+[re-frozen](../config/experiments/rulebook-author-2026-10-22/PROTOCOL.md#re-freeze-after-the-smoke-found-a-run-path-defect-2026-10-20)
+with the same window, settings and caps.
 
 Latest retained-runtime source also includes [durable execution receipts](../src/gpt_trader/features/idea_execution/executor.py),
 [identified fill accounting](../src/gpt_trader/core/fill_accounting.py), and
