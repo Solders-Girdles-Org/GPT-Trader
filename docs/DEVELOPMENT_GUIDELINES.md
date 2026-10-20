@@ -55,7 +55,7 @@ when you add a deprecation shim.
 | Check | Status |
 | --- | --- |
 | `CI` / Lint & Format, Docs Link Audit, Type Check, Test Guardrails, Unit Tests (Core), Property Tests, Contract Tests, Integration Tests | Required by `main` protection; also run on `merge_group` |
-| `CI` / Windows Unit Tests, Dependency Review, `CodeQL`, `UV Lock Upgrade` | Advisory |
+| `CI` / Windows Unit Tests, Dependency Review, `CodeQL` | Advisory |
 | `Release Image` (version-tag push) and `Integration Tests (Manual)` | Outside the merge gate; neither deploys, moves money or submits orders |
 
 Merges go through the merge queue, which re-validates each entry against the
