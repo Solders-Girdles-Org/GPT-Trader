@@ -42,8 +42,16 @@ and its read-only per-coin report are the forward run path
 [cheap-proofs decision](decisions/cheap-proofs-before-paid-ai-test.md) froze the
 [rulebook-author protocol](../config/experiments/rulebook-author-2026-10-22/PROTOCOL.md)
 (window 2026-10-22 to 2026-11-26), its reading and a [card draft](../config/experiments/rulebook-author-2026-10-22/CARD.md)
-for RJ ([#1363](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1363)). The card is
-not yet answered; no credential, model spend, fetch or research run is authorized by these builds.
+for RJ ([#1363](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1363)). On
+2026-10-19 RJ said go on the card ([#1367](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1367)):
+the plumbing smoke, then the forward run after 2026-11-26T02:00Z if the smoke passes, under one
+$25 cap ($6.50 smoke, $18.50 forward). The spend is funded only by the API credits included with
+RJ's Max plan, and the card's three departures and weak-result reading are confirmed. Before any
+call, the Console must show three things: the key belongs to the organization linked to the Max
+plan, that organization has no purchased credit, and auto-reload is off. If any of them can't be
+confirmed, work stops and goes back to RJ through Lead. No agent buys credits or changes billing
+settings. An agent cannot read the Console, so that check is waiting on RJ; no model call has been
+made.
 
 Latest retained-runtime source also includes [durable execution receipts](../src/gpt_trader/features/idea_execution/executor.py),
 [identified fill accounting](../src/gpt_trader/core/fill_accounting.py), and
