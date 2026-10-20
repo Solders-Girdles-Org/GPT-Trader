@@ -299,6 +299,28 @@ ledger and $6.50 cap. The shorter schema lowers each turn's input bound from
 56,348 to 51,686 tokens (worst case $1.446 a turn, re-measured offline); the
 2026-10-19 figures below are kept as the card's estimate and stay an upper bound.
 
+### The re-run smoke's entry names (2026-10-20, RJ's reading pending)
+
+The smoke re-ran on `b966b3c2` (digest `676e74e2…c991`). All three turns
+were answered by `claude-fable-5-1`. Input tokens were about half their bound,
+and the ledger matched the journal. But two of the three turns were rejected
+with "Unknown rulebook entry rule". For the rule the parser calls
+`mean-reversion`, the model wrote `reversion` on the first turn and
+`mean_reversion` on the second. The third turn, all `trend`, was accepted.
+The prompt names the rules only in prose, and the reply schema left `entry`
+a free string. Under step 3, two invalid turns meet the reconsider line, so
+the reading is RJ's:
+
+- **The fail stands:** no forward run. This commit then changes nothing that
+  runs.
+- **A run-path defect in the reply interface:** this commit is the re-frozen
+  source. The schema now lists the parser's four names as an `enum` (one list
+  shared with the parser; the prompt is unchanged), and the smoke re-runs in a
+  new scratch root with the same ledger and $6.50 cap. If the commit merges
+  before 2026-10-21T00:00Z, the window, settings, reading and caps are
+  unchanged. A probe on the smoke ledger confirmed the schema compiles
+  ($0.011).
+
 ## Spend estimate for the card
 
 `experiment estimate-spend --author` was run offline on the frozen settings

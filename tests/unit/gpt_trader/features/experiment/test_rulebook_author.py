@@ -15,7 +15,7 @@ from gpt_trader.features.experiment.model_transport import (
     SpendCeilingReached,
     SpendLedger,
 )
-from gpt_trader.features.experiment.rulebook import Rulebook
+from gpt_trader.features.experiment.rulebook import ENTRY_RULES, Rulebook
 from gpt_trader.features.experiment.rulebook_author import (
     AuthorSettings,
     build_author_request,
@@ -197,6 +197,10 @@ def test_reply_schema_defines_the_rule_once():
     assert rulebooks["required"] == symbols
     assert rulebooks["properties"] == {s: {"$ref": "#/$defs/rulebook"} for s in symbols}
     assert json.dumps(schema).count('"entry_z"') == 2  # properties and required, once
+    # The #1367 smoke's model wrote "reversion" and "mean_reversion"; only the
+    # parser's own names may be generated.
+    assert rule["properties"]["entry"] == {"type": "string", "enum": list(ENTRY_RULES)}
+    assert ENTRY_RULES == ("trend", "mean-reversion", "hold", "cash")
 
 
 def test_portfolio_rejects_mixed_costs_and_duplicate_symbols(portfolio):
