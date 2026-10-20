@@ -276,6 +276,29 @@ card. The smoke runs on old prices and a code fix before the forward run
 re-freezes only if the fix changes the run path. Reading arithmetic: this
 file wins over the code.
 
+### Re-freeze after the smoke found a run-path defect (2026-10-20)
+
+The first freeze was `e4556632` (digest `d600789f…ef767`). On 2026-10-20 the
+plumbing smoke's first call was rejected before any output, with HTTP 400:
+"The compiled grammar is too large". The reply schema wrote the 13-field rule
+out once for each of the 8 coins. The API turns a structured-output schema
+into a grammar, and that grammar passed its size limit. The rejection was
+unbilled ($0 in the smoke ledger), and no turn was journaled.
+*Fix:* `reply_schema` defines the rule once under `$defs` and each coin
+refers to it. The reply's shape and `parse_author_reply` are unchanged. Two
+`max_tokens`-1 probes on the smoke ledger confirmed that the shared form
+compiles ($0.0104 and $0.0106; nothing else was asked).
+
+The fix changes the request, so this file is re-frozen by the commit that
+merges the fix (rule above). It merges before 2026-10-21T00:00Z, so the first
+00:00 UTC at least one day later is still 2026-10-22T00:00Z, and **the window,
+settings, reading and caps are unchanged**. The new commit and digest go on
+the card. No forward-run call has been made, so RJ's go carries over. The
+smoke resumes in a new scratch root under the new source, with the same
+ledger and $6.50 cap. The shorter schema lowers each turn's input bound from
+56,348 to 51,686 tokens (worst case $1.446 a turn, re-measured offline); the
+2026-10-19 figures below are kept as the card's estimate and stay an upper bound.
+
 ## Spend estimate for the card
 
 `experiment estimate-spend --author` was run offline on the frozen settings
