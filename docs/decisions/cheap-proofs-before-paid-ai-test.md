@@ -176,6 +176,13 @@ shows the model cannot produce valid rulebooks reliably.
   [protocol](../../config/experiments/rulebook-author-2026-10-22/PROTOCOL.md) and
   [card draft](../../config/experiments/rulebook-author-2026-10-22/CARD.md) followed.
 - Any paid model use, including the smoke, needs RJ's go on the card.
+- RJ answered the card on 2026-10-19 with a go
+  ([#1367](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1367)): one $25 cap split
+  $6.50 and $18.50, funded only by the API credits included with RJ's Max plan, and checked in
+  the Console before any call. RJ confirmed the three departures. RJ also confirmed the proposed
+  reading of a weak result: a pass leads to the same design on a fresh window, and a fail allows
+  one more window. Each new window needs a new card. If that second window also fails, this line
+  pauses.
 
 ## Safety boundary
 
