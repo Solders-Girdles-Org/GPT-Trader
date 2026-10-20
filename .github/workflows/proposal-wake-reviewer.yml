@@ -1,0 +1,45 @@
+name: Wake Reviewer on proposal label
+
+on:
+  issues:
+    types: [labeled]
+
+permissions: {}
+
+jobs:
+  wake-reviewer:
+    if: github.event.label.name == 'proposal'
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Notify Reviewer
+        env:
+          REVIEWER_WEBHOOK_URL: ${{ secrets.REVIEWER_WEBHOOK_URL }}
+          REVIEWER_WEBHOOK_KEY: ${{ secrets.REVIEWER_WEBHOOK_KEY }}
+          ISSUE_REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+          ISSUE_LABEL: ${{ github.event.label.name }}
+        run: |
+          if [[ -z "$REVIEWER_WEBHOOK_URL" || -z "$REVIEWER_WEBHOOK_KEY" ]]; then
+            exit 0
+          fi
+
+          payload="$(jq -cn \
+            --arg repo "$ISSUE_REPO" \
+            --argjson number "$ISSUE_NUMBER" \
+            --arg url "$ISSUE_URL" \
+            --arg title "$ISSUE_TITLE" \
+            --arg author "$ISSUE_AUTHOR" \
+            --arg label "$ISSUE_LABEL" \
+            '{repo: $repo, number: $number, url: $url, title: $title, author: $author, label: $label}')"
+
+          curl --silent --fail --max-time 8 --output /dev/null \
+            --request POST \
+            --header 'Content-Type: application/json' \
+            --header "Authorization: Bearer $REVIEWER_WEBHOOK_KEY" \
+            --header "X-Automation-Key: $REVIEWER_WEBHOOK_KEY" \
+            --data-binary "$payload" \
+            "$REVIEWER_WEBHOOK_URL"
