@@ -26,7 +26,11 @@ dependencies = [
 [project.optional-dependencies]
 # Core trading functionality
 monitoring = ["psutil>=6.0.0,<7.0.0"]
-live-trade = ["websocket-client>=1.8.0,<2.0.0", "aiohttp>=3.14.3,<4.0.0"]
+live-trade = [
+    "websocket-client>=1.8.0,<2.0.0",
+    # GHSA-2g87-pp6c-29x5, GHSA-5wr8-gcqf-gqf3, GHSA-494j-54xm-rwp3 (#1368)
+    "aiohttp>=3.14.4,<4.0.0",
+]
 # Official MCP client and response-schema validation for the isolated,
 # read/review-only Robinhood Agentic adapter.
 robinhood-agentic = [
