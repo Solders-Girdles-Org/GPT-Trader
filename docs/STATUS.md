@@ -129,8 +129,9 @@ bare `agent-pr-ready` auto-detects the branch's PR
 ([#1307](https://github.com/Solders-Girdles-Org/GPT-Trader/pull/1307)), and the
 locked `multidict` clears the dependency audit
 ([#1306](https://github.com/Solders-Girdles-Org/GPT-Trader/pull/1306)). The
-runtime checkout picks up the `multidict` bump only through its own refresh
-procedure.
+locked `aiohttp` clears the three 2026-10-19 aiohttp advisories
+([#1370](https://github.com/Solders-Girdles-Org/GPT-Trader/pull/1370)). The
+runtime checkout picks up both bumps only through its own refresh procedure.
 
 ## Retained source pointers (2026-09-04 baseline)
 
