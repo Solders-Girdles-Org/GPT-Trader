@@ -55,9 +55,11 @@ settings. RJ confirmed all three on 2026-10-20. The smoke's first call was then 
 [re-frozen](../config/experiments/rulebook-author-2026-10-22/PROTOCOL.md#re-freeze-after-the-smoke-found-a-run-path-defect-2026-10-20)
 with the same window, settings and caps. The re-run smoke then failed its acceptance check: the
 model wrote `reversion` and `mean_reversion` for `mean-reversion` on two of three turns. The reply
-schema now lists the parser's entry names; whether that counts as a defect fix (re-run the smoke)
-or the fail stands (no forward run) is
-[RJ's reading](../config/experiments/rulebook-author-2026-10-22/PROTOCOL.md#the-re-run-smokes-entry-names-2026-10-20-rjs-reading-pending).
+schema now lists the parser's entry names. RJ
+[read that as our defect](../config/experiments/rulebook-author-2026-10-22/PROTOCOL.md#the-re-run-smokes-entry-names-2026-10-20-rjs-reading-pending)
+and asked for a re-run, so the frozen source is `448efed4` (digest `7adac9b2…e223`). On 2026-10-20
+the smoke passed on that source: three of three turns were accepted, and the ledger matched the
+journal. It spent $1.98 of the $6.50 smoke cap in total. The forward run waits for 2026-11-26T02:00Z.
 
 Latest retained-runtime source also includes [durable execution receipts](../src/gpt_trader/features/idea_execution/executor.py),
 [identified fill accounting](../src/gpt_trader/core/fill_accounting.py), and
