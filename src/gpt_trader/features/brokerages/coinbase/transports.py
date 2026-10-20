@@ -43,6 +43,8 @@ except ImportError:  # pragma: no cover - fallback stub for tests
     _HAS_WEBSOCKET = False
 
 if TYPE_CHECKING:
+    from websocket import WebSocket
+
     from gpt_trader.app.config import BotConfig
 
 _TRUTHY = {"1", "true", "yes", "on"}
@@ -54,7 +56,7 @@ class RealTransport:
     """Real WebSocket transport using websocket-client library."""
 
     def __init__(self, *, config: BotConfig | None = None) -> None:
-        self.ws = None
+        self.ws: WebSocket | None = None
         self.url: str | None = None
         self._config = config
 
