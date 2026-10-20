@@ -12,3 +12,15 @@ updates:
         patterns:
           - "github/codeql-action"
           - "github/codeql-action/*"
+  # Replaces the retired UV Lock Upgrade workflow (#1362): one weekly grouped PR
+  # that refreshes uv.lock within pyproject.toml's existing constraints.
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    versioning-strategy: "lockfile-only"
+    labels: ["dependencies"]
+    groups:
+      uv-lock:
+        patterns:
+          - "*"
