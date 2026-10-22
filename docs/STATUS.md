@@ -138,8 +138,11 @@ bare `agent-pr-ready` auto-detects the branch's PR
 locked `multidict` clears the dependency audit
 ([#1306](https://github.com/Solders-Girdles-Org/GPT-Trader/pull/1306)). The
 locked `aiohttp` clears the three 2026-10-19 aiohttp advisories
-([#1370](https://github.com/Solders-Girdles-Org/GPT-Trader/pull/1370)). The
-runtime checkout picks up both bumps only through its own refresh procedure.
+([#1370](https://github.com/Solders-Girdles-Org/GPT-Trader/pull/1370)). Locked
+`certifi 2026.10.19` and `virtualenv 21.14.12` clear the four advisories
+tracked in [#1387](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1387),
+with `packaging 26.3` required by virtualenv. The runtime checkout picks up
+these dependency updates only through its own refresh procedure.
 
 ## Retained source pointers (2026-09-04 baseline)
 
