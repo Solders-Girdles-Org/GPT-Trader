@@ -46,6 +46,21 @@ def isolated_kill_switch_env(monkeypatch):
     monkeypatch.delenv("RISK_KILL_SWITCH_ENABLED", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def isolated_anthropic_routing_env(monkeypatch):
+    """Keep a host's Anthropic API routing out of the test run.
+
+    model_transport.from_environment refuses to build a client while
+    ANTHROPIC_BASE_URL or ANTHROPIC_CUSTOM_HEADERS is set in os.environ, even
+    when the test passes its own environ. Hosts such as Claude Code cloud
+    sessions export ANTHROPIC_BASE_URL, which made the transport tests fail
+    with an unrelated refusal. Tests that exercise the refusal set the
+    variables themselves.
+    """
+    monkeypatch.delenv("ANTHROPIC_BASE_URL", raising=False)
+    monkeypatch.delenv("ANTHROPIC_CUSTOM_HEADERS", raising=False)
+
+
 @pytest.fixture
 def application_container(mock_config):
     """Provide an ApplicationContainer for tests that need it.
