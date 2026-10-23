@@ -109,21 +109,18 @@ cannot provide. The metadata block and reachability are enforced by
 
 ### Trading Profiles
 
-Profiles are config snapshots, not execution approval. Live profiles
-(`canary`, `prod`) only run after the gates in
-[Live Operations](production.md) and [Direction](DIRECTION.md) are satisfied with
-recorded human approval. `canary`/`prod` remain live-operation assets under
-that gating — accepted in
-[prod-canary-profile-meaning](decisions/prod-canary-profile-meaning.md); the
-profile name itself is never execution approval.
+Profiles are config snapshots. Live profiles (`canary`, `prod`) follow the
+gate sequence in [Live Operations](production.md) and the ladder in
+[Direction](DIRECTION.md); they remain live-operation assets, accepted in
+[prod-canary-profile-meaning](decisions/prod-canary-profile-meaning.md).
 
 | Profile | Broker / data | Role |
 |---------|---------------|------|
 | **dev** | Mock broker | Development and testing |
 | **paper** | Real data, mock execution | Strategy checks without exchange orders |
 | **observe** | Real data, blocked execution | Account and market observation |
-| **canary** | Live broker, tightly capped | Live-validation asset; runs require recorded approval |
-| **prod** | Live broker | Live-operation asset; runs require explicit approval and monitoring |
+| **canary** | Live broker, tightly capped | Live-validation asset |
+| **prod** | Live broker | Live-operation asset; runs need monitoring |
 
 ### Environment Setup
 - [Environment Template](../config/environments/.env.template) - Minimal operator config (safe defaults)
@@ -141,7 +138,7 @@ profile name itself is never execution approval.
 
 ### Spot vs Perpetuals
 
-These flags are capability selectors, not approval. Enabling a flag exposes the
+These flags are capability selectors. Enabling a flag exposes the
 relevant adapter; live execution still requires the gates in
 [Live Operations](production.md) and venue/account verification.
 

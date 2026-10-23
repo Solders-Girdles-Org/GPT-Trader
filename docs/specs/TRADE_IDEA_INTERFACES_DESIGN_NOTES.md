@@ -96,8 +96,8 @@ engine's configured broker only through the guard stack: kill switch,
 degradation, sizing/reduce-only, security, risk, mark freshness, exchange rules,
 slippage and configured preview checks. Their evidence is an order decision
 trace and order events, not a trade-idea approval trail. Callers must satisfy
-[DIRECTION's execution authorization](../DIRECTION.md#gate-before-execution-paths);
-a route flag or a passing guard is not approval. `OrderSubmitter.submit_order()`
+[DIRECTION's execution prerequisites](../DIRECTION.md#gate-before-execution-paths).
+`OrderSubmitter.submit_order()`
 is a lower-level execution helper, not an alternative public safety boundary.
 
 **How to review the proposals.** Proposed ideas land in the standard trade-idea

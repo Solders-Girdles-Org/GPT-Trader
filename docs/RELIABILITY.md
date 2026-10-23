@@ -244,8 +244,7 @@ Tip: avoid real delays in tests by passing a no-op `sleep_func` to `ChaosBroker`
 
 This checklist produces evidence for the gates in
 [Live Operations](production.md#live-gate-sequence) and the
-[Direction](DIRECTION.md). It does
-not by itself authorize a live profile run.
+[Direction](DIRECTION.md).
 
 1. Run preflight against the relevant profiles:
    - `uv run python scripts/production_preflight.py --profile canary`
@@ -254,8 +253,7 @@ not by itself authorize a live profile run.
 3. Run chaos tests:
    - `pytest tests/unit/support/test_chaos.py`
    - `pytest tests/unit/gpt_trader/features/live_trade/engines/test_strategy_engine_chaos.py`
-4. With recorded human approval, run a reduce-only canary session and archive guard
-   and pause logs as evidence.
-5. Any subsequent live profile run requires its own explicit approval; archive the
-   preflight report and guard events from that run.
+4. Run a reduce-only canary session and archive guard and pause logs as evidence.
+5. For each subsequent live profile run, archive the preflight report and guard
+   events from that run.
 6. Only use `--warn-only` during incident response and document the reason.

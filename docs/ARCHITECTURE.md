@@ -97,9 +97,7 @@ spend ledger).
    volatility) and `DegradationState` pauses (global or per symbol, optionally
    reduce-only); then `OrderSubmitter` persists the intent and `BrokerExecutor`
    talks to the broker under retry and timeout policy. A missing
-   acknowledgment stays uncertain until reconciled. No live order is submitted
-   without the recorded approval in [DIRECTION.md](DIRECTION.md); the `canary`
-   and `prod` profiles are assets, not approval.
+   acknowledgment stays uncertain until reconciled.
 6. **Account and measure.** Monitors compute high-water mark, drawdown from
    peak and open exposure from the same ledger; closeout attribution and the
    scorecard grade the track record that promotion requires.

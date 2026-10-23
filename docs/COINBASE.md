@@ -31,7 +31,7 @@ should be verified against the **official Coinbase documentation** and the
 
 ## Derivatives Capability Gates
 
-These flags expose adapter code paths; they are not approval to trade derivatives.
+These flags expose adapter code paths.
 A live derivatives run still requires venue/account verification and the gates in
 [Live Operations](production.md).
 
