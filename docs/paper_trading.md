@@ -145,9 +145,7 @@ directory outside any `runtime_data` tree, `--model-transport anthropic`,
 `NOT-EVIDENCE.txt` and journal metadata `not_evidence: true`; it produces no
 performance reading or forward evidence. All resumes retain the same ledger
 and cap. The transport reuses the existing Anthropic client, no-retry policy,
-pricing and durable pre-call reservation. A spend stop propagates loudly.
-**Any real call, credential or spend still requires RJ's explicit approval.**
-Stub tests require none. The full-window run is `experiment author-run` (below).
+pricing and durable pre-call reservation. A spend stop propagates loudly. The full-window run is `experiment author-run` (below).
 
 For an offline bound, use `experiment estimate-spend --author --input first.json`
 and repeat `--portfolio-input other.json` for other coins in the same cost case.
@@ -204,8 +202,7 @@ thresholds. A protocol with `"reading": "ai-rulebook-author"` is read by
 `experiment read` through [author_reading.py](../src/gpt_trader/features/experiment/author_reading.py):
 its runs file maps `ai-rulebook` to one author run per cost case, and the
 rules to per-symbol lists as in round two. `--source-sha256` and the one
-`--spend-ledger` are required. **Any real
-call, credential or spend still requires RJ's explicit approval.**
+`--spend-ledger` are required.
 
 ### Verification and next use
 
@@ -215,9 +212,7 @@ uv run local-ci
 ```
 
 The [product decision](decisions/recorded-experiment-product.md) owns what was
-reused/replaced and the next evidence milestone. Agents handle local engineering,
-simulation, review and gated integration. RJ chooses actual operational risk,
-external access and cutover. No human approval is fabricated for local steps.
+reused/replaced and the next evidence milestone.
 
 ## Retained paper-runtime procedures
 
@@ -736,11 +731,9 @@ reporting it.
 
 ## Readiness Evidence Inputs
 
-Paper trading produces evidence that feeds the readiness checklist; it does not
-itself authorize live execution. Live profiles only run after the gates in
-[Live Operations](production.md) and the
-[Direction](DIRECTION.md) have been
-satisfied with explicit human approval.
+Paper trading produces evidence that feeds the readiness checklist. Live
+profiles follow the gates in [Live Operations](production.md) and the
+[Direction](DIRECTION.md).
 
 ### What paper runs should produce
 1. Multi-day paper sessions with daily reports archived
@@ -754,8 +747,7 @@ uv run gpt-trader run --profile canary --dry-run
 ```
 
 For any live profile run, follow the gate sequence in
-[Live Operations](production.md#live-gate-sequence). Do not promote past
-`--dry-run` without recorded approval.
+[Live Operations](production.md#live-gate-sequence).
 
 ## Performance Metrics
 

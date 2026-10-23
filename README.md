@@ -41,7 +41,7 @@ journal binds a copy of them to the installed source. Changing either starts a
 new experiment. See [the input and fill contract](docs/paper_trading.md#recorded-experiment).
 
 Retained runtime profiles and credential configuration serve separately
-selected, authorized operations. Their source is
+selected operations. Their source is
 [profile configuration](config/profiles/) and the
 [environment template](config/environments/.env.template); the code under
 `src/gpt_trader/app/config/` is the reference for every variable it reads.

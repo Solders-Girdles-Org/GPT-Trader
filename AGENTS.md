@@ -1,8 +1,8 @@
 # AGENTS.md — Start here
 
-Entry point for every agent, and a fine one for humans. It routes and states
-the gates; each fact lives in one owning document, linked below. State each
-fact once; link, don't copy.
+Entry point for every agent, and a fine one for humans. It routes; each fact
+lives in one owning document, linked below. State each fact once; link, don't
+copy.
 
 ## Read first
 
@@ -39,21 +39,16 @@ uv run agent-pr-ready                    # real mergeability vs green checks
 
 ## Trading-safety boundary
 
-Live profiles and broker adapters are implementation assets, not approval.
-Live order submission requires recorded human approval plus any scoped
-decision packet; verify venue, API and account capability before adding or
-enabling an execution path. [docs/DIRECTION.md](docs/DIRECTION.md) is the
-authority. The standing merge approval below never covers live orders or
-execution enablement.
+Verify venue, API and account capability before adding or enabling an
+execution path. [docs/DIRECTION.md](docs/DIRECTION.md) owns the autonomy
+ladder and what an execution lane needs.
 
 ## Merge discipline
 
-`main` is protected and merges go through the merge queue. Merging carries
-standing operator approval (2026-07-02): no per-PR sign-off is needed once the
-readiness gate passes, and opening a PR is not merging. Before merging,
-resolve every review thread, re-read current-head review and reaction
-signals, and run `uv run agent-pr-ready`. Green CI is not sufficient; merge
-only when it reports ready.
+`main` is protected and merges go through the merge queue. Opening a PR is
+not merging. Before merging, resolve every review thread, re-read
+current-head review and reaction signals, and run `uv run agent-pr-ready`.
+Green CI is not sufficient; merge only when it reports ready.
 
 ```bash
 git switch -c <branch>

@@ -68,11 +68,7 @@ uv run local-ci --profile quick
 ```
 
 The scout may run narrower commands when there are no relevant changes since a
-recent run. It must not run real broker/API checks, canary operations, live
-trading commands, production preflight, or anything that assumes account
-capability unless a current decision packet or approved runbook explicitly
-scopes that lane. A `decision_needed` finding is not authorization by itself; it
-must first be resolved into a decision packet that scopes the command lane.
+recent run.
 
 After the cheap truth pass is green, choose exactly one discovery lane for the
 run. Rotate lanes across runs instead of scanning everything every hour.

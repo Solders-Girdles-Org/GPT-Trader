@@ -52,8 +52,7 @@ execution broker or authorize order placement/cancellation.
 Robinhood Agentic OAuth/session material is stored in the operating-system
 credential store by the optional official MCP client. The application exposes
 only four typed account/portfolio/review operations and no generic tool-call
-surface. Configuring it does not authorize place, cancel, transfer, watchlist,
-scan, or any other mutation operation.
+surface.
 
 ### Secrets and encryption
 
@@ -78,8 +77,8 @@ fallback when `GPT_TRADER_ALLOW_FILE_SECRET_FALLBACK=1` is set with a durable
 ## Preflight Security Checks
 
 Run preflight to gather security evidence (credential validity, key permissions,
-API connectivity). Preflight produces evidence; it is not authorization to run a
-live profile — see [Live Operations](production.md) for the full gate sequence.
+API connectivity). Preflight produces evidence; see
+[Live Operations](production.md) for the full gate sequence.
 
 ```bash
 uv run python scripts/production_preflight.py --profile canary

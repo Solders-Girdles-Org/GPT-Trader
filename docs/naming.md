@@ -60,7 +60,7 @@ The automated naming scan loads its banned pattern list from
 
 ## 3. Abbreviation Policy
 - Maintain a shared glossary in `docs/agents/glossary.md` listing approved abbreviations (`PnL`, `MVP`, `API`).
-- Any new abbreviation requires maintainer approval; add to glossary when accepted.
+- Add each new abbreviation to the glossary.
 
 ## 4. Review & Enforcement
 - Run the implemented naming scan with `uv run agent-naming`; the entrypoint

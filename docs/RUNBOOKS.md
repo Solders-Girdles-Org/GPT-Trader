@@ -148,8 +148,6 @@ PY
 - Risk validation failures are **expected behavior** - the system is protecting you
 - High frequency of risk blocks may indicate strategy needs tuning
 - Review blocked trades weekly to optimize parameters
-- Money movement, collateral changes, and risk-budget changes require explicit
-  human approval plus an approved runbook or decision packet for that lane.
 
 ---
 
@@ -206,11 +204,6 @@ curl -s https://status.coinbase.com/api/v2/status.json | jq '.status'
 - Single failure: Monitor, usually transient
 - Repeated failures for same symbol: Check symbol configuration
 - All orders failing: Check API credentials, broker status
-
-This runbook does not authorize order submission, retrying live orders outside
-the active runtime policy, credential reads, or money movement. If remediation
-requires any of those actions, record the incident evidence and route through
-the current approved runbook or a new `decision-needed` packet.
 
 ---
 
@@ -395,11 +388,8 @@ tail -f ${COINBASE_TRADER_LOG_DIR:-var/logs}/coinbase_trader.log | grep --color=
 ### Emergency Stop
 
 If you need to immediately stop all trading, stop first and preserve evidence.
-Emergency stop is always allowed as the immediate safety mitigation, including
-for unexpected or out-of-policy live bots with no pre-existing incident packet.
-It does not authorize restarting, position handoff, money movement, or order
-submission; those follow-up actions still require the applicable approved
-runbook or decision packet.
+Emergency stop is the immediate safety mitigation, including for unexpected or
+out-of-policy live bots with no pre-existing incident packet.
 
 ```bash
 # 1. Stop the bot

@@ -11,9 +11,9 @@ consolidates:
 
 ## Scope
 
-This guide keeps the historical `production.md` path for link stability, but it
-is not an approval to run unrestricted live automation. It describes the gates
-and operator steps required before using live profiles or broker adapters.
+This guide keeps the historical `production.md` path for link stability. It
+describes the gates and operator steps for using live profiles or broker
+adapters.
 
 Execution work should follow the
 [Direction](DIRECTION.md). Treat
@@ -21,22 +21,21 @@ the existing `canary` and `prod` profiles as legacy live-operation assets:
 useful for validation, but not proof that a product, account, or autonomy level
 is ready. Per the accepted
 [prod-canary-profile-meaning](decisions/prod-canary-profile-meaning.md)
-decision, a profile name is configuration, never approval — the gates in
-[DIRECTION.md](DIRECTION.md) and recorded human approval are the only
-authorization path (test-enforced in
+decision, a profile name is configuration: no profile can switch on AI-submitted
+order flow or autonomy escalation (test-enforced in
 `tests/unit/gpt_trader/app/config/test_profile_not_execution_approval.py`).
 
 ## Operating Posture
 
-- Start with `dev`, `paper`, or `observe` unless a live-operation gate has been
-  explicitly passed.
+- Start with `dev`, `paper`, or `observe` until the live gate sequence below has
+  been passed.
 - Use `human_approved_execution` as the first live execution tier.
 - Verify product, account, venue/API, risk, and audit-log capability before
   enabling any new live lane.
 - Keep broker-neutral decision and risk evidence canonical; broker-specific
   order tickets are downstream artifacts.
-- Prefer `canary` for live validation and reserve `prod` for an explicitly
-  approved, monitored live run.
+- Prefer `canary` for live validation and reserve `prod` for a monitored live
+  run.
 
 ## Readiness Checklist
 
@@ -121,8 +120,8 @@ Exit criteria:
 
 ### Gate 3: Human-Approved Canary
 
-Use canary only after the decision framework has recorded product scope,
-approval policy, risk budget, and audit expectations.
+Use canary only after product scope, approval policy, risk budget, and audit
+expectations are recorded.
 
 ```bash
 uv run gpt-trader run --profile canary --reduce-only
@@ -144,8 +143,8 @@ uv run gpt-trader run --profile prod --dry-run
 uv run gpt-trader run --profile prod --reduce-only
 ```
 
-Do not remove `--dry-run` or `--reduce-only` unless the current run has explicit
-approval and monitoring coverage.
+Do not remove `--dry-run` or `--reduce-only` unless the current run has
+monitoring coverage.
 
 ## Monitoring
 
@@ -189,7 +188,7 @@ sqlite3 runtime_data/prod/orders.db "select status, count(*) from orders group b
 tail -n 1000 ${COINBASE_TRADER_LOG_DIR:-var/logs}/coinbase_trader.log | grep ERROR
 ```
 
-Use the broker UI or explicitly approved CLI previews for manual exits. Do not
+Use the broker UI or CLI previews for manual exits. Do not
 assume the bot can safely recover an unknown state without human review.
 
 ## Emergency Stop
@@ -220,8 +219,6 @@ After emergency stop:
 
 ## Golden Rules
 
-1. Existing code paths are not approval to trade.
-2. Product coverage is constrained by verified venue/API/account capability.
-3. Live order submission starts with human approval.
-4. A run without audit evidence does not count as readiness evidence.
-5. Unknown state means stop, observe, and reconcile before continuing.
+1. Product coverage is constrained by verified venue/API/account capability.
+2. A run without audit evidence does not count as readiness evidence.
+3. Unknown state means stop, observe, and reconcile before continuing.

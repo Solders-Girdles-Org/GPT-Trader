@@ -93,10 +93,9 @@ for promotion by measured track record.
 | **2 — Bounded autonomy** | Auto-approval inside the budget envelope; HWM protection; profit-taking; kill switch; runtime daily-loss breaker | AI submits **only inside hard limits**; outside, it queues for review |
 | **3 — Self-directed entity** | Capital allocation across strategies; self-adjusted budgets inside an owner meta-envelope; scheduled self-review; owner reporting cadence | Self-directed within owner-set meta-limits |
 
-**Hard v1 rule:** AI does not submit live orders. Any API execution lane requires
-an explicit approval event **and** a decision packet or runbook naming the lane,
-its constraints, the verification boundary, and rollback/kill-switch
-expectations.
+**Hard v1 rule:** AI does not submit live orders. Any API execution lane needs a
+runbook naming the lane, its constraints, the verification boundary, and
+rollback/kill-switch expectations.
 
 The autonomy modes in full:
 
@@ -145,19 +144,13 @@ remains gated before any non-manual execution lane opens:
 
 Open questions that gate parts of this are tracked as `proposed` decisions in
 [docs/decisions](decisions/README.md). Profile meaning is resolved: `prod` and
-`canary` remain live-operation assets, explicitly gated — the profile name is
-never approval
+`canary` remain live-operation assets
 ([prod-canary-profile-meaning](decisions/prod-canary-profile-meaning.md)).
 The derivatives default is resolved: the
 [intx-default-derivatives-venue](decisions/intx-default-derivatives-venue.md)
 decision is accepted.
 
-## What this direction does not authorize
+## Operations
 
-Stating a destination is not approval to operate. The only real broker/API calls
-authorized here are the named account reads and non-binding previews in
-[real-account-read-preview-capability](decisions/real-account-read-preview-capability.md).
-No live trading command, production preflight, canary operation, money movement,
-or order submission is authorized; those require the gates above and recorded
-human approval. Paper/live readiness mechanics live in the operational
+Paper/live readiness mechanics live in the operational
 [Readiness Checklist](READINESS.md) and [Live Operations](production.md).

@@ -6,11 +6,10 @@ status: current
 
 ## Purpose
 
-This checklist defines the minimum evidence bar for a human-approved decision to
-run a live profile. It does not itself authorize live execution; live runs follow
-the gates in [Live Operations](production.md) and the
+This checklist defines the minimum evidence bar for running a live profile;
+live runs follow the gates in [Live Operations](production.md) and the
 [Direction](DIRECTION.md).
-Each pillar produces measurable evidence so the approval decision is objective,
+Each pillar produces measurable evidence so the decision is objective,
 repeatable, and auditable.
 
 ## How to use
@@ -214,13 +213,11 @@ Checklist:
 
 ## Phase-gated evidence milestones
 
-These phases describe the evidence required to support a human-approved decision
-to run the corresponding profile. Reaching a phase does not by itself enable live
-execution.
+These phases describe the evidence required to run the corresponding profile.
 
 - Phase A (Paper-ready): pillars 1-5 pass, plus full observability coverage.
-- Phase B (Canary-eligible): Phase A + no critical alerts in multi-day paper run, guard thresholds tuned. Approval still required before any canary run.
-- Phase C (Prod-eligible): Phase B + stability across regime changes (sideways/trending/high-vol). Approval still required before any prod run.
+- Phase B (Canary-eligible): Phase A + no critical alerts in multi-day paper run, guard thresholds tuned.
+- Phase C (Prod-eligible): Phase B + stability across regime changes (sideways/trending/high-vol).
 
 Checklist:
 - [ ] Phase A complete

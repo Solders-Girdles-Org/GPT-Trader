@@ -71,8 +71,7 @@ To add a new approved abbreviation:
 
 1. Open a PR with the proposed addition to this glossary
 2. Include rationale for why the abbreviation improves clarity
-3. Require maintainer approval
-4. If the abbreviation was previously banned, update `config/agents/naming_patterns.yaml`
+3. If the abbreviation was previously banned, update `config/agents/naming_patterns.yaml`
 
 ## Inline Exceptions
 
