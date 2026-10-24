@@ -152,8 +152,14 @@ locked `aiohttp` clears the three 2026-10-19 aiohttp advisories
 ([#1370](https://github.com/Solders-Girdles-Org/GPT-Trader/pull/1370)). Locked
 `certifi 2026.10.19` and `virtualenv 21.14.12` clear the four advisories
 tracked in [#1387](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1387),
-with `packaging 26.3` required by virtualenv. The runtime checkout picks up
-these dependency updates only through its own refresh procedure.
+with `packaging 26.3` required by virtualenv. `filelock` is a direct runtime
+dependency for cycle, budget and autonomy locking, with a security floor of
+4.2.1 and a 4.2.4 lock clearing the advisories in
+[#1393](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1393). The basic
+`FileLock` callers do not use the read/write lock protocol changed in 4.0.
+Keeping the constraint only in development dependencies would leave runtime
+installs without their declared locking dependency. The runtime checkout picks
+up these dependency updates only through its own refresh procedure.
 
 ## Retained source pointers (2026-09-04 baseline)
 
