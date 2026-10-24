@@ -61,6 +61,17 @@ and asked for a re-run, so the frozen source is `448efed4` (digest `7adac9b2…e
 the smoke passed on that source: three of three turns were accepted, and the ledger matched the
 journal. It spent $1.98 of the $6.50 smoke cap in total. The forward run waits for 2026-11-26T02:00Z.
 
+The [closing-state disposition](decisions/evidence-first-improvement-rounds.md#decision)
+records [RJ's 2026-10-23 answer (WO#252, 6378841453)](https://github.com/Solders-Girdles/workspace-operations/issues/252#issuecomment-6378841453):
+**maintenance only until #1367's forward round is read under its predeclared
+reading and the result is recorded**. What remains is #1367's run and reading;
+then RJ chooses close or stage 4, which still needs RJ's explicit grants.
+The closing-state date is **after November 25, 2026, 19:00 MST (estimate, not deadline)**;
+#1367's protocol and its own run start remain unchanged. #1212, #1224, #1232
+and #1238 remain unstarted, paused under that answer. No stage is marked done;
+approved stage text is retained. Spending and messages to people remain gated
+by RJ; this documentation starts no run and changes no schedule.
+
 Latest retained-runtime source also includes [durable execution receipts](../src/gpt_trader/features/idea_execution/executor.py),
 [identified fill accounting](../src/gpt_trader/core/fill_accounting.py), and
 [targeted reductions](../src/gpt_trader/features/trade_ideas/position_operations.py).

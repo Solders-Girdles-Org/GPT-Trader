@@ -68,12 +68,18 @@ agent applies them, and RJ may change them.
 
 The stages, in order:
 
-| Stage | Done when |
-| --- | --- |
-| 1 — Record the approved path | This record, [Direction](../DIRECTION.md) and [STATUS](../STATUS.md) are merged, #1252 is reconciled with #1315, the Phase B procedure is checked against the merged code without fetching data, and stages 1 and 2 are bounded agent-owned items (#1340, #1315) |
-| 2 — Held-out benchmark | #1315's run follows the committed [protocol](../../config/experiments/held-out-2026-09-06/PROTOCOL.md) unchanged: capture hashes verified, independent Decimal balances and pause/resume agree, all 32 cases accounted for, and `experiment read` yields the predeclared A–D action |
-| 3 — Next round | Proposed from stage 2's reading under the rules above; if it is a forward reasoning test, it starts default-off with full model, input and output provenance, bounded spend and a predeclared window read against the [forward-test bar](held-out-benchmark-before-reasoning-proposer.md#held-out-protocol-and-predeclared-reading) |
-| 4 — Earned operational autonomy | Independent review of the [measured-outcome gates](adopt-measured-outcome-rubric.md), account and execution capability, loss breakers, kill switch and rollback, then RJ's explicit grants; software completion alone earns no promotion |
+| Stage | Done when | Closing-state disposition (RJ, 2026-10-23) |
+| --- | --- | --- |
+| 1 — Record the approved path | This record, [Direction](../DIRECTION.md) and [STATUS](../STATUS.md) are merged, #1252 is reconciled with #1315, the Phase B procedure is checked against the merged code without fetching data, and stages 1 and 2 are bounded agent-owned items (#1340, #1315) | Conditions unchanged; no completion recorded here |
+| 2 — Held-out benchmark | #1315's run follows the committed [protocol](../../config/experiments/held-out-2026-09-06/PROTOCOL.md) unchanged: capture hashes verified, independent Decimal balances and pause/resume agree, all 32 cases accounted for, and `experiment read` yields the predeclared A–D action | Conditions unchanged; no completion recorded here |
+| 3 — Next round | Proposed from stage 2's reading under the rules above; if it is a forward reasoning test, it starts default-off with full model, input and output provenance, bounded spend and a predeclared window read against the [forward-test bar](held-out-benchmark-before-reasoning-proposer.md#held-out-protocol-and-predeclared-reading) | Maintenance only until [#1367](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1367)'s forward round is read under its predeclared reading and the result is recorded; what remains is that run and reading. Estimated closing state: after November 25, 2026, 19:00 MST (estimate, not deadline); the protocol's own run start is unchanged. Then RJ chooses close or stage 4. See [RJ's answer (WO#252, 6378841453)](https://github.com/Solders-Girdles/workspace-operations/issues/252#issuecomment-6378841453) |
+| 4 — Earned operational autonomy | Independent review of the [measured-outcome gates](adopt-measured-outcome-rubric.md), account and execution capability, loss breakers, kill switch and rollback, then RJ's explicit grants; software completion alone earns no promotion | Conditional on RJ choosing stage 4 after the reading and giving explicit grants; no stage is marked done |
+
+Under [RJ's 10-23 answer](https://github.com/Solders-Girdles/workspace-operations/issues/252#issuecomment-6378841453),
+#1212, #1224, #1232 and #1238 remain unstarted, paused while the project is
+in maintenance. Their approved scope and the stage conditions above are retained.
+Spending and messages to people remain gated by RJ; this record starts no run
+and changes no protocol or schedule.
 
 ## Consequences
 
