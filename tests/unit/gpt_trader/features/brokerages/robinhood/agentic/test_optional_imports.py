@@ -13,7 +13,7 @@ import sys
 
 class NoAdapterDependencies(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.split('.')[0] in {'anyio', 'mcp', 'keyring', 'jsonschema'}:
+        if fullname.split('.')[0] in {'anyio', 'mcp', 'keyring', 'jsonschema', 'httpx'}:
             raise ModuleNotFoundError(f'Blocked optional dependency: {fullname}')
 
 sys.meta_path.insert(0, NoAdapterDependencies())
