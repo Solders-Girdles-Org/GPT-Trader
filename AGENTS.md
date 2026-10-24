@@ -46,7 +46,8 @@ ladder and what an execution lane needs.
 `main` is protected and merges go through the merge queue. Opening a PR is
 not merging. Before merging, resolve every review thread, re-read
 current-head review and reaction signals, and run `uv run agent-pr-ready`.
-Green CI is not sufficient; merge only when it reports ready.
+Green CI is not sufficient; merge only when it reports ready. Enqueue a squash
+merge with auto-merge after readiness passes.
 
 Prefer independent PRs over stacks; if you must stack, merge base-first
 (branch auto-delete can close a child whose base vanished; restore the branch
