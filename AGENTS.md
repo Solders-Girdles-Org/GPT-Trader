@@ -1,8 +1,6 @@
 # AGENTS.md — Start here
 
-Entry point for every agent, and a fine one for humans. It routes; each fact
-lives in one owning document, linked below. State each fact once; link, don't
-copy.
+Each fact has one owner below. Link to it rather than copying it.
 
 ## Read first
 
@@ -23,9 +21,9 @@ Inventories (env vars, metrics, events, schemas) are read from the code with
 
 ## Everyday commands
 
-Python 3.12 and `uv`. Setup: `uv sync --all-extras --dev`, then
-`cp config/environments/.env.template .env` (`MOCK_BROKER=1` runs without
-credentials).
+Python 3.12 and `uv`. Use the setup in
+[development guidelines](docs/DEVELOPMENT_GUIDELINES.md); `MOCK_BROKER=1` needs no
+credentials.
 
 ```bash
 uv run pytest tests/unit -n auto -q      # unit tests
@@ -49,13 +47,6 @@ ladder and what an execution lane needs.
 not merging. Before merging, resolve every review thread, re-read
 current-head review and reaction signals, and run `uv run agent-pr-ready`.
 Green CI is not sufficient; merge only when it reports ready.
-
-```bash
-git switch -c <branch>
-git push -u origin HEAD
-gh pr create --fill            # fill .github/pull_request_template.md; Closes #<n>
-gh pr merge --squash --auto    # enqueues; the queue validates against latest main
-```
 
 Prefer independent PRs over stacks; if you must stack, merge base-first
 (branch auto-delete can close a child whose base vanished; restore the branch
