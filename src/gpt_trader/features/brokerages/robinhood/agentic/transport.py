@@ -10,8 +10,6 @@ from types import TracebackType
 from typing import Any, Protocol
 from urllib.parse import parse_qs, urlsplit
 
-import anyio
-
 from gpt_trader.features.brokerages.robinhood.agentic.errors import (
     RobinhoodAgenticUnavailable,
     RobinhoodAgenticViolation,
@@ -50,6 +48,7 @@ class KeyringTokenStorage:
 
     async def _get(self, key: str) -> str | None:
         try:
+            import anyio
             import keyring
         except ImportError as exc:  # pragma: no cover - optional dependency guard
             raise RobinhoodAgenticUnavailable(
@@ -58,6 +57,7 @@ class KeyringTokenStorage:
         return await anyio.to_thread.run_sync(keyring.get_password, self._SERVICE, key)
 
     async def _set(self, key: str, value: str) -> None:
+        import anyio
         import keyring
 
         await anyio.to_thread.run_sync(keyring.set_password, self._SERVICE, key, value)
@@ -126,11 +126,15 @@ class _OAuthCallback:
         return f"http://127.0.0.1:{self._server.server_port}/callback"
 
     async def open_browser(self, url: str) -> None:
+        import anyio
+
         opened = await anyio.to_thread.run_sync(webbrowser.open, url)
         if not opened:
             raise RobinhoodAgenticUnavailable("Unable to open Robinhood OAuth in a browser")
 
     async def wait(self) -> tuple[str, str | None]:
+        import anyio
+
         await anyio.to_thread.run_sync(self._server.handle_request)
         if self._server.callback is None:
             raise RobinhoodAgenticUnavailable("Robinhood OAuth callback timed out")

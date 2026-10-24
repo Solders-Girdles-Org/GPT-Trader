@@ -161,6 +161,14 @@ Keeping the constraint only in development dependencies would leave runtime
 installs without their declared locking dependency. The runtime checkout picks
 up these dependency updates only through its own refresh procedure.
 
+The base install keeps Robinhood Agentic dependencies optional: the transport
+loads `anyio` only for credential-storage and OAuth callback operations. A
+missing MCP extra raises the adapter's install-extra error at connection time.
+The [isolated import tests](../tests/unit/gpt_trader/features/brokerages/robinhood/agentic/test_optional_imports.py)
+cover package import, CLI help and missing-extra failure. Promoting `anyio` to
+the base dependencies was rejected because this adapter is optional; deferring
+its import preserves the existing asynchronous backend behavior.
+
 ## Retained source pointers (2026-09-04 baseline)
 
 Pointers checked against `main` through the merged transactional state,
