@@ -78,8 +78,7 @@ The stages, in order:
 Under [RJ's 10-23 answer](https://github.com/Solders-Girdles/workspace-operations/issues/252#issuecomment-6378841453),
 #1212, #1224, #1232 and #1238 remain unstarted, paused while the project is
 in maintenance. Their approved scope and the stage conditions above are retained.
-Spending and messages to people remain gated by RJ; this record starts no run
-and changes no protocol or schedule.
+This record starts no run and changes no protocol, schedule or spend cap.
 
 ## Consequences
 

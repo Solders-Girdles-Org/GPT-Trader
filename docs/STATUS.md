@@ -69,8 +69,8 @@ then RJ chooses close or stage 4, which still needs RJ's explicit grants.
 The closing-state date is **after November 25, 2026, 19:00 MST (estimate, not deadline)**;
 #1367's protocol and its own run start remain unchanged. #1212, #1224, #1232
 and #1238 remain unstarted, paused under that answer. No stage is marked done;
-approved stage text is retained. Spending and messages to people remain gated
-by RJ; this documentation starts no run and changes no schedule.
+approved stage text is retained. This documentation starts no run and changes
+no protocol, schedule or spend cap.
 
 Latest retained-runtime source also includes [durable execution receipts](../src/gpt_trader/features/idea_execution/executor.py),
 [identified fill accounting](../src/gpt_trader/core/fill_accounting.py), and
