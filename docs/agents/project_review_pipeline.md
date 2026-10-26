@@ -6,14 +6,14 @@ status: current
 
 This document defines the recurring project-review pipeline for GPT-Trader. The
 pipeline is intentionally staged: frequent scouts produce candidate findings,
-and only validated, deduped findings are promoted to GitHub issues for
+and only validated, deduped findings are promoted to Linear tasks for
 implementation or review loops.
 
 ## Goals
 
 - Keep a frequent agent scout close to current repo truth.
 - Promote only actionable, evidence-backed findings.
-- Use GitHub issues as the durable project queue for implementation agents.
+- Use the Linear GPT-Trader project in Work as the single task queue.
 - Preserve GPT-Trader safety boundaries around broker access, trading
   execution, account capability, and explicit decision records.
 - Feed PR review feedback back into implementation agents without broadening
@@ -46,12 +46,12 @@ it as a second queue.
 | Stage | Canonical source | Allowed derived/display form | Validation / owner |
 |-------|------------------|------------------------------|--------------------|
 | Scout candidate | Local JSON packet with `schema_version: "gpt-trader.agent-finding.v1"` | Promoter dry-run body for human review | `uv run python scripts/maintenance/project_review_issue_promoter.py --packet <packet>` |
-| Promoted finding | GitHub issue with the hidden `finding_id` marker and routing labels | Packet details rendered into the issue body or refresh comments | `project_review_issue_promoter.py` plus GitHub issue state |
-| Implementation | GitHub issue or direct owner-routed package, then a PR | PR body links issue/finding/package source | PR checks and review state |
+| Promoted finding | Linear issue with the stable `finding_id` marker | Packet details in description or refresh comments | Native Linear readback and promoter plan |
+| Implementation | Linear issue or direct owner-routed package, then a GitHub PR | PR body links issue/finding/package source | PR checks and review state |
 | Review feedback | GitHub review thread, check output, or a bounded feedback packet copied into issue/PR comments | Short fix packet for the active executor | PR review/check evidence; a follow-up issue when it becomes queue work |
 | Review deliverable | Intended `review_artifacts/*.csv` or `review_artifacts/*.xlsx` file | PR body summary of provenance and purpose | `.gitignore` policy plus `git status` review |
 
-The packet is canonical only before promotion. After promotion, the GitHub issue
+The packet is canonical only before promotion. After promotion, the Linear issue
 is the durable queue item; local packet files are inputs or receipts, not the
 ongoing source of truth.
 
@@ -62,7 +62,7 @@ before relying on memory or prior runs:
 
 ```bash
 git status --short --branch
-gh issue list --state open --limit 50
+# Read the registered Linear project through the native connector
 gh pr list --state open --limit 30
 uv run local-ci --profile quick
 ```
@@ -76,7 +76,7 @@ run. Rotate lanes across runs instead of scanning everything every hour.
 | Lane | Cheap evidence | Promote only when |
 | --- | --- | --- |
 | Local CI | `uv run local-ci --profile quick`; failing command output | A repeated failure points to repo code, tests, or docs rather than transient environment drift |
-| Open queue | `gh issue list --state open --limit 50`; `gh pr list --state open --limit 30`; check whether the active branch has a PR | An issue or PR is stale, blocked, duplicated, or missing an agent-ready contract, or a repeated local review branch has no PR/issue/explicit parked blocker |
+| Open queue | Read the registered project through the native Linear connector; `gh pr list --state open --limit 30`; check whether the active branch has a PR | An issue or PR is stale, blocked, duplicated, or missing an agent-ready contract, or a repeated local review branch has no PR/issue/explicit parked blocker |
 | Test hygiene | `uv run python scripts/ci/check_test_hygiene.py`; `make test-triage-check` | A hygiene or triage failure points to a bounded test fix |
 | Architecture contracts | Read one named contract doc such as `docs/DI_POLICY.md`, `docs/ARCHITECTURE.md`, or `docs/DIRECTION.md`; compare with a narrow code path | A concrete docs/code mismatch or boundary violation has a safe verification command |
 | Agent ergonomics | Inspect one agent-facing doc, workflow script, or recent scout memory | A missing or stale instruction causes repeat agent confusion, repeated no-promotion churn, or an ambiguous finish/park decision that can be fixed in one PR |
@@ -174,46 +174,57 @@ recommend the next policy and implementation route.
 
 ## Stage 3: Promote
 
-Promotion creates or updates a GitHub issue from a validated packet. Promote at
-most one finding per scout run unless the project owner explicitly requests a
-bulk pass.
+Promotion uses the existing authenticated native Linear connection. The Python
+promoter validates and renders; it emits connector requests without remote calls,
+credentials, labels creation or a GitHub fallback. Promote at most one finding
+per scout run unless the owner requests a bulk pass.
 
-Dry-run first:
+1. Run the promoter with `--packet <packet> --json`. Its `search_required` result
+   includes an unfiltered native `list_issues` enumeration for the registered Work team
+   (`6dac4998-d0f1-4eb9-8739-179db1379d55`) and GPT-Trader project
+   (`b621cc17-1650-432b-802d-4575507d3a5b`). Execute it through the native connector.
+   Include archived issues, omit both text-query and state filters and collect every page.
+   Marker search is not absence evidence: it has omitted a verified completed match. On any
+   denied/failed read, stop; report action, target, reason and observed state.
+2. Export the fresh results as a temporary `--linear-snapshot <file>` input:
+   `team_id`, `project_id`, `scope: "project_all_states"`,
+   `query: null`, `state: null`,
+   `include_archived: true`, `has_next_page: false` and `issues` (the accumulated
+   native rows). Fetch every result with native `get_issue` for its full description; list
+   previews can be truncated and search can return broad matches. Include each row's `id`, `description`, `url`, `statusType`,
+   `archivedAt`, `teamId` and `projectId`. Never certify incomplete results as
+   complete. Snapshots are one-use read inputs, not an alternate task home.
+3. Re-run the promoter with the packet, snapshot and `--json`. It rejects wrong
+   destinations, incomplete searches, ambiguous exact markers and unknown states.
+   An open match plans `save_comment` without changing owner, description, labels
+   or state. A terminal or archived match returns `matched_terminal` and no write:
+   reuse that history, never reopen or duplicate it. A genuinely new finding
+   plans `save_issue` in Backlog with exactly one Need label; routing hints in
+   the body do not create custom labels or confer Ready authority.
+4. Before executing a planned write, re-read an existing match (or repeat the
+   complete unfiltered project enumeration for a create), check current claims and add the responsible agent,
+   resumption trigger and writer/model signature to the body. Apply the workspace
+   Ready rule only after checking purpose, focus and holds. Execute via native
+   `save_issue`/`save_comment`, then read back the exact marker and destination.
+   If a write is uncertain, read back before retrying. Concurrent promoters must
+   serialize the final enumeration/write; the connector offers no unique-marker lock.
+   If native access is absent, retain the packet and report the gap; do not use
+   an API key, a hidden session or `gh issue create`.
 
-```bash
-uv run python scripts/maintenance/project_review_issue_promoter.py \
-  --packet path/to/finding.json
-```
-
-Create or update the GitHub issue:
-
-```bash
-uv run python scripts/maintenance/project_review_issue_promoter.py \
-  --packet path/to/finding.json \
-  --create-issue \
-  --create-labels
-```
-
-The promoter searches for the hidden `finding_id` marker before creating a new
-issue. When a matching open issue exists, it comments with the refreshed packet
-instead of creating a duplicate.
+The exact marker line is `gpt-trader-agent-finding-id: <finding_id>` in the
+Linear description; legacy HTML-comment markers also match. Marker identity is
+stable across refreshes. Free-text similarity is only a lead for human dedupe,
+not proof that a different exact marker is the same finding.
 
 ## Stage 4: Queue
 
-GitHub issues are the durable queue. Labels mark exceptions only (the full
-model is owned by [Development Guidelines](../DEVELOPMENT_GUIDELINES.md#pr-flow)); the
-promoter emits:
-
-| Label | Meaning |
-| --- | --- |
-| `agent-review` | Finding came from the recurring GPT-Trader review lane |
-| `agent-ready` | Finding passed promotion gates, has no decision/blocker gate, and is ready for implementation |
-| `decision-needed` | Requires an explicit decision packet and agent recommendation before implementation or execution |
-| `blocked` | The packet names `routing.blocked_by` dependencies |
-
-The promoter can create missing labels with `--create-labels`. If labels are
-missing and that flag is not used, it keeps routing in the issue body and omits
-unknown labels from the GitHub call.
+[Linear GPT-Trader in Work](https://linear.app/rj-openclaw/project/gpt-trader-27e81625d145)
+holds tasks, decisions and verifications; GitHub holds code, PRs, CI and retained
+linked history. [Development Guidelines](../DEVELOPMENT_GUIDELINES.md#pr-flow)
+owns the move contract. Routing hints (`agent-review`, `agent-ready`,
+`decision-needed`, `blocked`) remain packet metadata, not new Linear labels.
+Preserve blockers, owner and resumption dates on refresh; promotion never releases
+an operational hold. Do not mirror mutable status back to the retired Work board.
 
 ## Stage 5: Implement
 
@@ -227,12 +238,12 @@ contract:
 - leave any broader discovery as a new finding instead of scope creep
 
 The PR body should follow `.github/pull_request_template.md`. For
-issue-backed work, include `Closes #<issue>`.
+issue-backed work, link the Linear task and return the delivery receipt there.
 
 ### Direct Package Cycles
 
 When the project owner or the active agent workspace explicitly routes a
-build/package cycle, a promoted GitHub issue is useful but not required. In that
+build/package cycle, a promoted Linear issue is useful but not required. In that
 path, the direct request, the observed repo evidence, and the PR body form the
 implementation contract.
 
@@ -262,7 +273,7 @@ convert each actionable item into a bounded fix packet for the active executor:
 - stop condition
 
 If the feedback contradicts the issue acceptance criteria or crosses an
-undecided policy boundary, label the issue or PR `decision-needed` and route a
+undecided policy boundary, record the unresolved decision on the Linear issue and route a
 decision packet before implementation continues.
 
 Review-feedback packets are routing packets, not a new durable planning system.
@@ -277,11 +288,12 @@ the change is explicitly routed/approved for merge and all review threads are
 resolved, merge per `AGENTS.md`:
 
 ```bash
-gh pr merge --squash --delete-branch
+uv run agent-pr-ready --pr <number> --format json --exit-on-not-ready
+gh pr merge <number> --squash --auto --match-head-commit <verified-head>
 ```
 
-After merge, confirm the issue is closed or comment with the merged PR and any
-follow-up. New work gets a new finding packet.
+After merge, verify the actual remote merge and the task done-test; return the
+receipt and remaining owner/trigger to Linear before marking the task Done. New work gets a new finding packet.
 
 ## Review Artifacts Convention (from #968, run goal-pipeline-20260626-001-gpt-trader-clean-discovery-scout)
 
@@ -291,7 +303,7 @@ Review and analysis artifacts (spreadsheets, CSVs, reports) produced by agent re
   `review_artifacts/*.xlsx` files under the existing `.gitignore` exceptions.
 - Put non-durable temps in `review_artifacts/tmp/` (still ignored).
 - Treat committed CSV/XLSX files as review deliverables, not canonical planning
-  state. The queue remains GitHub issues; project status remains `docs/STATUS.md`.
+  state. The queue remains Linear; project status remains `docs/STATUS.md`.
 - Name durable files with a stable subject and date or run id, and include enough
   context in the PR body to explain provenance, source command, and intended
   reviewer.

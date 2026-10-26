@@ -107,3 +107,139 @@ def test_decision_candidate_requires_decision_needed() -> None:
     errors = promoter.validate_packet(packet)
 
     assert "routing.candidate_for includes decision requires routing.decision_needed=true" in errors
+
+
+def linear_snapshot(packet, issues=None):
+    return {
+        "team_id": promoter.LINEAR_TEAM_ID,
+        "project_id": promoter.LINEAR_PROJECT_ID,
+        "query": None,
+        "state": None,
+        "scope": "project_all_states",
+        "include_archived": True,
+        "has_next_page": False,
+        "issues": issues or [],
+    }
+
+
+def linear_issue(packet, status="started", **overrides):
+    return {
+        "id": "RJ-999",
+        "url": "https://linear.app/rj-openclaw/issue/RJ-999",
+        "description": promoter.marker_for(packet["finding_id"]),
+        "statusType": status,
+        "archivedAt": None,
+        "teamId": promoter.LINEAR_TEAM_ID,
+        "projectId": promoter.LINEAR_PROJECT_ID,
+        **overrides,
+    }
+
+
+def test_search_required_before_any_promotion() -> None:
+    plan = promoter.promotion_plan(promoter.example_packet(), None)
+    assert plan["action"] == "search_required"
+    assert "request" not in plan
+    assert plan["search"]["arguments"]["includeArchived"] is True
+    assert "state" not in plan["search"]["arguments"]
+    assert "query" not in plan["search"]["arguments"]
+
+
+def test_empty_complete_search_plans_only_linear_backlog_create() -> None:
+    packet = promoter.example_packet()
+    plan = promoter.promotion_plan(packet, linear_snapshot(packet))
+    assert plan["action"] == "create"
+    assert plan["request"]["tool"] == "save_issue"
+    args = plan["request"]["arguments"]
+    assert args["team"] == promoter.LINEAR_TEAM_ID
+    assert args["project"] == promoter.LINEAR_PROJECT_ID
+    assert args["state"] == "Backlog"
+    assert args["labels"] == ["work"]
+
+
+def test_active_match_comments_without_changing_state_or_description() -> None:
+    packet = promoter.example_packet()
+    existing = linear_issue(packet)
+    plan = promoter.promotion_plan(packet, linear_snapshot(packet, [existing]))
+    assert plan["action"] == "comment_existing"
+    assert plan["request"]["tool"] == "save_comment"
+    assert plan["request"]["arguments"]["issueId"] == "RJ-999"
+    assert set(plan["request"]["arguments"]) == {"issueId", "body"}
+
+
+def test_terminal_and_archived_matches_never_create_or_reopen() -> None:
+    packet = promoter.example_packet()
+    for issue in [
+        linear_issue(packet, "completed"),
+        linear_issue(packet, "canceled"),
+        linear_issue(packet, archivedAt="2026-10-25T00:00:00Z"),
+    ]:
+        plan = promoter.promotion_plan(packet, linear_snapshot(packet, [issue]))
+        assert plan["action"] == "matched_terminal"
+        assert "request" not in plan
+
+
+def test_legacy_hidden_marker_matches_but_prefix_collision_does_not() -> None:
+    packet = promoter.example_packet()
+    marker = promoter.marker_for(packet["finding_id"])
+    issue = linear_issue(packet, description=f"<!-- {marker} -->\nsummary")
+    assert (
+        promoter.promotion_plan(packet, linear_snapshot(packet, [issue]))["action"]
+        == "comment_existing"
+    )
+    issue["description"] = marker + "-different"
+    assert promoter.promotion_plan(packet, linear_snapshot(packet, [issue]))["action"] == "create"
+
+
+def test_incomplete_or_wrong_destination_search_cannot_create() -> None:
+    import pytest
+
+    packet = promoter.example_packet()
+    for change in [
+        {"has_next_page": True},
+        {"include_archived": False},
+        {"project_id": "wrong"},
+        {"team_id": "wrong"},
+        {"query": "other"},
+    ]:
+        with pytest.raises(ValueError, match="complete all-state"):
+            promoter.promotion_plan(packet, {**linear_snapshot(packet), **change})
+
+
+def test_ambiguous_matches_and_unknown_state_fail_closed() -> None:
+    import pytest
+
+    packet = promoter.example_packet()
+    issue = linear_issue(packet)
+    with pytest.raises(ValueError, match="multiple exact"):
+        promoter.promotion_plan(packet, linear_snapshot(packet, [issue, {**issue, "id": "RJ-998"}]))
+    with pytest.raises(ValueError, match="unknown statusType"):
+        promoter.promotion_plan(packet, linear_snapshot(packet, [linear_issue(packet, "unknown")]))
+    with pytest.raises(ValueError, match="outside"):
+        promoter.promotion_plan(packet, linear_snapshot(packet, [{**issue, "projectId": "other"}]))
+
+
+def test_truncated_search_descriptions_require_hydration() -> None:
+    import pytest
+
+    packet = promoter.example_packet()
+    issue = linear_issue(
+        packet, description="preview (truncated, use `get_issue` for full description)"
+    )
+    with pytest.raises(ValueError, match="hydrate truncated"):
+        promoter.promotion_plan(packet, linear_snapshot(packet, [issue]))
+
+
+def test_exhausted_marker_search_cannot_certify_terminal_absence() -> None:
+    import pytest
+
+    packet = promoter.example_packet()
+    # The native marker query omitted completed RJ-797 even with hasNextPage=false.
+    # That old read must fail rather than returning a duplicate create request.
+    snapshot = linear_snapshot(packet)
+    snapshot["query"] = promoter.marker_for(packet["finding_id"])
+    with pytest.raises(ValueError, match="without query or state filters"):
+        promoter.promotion_plan(packet, snapshot)
+    snapshot["query"] = None
+    snapshot["state"] = "started"
+    with pytest.raises(ValueError, match="without query or state filters"):
+        promoter.promotion_plan(packet, snapshot)
