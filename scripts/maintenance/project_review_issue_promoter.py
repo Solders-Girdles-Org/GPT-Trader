@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Promote a GPT-Trader agent finding packet to a GitHub issue."""
+"""Validate findings and plan promotion through the authenticated native Linear connector."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import re
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
-DEFAULT_REPOSITORY = "Solders-Girdles-Org/GPT-Trader"
+LINEAR_TEAM_ID = "6dac4998-d0f1-4eb9-8739-179db1379d55"
+LINEAR_PROJECT_ID = "b621cc17-1650-432b-802d-4575507d3a5b"
 SCHEMA_VERSION = "gpt-trader.agent-finding.v1"
 
 SEVERITIES = {"low", "medium", "high", "critical"}
@@ -29,50 +29,17 @@ CATEGORIES = {
 CANDIDATES = {"implementation", "codex-review", "decision"}
 EVIDENCE_ANCHOR_FIELDS = ("command", "path", "url")
 
-CUSTOM_LABELS = {
-    "agent-review": {
-        "color": "5319e7",
-        "description": "Produced by the recurring GPT-Trader agent review lane",
-    },
-    "agent-ready": {
-        "color": "0e8a16",
-        "description": "Validated and ready for agent implementation",
-    },
-    "decision-needed": {
-        "color": "d876e3",
-        "description": "Requires an explicit decision packet and agent recommendation",
-    },
-    "blocked": {
-        "color": "b60205",
-        "description": "Blocked on a dependency or decision",
-    },
-}
-
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--packet", type=Path, help="Finding packet JSON path, or '-' for stdin.")
-    parser.add_argument("--repo", default=DEFAULT_REPOSITORY, help="GitHub repository owner/name.")
     parser.add_argument(
-        "--create-issue",
-        action="store_true",
-        help="Create or update the GitHub issue. Omit for dry-run output.",
+        "--linear-snapshot",
+        type=Path,
+        help="Fresh native Linear search export, including terminal and archived matches.",
     )
-    parser.add_argument(
-        "--create-labels",
-        action="store_true",
-        help="Create missing routing labels before creating/updating the issue.",
-    )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help="Emit machine-readable output for the planned or completed action.",
-    )
-    parser.add_argument(
-        "--print-template",
-        action="store_true",
-        help="Print an example finding packet and exit.",
-    )
+    parser.add_argument("--json", action="store_true", help="Emit a native connector action plan.")
+    parser.add_argument("--print-template", action="store_true", help="Print an example packet.")
     return parser.parse_args(argv)
 
 
@@ -256,81 +223,6 @@ def packet_labels(packet: dict[str, Any]) -> list[str]:
     return sorted(labels)
 
 
-def run_gh(arguments: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["gh", *arguments],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-
-def existing_labels(repository: str) -> set[str]:
-    result = run_gh(["label", "list", "--repo", repository, "--limit", "300", "--json", "name"])
-    if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or "failed to list GitHub labels")
-    data = json.loads(result.stdout)
-    return {item["name"] for item in data}
-
-
-def ensure_labels(repository: str, labels: list[str]) -> None:
-    present = existing_labels(repository)
-    for label in labels:
-        if label in present or label not in CUSTOM_LABELS:
-            continue
-        metadata = CUSTOM_LABELS[label]
-        result = run_gh(
-            [
-                "label",
-                "create",
-                label,
-                "--repo",
-                repository,
-                "--color",
-                metadata["color"],
-                "--description",
-                metadata["description"],
-            ]
-        )
-        if result.returncode != 0 and "already exists" not in result.stderr:
-            raise RuntimeError(result.stderr.strip() or f"failed to create label {label}")
-
-
-def usable_labels(
-    repository: str, labels: list[str], create_labels: bool
-) -> tuple[list[str], list[str]]:
-    if create_labels:
-        ensure_labels(repository, labels)
-    present = existing_labels(repository)
-    selected = [label for label in labels if label in present]
-    missing = [label for label in labels if label not in present]
-    return selected, missing
-
-
-def find_existing_issue(repository: str, finding_id: str) -> dict[str, Any] | None:
-    marker = marker_for(finding_id)
-    result = run_gh(
-        [
-            "issue",
-            "list",
-            "--repo",
-            repository,
-            "--state",
-            "open",
-            "--search",
-            f'"{marker}" in:body',
-            "--limit",
-            "5",
-            "--json",
-            "number,title,url",
-        ]
-    )
-    if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or "failed to search existing issues")
-    matches = json.loads(result.stdout)
-    return matches[0] if matches else None
-
-
 def render_issue_body(packet: dict[str, Any], labels: list[str], missing_labels: list[str]) -> str:
     scope = packet["scope"]
     dedupe = packet["dedupe"]
@@ -351,7 +243,7 @@ def render_issue_body(packet: dict[str, Any], labels: list[str], missing_labels:
         evidence_lines.append(prefix + item["detail"])
 
     body = [
-        f"<!-- {marker_for(packet['finding_id'])} -->",
+        marker_for(packet["finding_id"]),
         "",
         "## Summary",
         packet["summary"].strip(),
@@ -382,69 +274,104 @@ def render_issue_body(packet: dict[str, Any], labels: list[str], missing_labels:
         "## Dedupe",
         *[f"- {term}" for term in dedupe["search_terms"]],
         "",
-        "## Labels",
-        f"- Applied/planned: {', '.join(labels) if labels else 'none'}",
+        "## Routing hints",
+        f"- Hints (not Linear labels): {', '.join(labels) if labels else 'none'}",
     ]
     if missing_labels:
         body.extend(["", f"- Missing in repository: {', '.join(missing_labels)}"])
     return "\n".join(body).rstrip() + "\n"
 
 
-def create_or_update_issue(
-    repository: str,
-    packet: dict[str, Any],
-    labels: list[str],
-    missing_labels: list[str],
-) -> dict[str, Any]:
-    body = render_issue_body(packet, labels, missing_labels)
-    existing = find_existing_issue(repository, packet["finding_id"])
-    if existing:
-        result = run_gh(
-            [
-                "issue",
-                "comment",
-                str(existing["number"]),
-                "--repo",
-                repository,
-                "--body",
-                body,
-            ]
-        )
-        if result.returncode != 0:
-            raise RuntimeError(result.stderr.strip() or "failed to comment on existing issue")
-        if labels:
-            edit_result = run_gh(
-                [
-                    "issue",
-                    "edit",
-                    str(existing["number"]),
-                    "--repo",
-                    repository,
-                    "--add-label",
-                    ",".join(labels),
-                ]
-            )
-            if edit_result.returncode != 0:
-                raise RuntimeError(edit_result.stderr.strip() or "failed to update issue labels")
-        return {"action": "commented_existing", "issue": existing, "missing_labels": missing_labels}
+def promotion_plan(packet: dict[str, Any], snapshot: dict[str, Any] | None) -> dict[str, Any]:
+    """Plan only; an agent executes through its existing native Linear connection.
 
-    command = [
-        "issue",
-        "create",
-        "--repo",
-        repository,
-        "--title",
-        packet["title"],
-        "--body",
-        body,
-    ]
-    for label in labels:
-        command.extend(["--label", label])
-    result = run_gh(command)
-    if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or "failed to create issue")
-    url = result.stdout.strip()
-    return {"action": "created", "issue": {"url": url}, "missing_labels": missing_labels}
+    Search results are fresh inputs, not an ongoing queue or credentials. Never
+    create from a failed, truncated, wrong-destination or active-only search.
+    """
+    marker = marker_for(packet["finding_id"])
+    search = {
+        "team": LINEAR_TEAM_ID,
+        "project": LINEAR_PROJECT_ID,
+        "query": marker,
+        "includeArchived": True,
+        "fields": ["id", "description", "url", "statusType", "archivedAt", "teamId", "projectId"],
+    }
+    result: dict[str, Any] = {
+        "finding_id": packet["finding_id"],
+        "title": packet["title"],
+        "body": render_issue_body(packet, packet_labels(packet), []),
+        "search": {"tool": "list_issues", "arguments": search},
+    }
+    if snapshot is None:
+        return {**result, "action": "search_required"}
+    expected = {
+        "team_id": LINEAR_TEAM_ID,
+        "project_id": LINEAR_PROJECT_ID,
+        "query": marker,
+        "include_archived": True,
+        "has_next_page": False,
+    }
+    if any(key not in snapshot or snapshot[key] != value for key, value in expected.items()):
+        raise ValueError(
+            "snapshot must be a complete all-state, archived-inclusive native search for this finding and destination"
+        )
+    issues = snapshot.get("issues")
+    if not isinstance(issues, list):
+        raise ValueError("snapshot.issues must be a list")
+    matches = []
+    pattern = re.compile(r"^\s*(?:<!--\s*)?" + re.escape(marker) + r"(?:\s*-->)?\s*$", re.MULTILINE)
+    for issue in issues:
+        if not isinstance(issue, dict) or not isinstance(issue.get("description"), str):
+            raise ValueError("search results must include issue descriptions")
+        if "(truncated, use `get_issue` for full description)" in issue["description"]:
+            raise ValueError(
+                "hydrate truncated search descriptions with native get_issue before planning"
+            )
+        if issue.get("teamId") != LINEAR_TEAM_ID or issue.get("projectId") != LINEAR_PROJECT_ID:
+            raise ValueError("search result is outside the registered Linear destination")
+        if pattern.search(issue["description"]):
+            if not issue.get("id") or not issue.get("url") or "archivedAt" not in issue:
+                raise ValueError("matching issue lacks identity, URL or archive state")
+            if issue.get("statusType") not in {
+                "triage",
+                "backlog",
+                "unstarted",
+                "started",
+                "completed",
+                "canceled",
+            }:
+                raise ValueError("matching issue has unknown statusType")
+            matches.append(issue)
+    if len(matches) > 1:
+        raise ValueError("multiple exact finding_id matches; reconcile on Linear before promotion")
+    if matches:
+        issue = matches[0]
+        if issue["statusType"] in {"completed", "canceled"} or issue["archivedAt"]:
+            return {**result, "action": "matched_terminal", "issue": issue}
+        return {
+            **result,
+            "action": "comment_existing",
+            "issue": issue,
+            "request": {
+                "tool": "save_comment",
+                "arguments": {"issueId": issue["id"], "body": result["body"]},
+            },
+        }
+    return {
+        **result,
+        "action": "create",
+        "request": {
+            "tool": "save_issue",
+            "arguments": {
+                "team": LINEAR_TEAM_ID,
+                "project": LINEAR_PROJECT_ID,
+                "title": packet["title"],
+                "description": result["body"],
+                "state": "Backlog",
+                "labels": ["decision" if packet["routing"]["decision_needed"] else "work"],
+            },
+        },
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -455,35 +382,27 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         packet = read_packet(args.packet)
+        if not isinstance(packet, dict):
+            raise ValueError("packet must be an object")
         errors = validate_packet(packet)
         if errors:
             for error in errors:
                 print(f"error: {error}", file=sys.stderr)
             return 2
 
-        planned_labels = packet_labels(packet)
-        if args.create_issue:
-            labels, missing_labels = usable_labels(args.repo, planned_labels, args.create_labels)
-            result = create_or_update_issue(args.repo, packet, labels, missing_labels)
-        else:
-            result = {
-                "action": "dry_run",
-                "repository": args.repo,
-                "finding_id": packet["finding_id"],
-                "title": packet["title"],
-                "planned_labels": planned_labels,
-                "body": render_issue_body(packet, planned_labels, []),
-            }
-
+        snapshot = (
+            json.loads(args.linear_snapshot.read_text(encoding="utf-8"))
+            if args.linear_snapshot
+            else None
+        )
+        if snapshot is not None and not isinstance(snapshot, dict):
+            raise ValueError("snapshot must be an object")
+        result = promotion_plan(packet, snapshot)
         if args.json:
             print(json.dumps(result, indent=2, sort_keys=True))
-        elif result["action"] == "dry_run":
-            print(result["body"])
         else:
-            issue = result["issue"]
-            print(f"{result['action']}: {issue.get('url') or issue}")
-            if result.get("missing_labels"):
-                print(f"missing labels: {', '.join(result['missing_labels'])}")
+            print(result["body"])
+            print(f"Native Linear action: {result['action']} (no remote write performed)")
         return 0
     except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as error:
         print(f"error: {error}", file=sys.stderr)

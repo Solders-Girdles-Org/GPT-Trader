@@ -16,7 +16,7 @@ drifts.
 | Destination, autonomy ladder, execution gates | `docs/DIRECTION.md` | STATUS or README prose |
 | A decision, made or open | `docs/decisions/<slug>.md`; `status` carries the lifecycle; the index is generated | Open-question tables, an issue body as the only packet |
 | Shipped state | Code and tests, with pointers in `docs/STATUS.md` | ARCHITECTURE prose, README status lists |
-| Work to do | GitHub issues (labels only for exceptions) | Roadmap queues, STATUS "next" lists |
+| Work to do | Linear GPT-Trader project in Work; GitHub links delivery/history | Roadmap queues, STATUS "next" lists |
 | How the code is structured | `docs/ARCHITECTURE.md` plus the code | Hand-maintained module inventories |
 | Env vars, metrics, events, CLI flags, schemas | The code (`rg -n` under `src/gpt_trader/`) and `config/environments/.env.template` | Reference tables that must be kept in sync |
 | Agent rules and gates | `AGENTS.md` (`CLAUDE.md` links to it) | A second copy under `docs/` |

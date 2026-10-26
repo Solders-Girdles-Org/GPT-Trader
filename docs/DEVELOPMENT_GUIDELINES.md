@@ -91,14 +91,25 @@ on a removed path means use the canonical path in
    [testing.md](testing.md).
 3. Run `uv run local-ci`.
 4. Open the PR with `.github/pull_request_template.md` filled in; link the
-   issue with `Closes #<n>`; state risk impact and behaviour changes.
+   Linear task by URL or `RJ-<n>`; state risk impact and behaviour changes.
+   GitHub holds code, PR review and CI, not a second task queue.
 5. Merge per [AGENTS.md](../AGENTS.md#merge-discipline).
 
-Issue labels mark exceptions, not categories: `agent-ready`, `decision-needed`,
-`blocked` (name the dependency in the body), `trading-safety`, `agent-review`,
-plus the GitHub defaults. An unlabeled open issue is ordinary ready work;
-deferred work is closed with a comment. Do not add labels beyond this set.
-File new work with the Task issue form.
+The [Linear GPT-Trader project in Work](https://linear.app/rj-openclaw/project/gpt-trader-27e81625d145)
+is the single task home. Read its current issue and comments before claiming
+work; return checks, PR/head and merge receipts, remaining owner and resumption
+trigger there. GitHub issue history stays readable; PR links do not imply issue
+sync across organizations. Use the existing native Linear connection and the
+registered team/project, never a new API key or hidden session transport.
+
+Preserve holds, not-before dates and operating evidence when moving a task.
+Verify each source issue's latest history and its exact Linear replacement
+before closing the GitHub original **as moved**, with a replacement link.
+Moving is routing only: it does not complete the work or release any hold.
+For #1212/#1224/#1232/#1238/#1367 the replacements are RJ-747–RJ-751 respectively;
+the November 25 forward-test protocol and historical operational holds remain.
+Do not close originals until this contract is reviewed and merged. New findings
+follow the [review pipeline](agents/project_review_pipeline.md#stage-3-promote).
 
 ## Conventions
 

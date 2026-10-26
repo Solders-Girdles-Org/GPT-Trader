@@ -12,8 +12,9 @@ cannot override observed behavior or an accepted decision.
 
 [Direction](DIRECTION.md) owns the destination and execution gates,
 [decisions](decisions/README.md) own durable choices, and the
-[issue tracker](https://github.com/Solders-Girdles-Org/GPT-Trader/issues) owns
-accepted next work. Source integration is separate from runtime deployment,
+[Linear GPT-Trader project in Work](https://linear.app/rj-openclaw/project/gpt-trader-27e81625d145)
+owns accepted tasks and their current owner/resumption trigger. GitHub retains
+code, PR review, CI and linked source history. Source integration is separate from runtime deployment,
 migration, authorization and measured promotion.
 
 ## Local product and continuation
@@ -120,6 +121,17 @@ spend before a dollar-sized card. Do not start the old runtime,
 use its approval grants for the new product, or infer a deployment from this
 page.
 
+## Task continuation
+
+[Linear routing](DEVELOPMENT_GUIDELINES.md#pr-flow) owns task handoff. RJ-747–RJ-751
+retain the five original operational items and their holds, including the
+November 25 forward-test window. A moved GitHub original is retained history,
+not operational completion. The native connector executes promoter plans;
+terminal `finding_id` matches are reused without reopening. This replaces the
+standalone GitHub writer rather than adding a credentialed Linear client.
+Reconsider an automated client only if a supported native tool cannot serve a
+required consumer; no credential or scheduler change is part of this cutover.
+
 ## Documentation continuation
 
 [Architecture](ARCHITECTURE.md) routes the recorded experiment, retained runtime
@@ -206,7 +218,6 @@ themselves prove entry into bounded autonomy or approval for live orders.
 ## Keeping this page current
 
 Update a source pointer when its capability changes, preferably in the same PR.
-Keep detailed behavior in its owning contract, volatile work in GitHub issues
-and PRs, and runtime evidence in its prescribed local stores. Preserve accepted
+Keep detailed behavior in its owning contract, volatile work in Linear with linked GitHub PRs, and runtime evidence in its prescribed local stores. Preserve accepted
 direction while correcting stale status text; an observed implementation does
 not silently amend a policy or grant authority.
