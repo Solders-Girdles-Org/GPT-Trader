@@ -113,7 +113,9 @@ def linear_snapshot(packet, issues=None):
     return {
         "team_id": promoter.LINEAR_TEAM_ID,
         "project_id": promoter.LINEAR_PROJECT_ID,
-        "query": promoter.marker_for(packet["finding_id"]),
+        "query": None,
+        "state": None,
+        "scope": "project_all_states",
         "include_archived": True,
         "has_next_page": False,
         "issues": issues or [],
@@ -139,6 +141,7 @@ def test_search_required_before_any_promotion() -> None:
     assert "request" not in plan
     assert plan["search"]["arguments"]["includeArchived"] is True
     assert "state" not in plan["search"]["arguments"]
+    assert "query" not in plan["search"]["arguments"]
 
 
 def test_empty_complete_search_plans_only_linear_backlog_create() -> None:
@@ -224,3 +227,19 @@ def test_truncated_search_descriptions_require_hydration() -> None:
     )
     with pytest.raises(ValueError, match="hydrate truncated"):
         promoter.promotion_plan(packet, linear_snapshot(packet, [issue]))
+
+
+def test_exhausted_marker_search_cannot_certify_terminal_absence() -> None:
+    import pytest
+
+    packet = promoter.example_packet()
+    # The native marker query omitted completed RJ-797 even with hasNextPage=false.
+    # That old read must fail rather than returning a duplicate create request.
+    snapshot = linear_snapshot(packet)
+    snapshot["query"] = promoter.marker_for(packet["finding_id"])
+    with pytest.raises(ValueError, match="without query or state filters"):
+        promoter.promotion_plan(packet, snapshot)
+    snapshot["query"] = None
+    snapshot["state"] = "started"
+    with pytest.raises(ValueError, match="without query or state filters"):
+        promoter.promotion_plan(packet, snapshot)

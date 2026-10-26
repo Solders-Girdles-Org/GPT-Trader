@@ -292,7 +292,6 @@ def promotion_plan(packet: dict[str, Any], snapshot: dict[str, Any] | None) -> d
     search = {
         "team": LINEAR_TEAM_ID,
         "project": LINEAR_PROJECT_ID,
-        "query": marker,
         "includeArchived": True,
         "fields": ["id", "description", "url", "statusType", "archivedAt", "teamId", "projectId"],
     }
@@ -307,13 +306,15 @@ def promotion_plan(packet: dict[str, Any], snapshot: dict[str, Any] | None) -> d
     expected = {
         "team_id": LINEAR_TEAM_ID,
         "project_id": LINEAR_PROJECT_ID,
-        "query": marker,
+        "query": None,
+        "state": None,
+        "scope": "project_all_states",
         "include_archived": True,
         "has_next_page": False,
     }
     if any(key not in snapshot or snapshot[key] != value for key, value in expected.items()):
         raise ValueError(
-            "snapshot must be a complete all-state, archived-inclusive native search for this finding and destination"
+            "snapshot must be a complete all-state, archived-inclusive project enumeration without query or state filters"
         )
     issues = snapshot.get("issues")
     if not isinstance(issues, list):

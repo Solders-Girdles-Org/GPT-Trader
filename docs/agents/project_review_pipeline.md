@@ -180,13 +180,15 @@ credentials, labels creation or a GitHub fallback. Promote at most one finding
 per scout run unless the owner requests a bulk pass.
 
 1. Run the promoter with `--packet <packet> --json`. Its `search_required` result
-   includes a native `list_issues` request for the registered Work team
+   includes an unfiltered native `list_issues` enumeration for the registered Work team
    (`6dac4998-d0f1-4eb9-8739-179db1379d55`) and GPT-Trader project
    (`b621cc17-1650-432b-802d-4575507d3a5b`). Execute it through the native connector.
-   Include archived issues, omit state filters and collect every page. On any
+   Include archived issues, omit both text-query and state filters and collect every page.
+   Marker search is not absence evidence: it has omitted a verified completed match. On any
    denied/failed read, stop; report action, target, reason and observed state.
 2. Export the fresh results as a temporary `--linear-snapshot <file>` input:
-   `team_id`, `project_id`, `query` (the exact emitted marker),
+   `team_id`, `project_id`, `scope: "project_all_states"`,
+   `query: null`, `state: null`,
    `include_archived: true`, `has_next_page: false` and `issues` (the accumulated
    native rows). Fetch every result with native `get_issue` for its full description; list
    previews can be truncated and search can return broad matches. Include each row's `id`, `description`, `url`, `statusType`,
@@ -200,12 +202,12 @@ per scout run unless the owner requests a bulk pass.
    plans `save_issue` in Backlog with exactly one Need label; routing hints in
    the body do not create custom labels or confer Ready authority.
 4. Before executing a planned write, re-read an existing match (or repeat the
-   search for a create), check current claims and add the responsible agent,
+   complete unfiltered project enumeration for a create), check current claims and add the responsible agent,
    resumption trigger and writer/model signature to the body. Apply the workspace
    Ready rule only after checking purpose, focus and holds. Execute via native
    `save_issue`/`save_comment`, then read back the exact marker and destination.
    If a write is uncertain, read back before retrying. Concurrent promoters must
-   serialize the final search/write; the connector offers no unique-marker lock.
+   serialize the final enumeration/write; the connector offers no unique-marker lock.
    If native access is absent, retain the packet and report the gap; do not use
    an API key, a hidden session or `gh issue create`.
 
