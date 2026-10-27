@@ -36,8 +36,8 @@ starting rules are agent-written. The [portfolio author](paper_trading.md#portfo
 adds a strict per-coin rewrite schema, weekly closed-daily-bar context, an offline
 spend bound and a replayable scratch-only smoke runner with the existing spend
 ceiling ([#1357](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1357)).
-Only synthetic/stub plumbing is tested; real token counts, reply quality and
-forward performance remain unmeasured. The [full-window author run](paper_trading.md#full-window-author-run-default-off)
+The later plumbing smoke below measured real token counts and accepted replies;
+forward performance remains unmeasured. The [full-window author run](paper_trading.md#full-window-author-run-default-off)
 and its read-only per-coin report are the forward run path
 ([#1364](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1364)). Step 3 of the
 [cheap-proofs decision](decisions/cheap-proofs-before-paid-ai-test.md) froze the
