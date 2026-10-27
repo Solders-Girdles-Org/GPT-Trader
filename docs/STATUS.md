@@ -36,8 +36,8 @@ starting rules are agent-written. The [portfolio author](paper_trading.md#portfo
 adds a strict per-coin rewrite schema, weekly closed-daily-bar context, an offline
 spend bound and a replayable scratch-only smoke runner with the existing spend
 ceiling ([#1357](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1357)).
-Only synthetic/stub plumbing is tested; real token counts, reply quality and
-forward performance remain unmeasured. The [full-window author run](paper_trading.md#full-window-author-run-default-off)
+The later plumbing smoke below measured real token counts and accepted replies;
+forward performance remains unmeasured. The [full-window author run](paper_trading.md#full-window-author-run-default-off)
 and its read-only per-coin report are the forward run path
 ([#1364](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1364)). Step 3 of the
 [cheap-proofs decision](decisions/cheap-proofs-before-paid-ai-test.md) froze the
@@ -131,6 +131,67 @@ terminal `finding_id` matches are reused without reopening. This replaces the
 standalone GitHub writer rather than adding a credentialed Linear client.
 Reconsider an automated client only if a supported native tool cannot serve a
 required consumer; no credential or scheduler change is part of this cutover.
+
+## M4 promotion evidence continuation
+
+[RJ-747](https://linear.app/rj-openclaw/issue/RJ-747) remains Waiting. Its
+November 8 checkpoint is a review date, not permission to resume the old loop.
+The [July 7 closeout](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1212#issuecomment-4910064978)
+completed all six M4 implementation workstreams, including the paper drawdown
+setting and suppression telemetry consumer. Its 4/7 scorecard is historical;
+the copied unchecked boxes are not remaining build work.
+
+The [October hold](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1212#issuecomment-6110909334)
+named #1252 and #1315. Those literal prerequisites closed: the
+[held-out result](decisions/held-out-benchmark-before-reasoning-proposer.md#result-2026-10-17)
+was action D (both fixed rules failed both cost cases), and
+[#1252's W1–W3 build](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1252#issuecomment-6245004316)
+handed execution to #1354. RJ declined that card; the
+[cheap-proofs decision](decisions/cheap-proofs-before-paid-ai-test.md)
+records the October 20–November 24 round as lapsed **UNRUN**, not failed evidence.
+The successor is [RJ-751 / #1367](https://linear.app/rj-openclaw/issue/RJ-751),
+with frozen source `448efed49c9677e80c85d743c918f4a547a7d0ff` and forward
+not-before **2026-11-26T02:00Z / November 25, 19:00 Phoenix**. The
+[smoke receipt](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1367#issuecomment-6297200724)
+reports three accepted turns and reconciled spend; it is plumbing proof,
+explicitly not research evidence. The later
+[offline rehearsal](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1367#issuecomment-6329685087)
+is also NOT-EVIDENCE and did not perform the independent Decimal audit.
+
+The seven rows below map the implemented
+[scorecard](../src/gpt_trader/features/trade_ideas/scorecard.py) to retained
+receipts. They are not a newly measured scorecard. July's aggregate 4/7 supplies
+no numeric eligibility, attribution or calibration rates in that receipt.
+
+| Gate and implemented measurement | Actually recorded evidence | Remaining evidence prerequisite if M4 resumes |
+| --- | --- | --- |
+| `track_record_depth`: ≥200 closed ideas and ≥60 days | July: 23/200, 6/60 days, failing. The later [cutover](decisions/paper-runtime-cutover.md#execution-record-2026-10-09) records 214 filled closeouts and 21 unfilled expiries, with seven filled outcomes unknown. | A valid observation-window report; raw historical counts do not certify a current gate. Replay cannot replace wall-clock depth. |
+| `eligibility_pass_rate`: ≥90% of proposed ideas | July aggregate only; no current per-row rate established here. | Proposed-idea eligibility numerator and denominator in the scored window. |
+| `attribution_coverage`: 100% of closed ideas | W2 shipped; cutover records 235 attributions, including 21 unfilled expiries. Seven filled ideas remain open in evidence with outcome unknown. | Closed-lifecycle denominator and complete attributed outcomes in a valid window; preserve unknowns rather than invent closeouts. |
+| `risk_calibration`: ≥95% of attributed losers within recorded max loss | Measurement code shipped; no current calibrated-loser ratio established by these receipts. | Attributed losing closeouts with recorded realized loss and max-loss estimates. |
+| `expectancy`: average R >0 | July: −0.56 R over two closeouts, failing. The held-out test later failed net of costs; that experiment result is not this R gate. | Comparable attributed closeouts with realized amounts and max-loss denominators, over the valid window. |
+| `benchmark_edge`: candidate average R minus baseline average R >0 | July: non-baseline closeouts missing. M5 replays showed relative mean-reversion edge but negative absolute expectancy on window A; #1315 then failed both rules net of costs. | Comparable baseline and candidate closeouts in the same wall-clock window; separately labelled replay comparisons remain supporting evidence. |
+| `max_drawdown_from_peak`: window worst ≤configured budget limit | July: 0.01% versus accepted 15% paper budget, pass. W5 and ratchet plumbing completed. | Attested-equity ledger points and the applicable budget for the scored window; July's pass is not a current measurement or a new risk-setting request. |
+
+`build_replay_evidence` labels replay evidence alongside the wall-clock scorecard
+and never feeds a gate verdict. M4's unchanged done-test is all seven gates
+measurable with honest pass/fail across wall-clock and replay evidence, with no
+not-yet-measurable rows; it does not require all seven to pass to close the
+umbrella. Promotion separately requires passing evidence and healthy loop/audit
+checks, kill-switch and daily-loss demonstrations under the
+[accepted rubric](decisions/adopt-measured-outcome-rubric.md), independent review
+and RJ's explicit grant. The experiment reading substituted for the old scorecard
+only within the separately accepted experiment card; it does not mark M4 done.
+
+Next: retain maintenance until RJ-751's frozen forward run and reading are
+recorded, then RJ chooses close or stage 4 under the
+[closing-state decision](decisions/evidence-first-improvement-rounds.md#decision).
+Any return to legacy accrual needs its own decision under the
+[cutover](decisions/paper-runtime-cutover.md#decision); the retired hourly loop
+is not a continuation step. Separate [RJ-748](https://linear.app/rj-openclaw/issue/RJ-748),
+[RJ-749](https://linear.app/rj-openclaw/issue/RJ-749) and
+[RJ-750](https://linear.app/rj-openclaw/issue/RJ-750) retain their own scopes and
+gates. This reconciliation records no new measurement or operational grant.
 
 ## Documentation continuation
 
