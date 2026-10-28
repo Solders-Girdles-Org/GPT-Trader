@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from gpt_trader.features.trade_ideas.models import TradeIdea
+from gpt_trader.features.trade_ideas.models import TradeIdea, is_safe_decision_id
 from gpt_trader.features.trade_ideas.persistence import StateRepository
 
 
@@ -26,6 +26,8 @@ class TradeIdeaStore:
         return self._root
 
     def _decision_dir(self, decision_id: str) -> Path:
+        if not is_safe_decision_id(decision_id):
+            raise ValueError("decision_id must be one filesystem-safe path segment")
         return self._root / decision_id
 
     def exists(self, decision_id: str) -> bool:
@@ -62,6 +64,8 @@ class TradeIdeaStore:
         if self._repository.active:
             payload = self._repository.record(decision_id, record_hash)
             return TradeIdea.from_dict(json.loads(payload)) if payload is not None else None
+        if not is_safe_decision_id(record_hash):
+            raise ValueError("record_hash must be one filesystem-safe path segment")
         path = self._decision_dir(decision_id) / f"{record_hash}.json"
         if not path.exists():
             return None
