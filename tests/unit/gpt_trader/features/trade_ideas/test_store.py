@@ -46,3 +46,15 @@ def test_list_decision_ids_sorted(store: TradeIdeaStore) -> None:
 
 def test_empty_store_lists_nothing(store: TradeIdeaStore) -> None:
     assert store.list_decision_ids() == []
+
+
+@pytest.mark.parametrize("unsafe", ["../outside", "/tmp/outside", "a/b", "a\\b", ".", "..", ""])
+def test_rejects_unsafe_lookup_paths(store: TradeIdeaStore, unsafe: str) -> None:
+    with pytest.raises(ValueError, match="decision_id"):
+        store.exists(unsafe)
+    with pytest.raises(ValueError, match="decision_id"):
+        store.load_latest(unsafe)
+    with pytest.raises(ValueError, match="decision_id"):
+        store.load_version(unsafe, "deadbeef")
+    with pytest.raises(ValueError, match="record_hash"):
+        store.load_version("trade-safe", unsafe)
