@@ -228,10 +228,16 @@ tracked in [#1387](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1387
 with `packaging 26.3` required by virtualenv. The subsequent virtualenv
 GHSA-cx6f-vjhg-g3cc is cleared by the 21.14.13 lock (RJ-905).
 The development-only pip-audit dependency msgpack is locked to 1.2.3 for
-CVE-2026-114613. Trivy remains active in the release-image workflow; RJ-905
-keeps its 247 findings from the June image scan open until the next authorized
-image build and scan can establish which remain. No image publication is
-authorized by that maintenance item. `filelock` is a direct runtime
+CVE-2026-114613. Trivy remains active in the release-image workflow. The
+[RJ-905 re-triage](https://linear.app/rj-openclaw/issue/RJ-905) of
+[release scan 40805644736](https://github.com/Solders-Girdles-Org/GPT-Trader/actions/runs/40805644736)
+found 297 open alerts: 12 fixable pip findings across the base and virtualenv
+copies, plus 285 Debian 13 findings without fixes. The Dockerfile upgrades
+both pip copies to at least 26.2.0 (RJ-926), preserving pip for the security
+stage. Confirmation that those 12 alerts are fixed waits for the next
+RJ-authorized image build and scan; the 285 unfixed OS findings stay open.
+RJ-912's one authorized build is consumed; this change authorizes no image
+publication. `filelock` is a direct runtime
 dependency for cycle, budget and autonomy locking, with a security floor of
 4.2.1 and a 4.2.4 lock clearing the advisories in
 [#1393](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1393). The basic

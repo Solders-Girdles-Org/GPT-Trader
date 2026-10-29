@@ -11,6 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Upgrade the base pip independently of the wheel bundled with ensurepip.
+RUN python -m pip install --no-cache-dir --upgrade "pip>=26.2.0"
+
 # Create non-root user available to descendant stages.
 RUN groupadd -r trader && useradd -r -g trader trader
 WORKDIR /app
@@ -36,7 +39,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install uv.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-RUN python -m venv /opt/venv
+# venv seeds pip from ensurepip, so upgrade its copy explicitly as well.
+RUN python -m venv /opt/venv \
+    && /opt/venv/bin/python -m pip install --no-cache-dir --upgrade "pip>=26.2.0"
 ENV VIRTUAL_ENV=/opt/venv \
     PATH="/opt/venv/bin:$PATH"
 
