@@ -55,12 +55,74 @@ def test_reserved_values_read_raw_lines() -> None:
     assert tt.reserved_values(body) == ["none.", "b - new paid feed"]
 
 
+LINK = "https://github.com/o/r/pull/1#pullrequestreview-1"
+
+
 def test_clean_review_must_name_current_head() -> None:
-    body = "Review: https://github.com/o/r/pull/1#pullrequestreview-1 (Codex) at abcdef1: clean"
+    body = f"Review: {LINK} (Codex) at abcdef1: clean"
     assert tt.clean_review_for_head(body, HEAD)
     assert not tt.clean_review_for_head(body, "1234567890")
-    blocking = "Review: https://x (Codex) at abcdef1: blocking"
-    assert not tt.clean_review_for_head(blocking, HEAD)
+    assert not tt.clean_review_for_head(f"Review: {LINK} (Codex) at abcdef1: blocking", HEAD)
+
+
+@pytest.mark.parametrize(
+    "ending",
+    [
+        "; no blocking findings",
+        ", with 2 non-blocking notes",
+        " (carried from 1234567: clean rebase)",
+    ],
+)
+def test_clean_review_allowed_endings(ending: str) -> None:
+    assert tt.clean_review_for_head(f"Review: {LINK} (Claude) at abcdef1: clean{ending}", HEAD)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        # A clean and a blocking outcome for the same head contradict each other.
+        f"Review: {LINK} (Codex) at abcdef1: clean\nReview: {LINK} (Claude) at abcdef1: blocking",
+        # A qualified clean outcome is not clean.
+        f"Review: {LINK} (Codex) at abcdef1: clean; blocking findings remain",
+        f"Review: {LINK} (Codex) at abcdef1: clean but see notes",
+        # A malformed line anywhere fails the set.
+        f"Review: {LINK} (Codex) at abcdef1: clean\nReview: pending (Claude)",
+        "Review: https://example.com/x (Codex) at abcdef1: clean",
+    ],
+)
+def test_clean_review_rejects_contradictory_or_qualified_lines(body: str) -> None:
+    assert not tt.clean_review_for_head(body, HEAD)
+
+
+def test_clean_review_for_earlier_head_with_blocking_is_fine() -> None:
+    body = (
+        f"Review: {LINK} (Codex) at 1234567: blocking\n"
+        f"Review: {LINK} (Codex) at abcdef1: clean; no blocking findings\nReview: none"
+    )
+    assert tt.clean_review_for_head(body, HEAD)
+
+
+def test_clean_review_link_must_be_this_pr_when_known() -> None:
+    body = f"Review: {LINK} (Codex) at abcdef1: clean"
+    assert tt.clean_review_for_head(body, HEAD, repo="o/r", number=1)
+    assert not tt.clean_review_for_head(body, HEAD, repo="o/r", number=2)
+
+
+def test_pr_files_lists_both_paths_of_a_rename(monkeypatch) -> None:
+    pages = [
+        [
+            {"filename": "docs/STATUS.md"},
+            {
+                "filename": "src/gpt_trader/utilities/submit.py",
+                "previous_filename": "src/gpt_trader/features/live_trade/execution/order_submission.py",
+            },
+        ]
+    ]
+    monkeypatch.setattr(tt, "_gh_json", lambda args: pages)
+    paths = tt.pr_files("o/r", 1)
+    assert tt.trading_paths(paths) == [
+        "src/gpt_trader/features/live_trade/execution/order_submission.py"
+    ]
 
 
 def test_routine_pr_without_trading_paths_is_info() -> None:
@@ -87,7 +149,7 @@ def test_trading_paths_with_unconfirmed_none_block() -> None:
 
 
 def test_trading_paths_with_none_and_clean_review_pass() -> None:
-    body = "Reserved: none\nReview: https://x (Claude) at abcdef1: clean; no blocking findings"
+    body = f"Reserved: none\nReview: {LINK} (Claude) at abcdef1: clean; no blocking findings"
     assert tt.assess(TRADING, body, HEAD).severity == "info"
 
 

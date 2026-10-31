@@ -263,6 +263,7 @@ def assess_readiness(
     require_current_head_review_signal: bool = False,
     merge_queue_active: bool = False,
     rj_authorized_head: str | None = None,
+    repo: str | None = None,
 ) -> ReadinessReport:
     """Reconcile checks + protection + threads into a non-blocking verdict."""
     findings: list[Finding] = []
@@ -270,7 +271,12 @@ def assess_readiness(
     if state.body is not None and state.changed_paths is not None:
         # RJ's reserved item (e): trades, broker accounts and their keys.
         trigger = trading_trigger.assess(
-            state.changed_paths, state.body, state.head_oid, rj_authorized_head
+            state.changed_paths,
+            state.body,
+            state.head_oid,
+            rj_authorized_head,
+            repo=repo,
+            number=state.number or None,
         )
         findings.append(Finding(trigger.severity, trigger.message))
 
@@ -1182,6 +1188,7 @@ def main(argv: list[str] | None = None) -> int:
         require_current_head_review_signal=args.require_current_head_review_signal,
         merge_queue_active=merge_queue_active,
         rj_authorized_head=args.rj_authorized_head,
+        repo=repo,
     )
     apply_protection_drift(report, protection_raw, base_ref_name)
     print(_render(args.format, state, report))

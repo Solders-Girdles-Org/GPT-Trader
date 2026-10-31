@@ -61,8 +61,14 @@ _DECLARATION = re.compile(
     r"^(?:[-*] )?(?:\*\*)?(reserved|review)(?:\*\*)?:(?:\*\*)?(.*)$", re.IGNORECASE
 )
 _NONE = re.compile(r"\s*none\.?\s*", re.IGNORECASE)
-_CLEAN_REVIEW = re.compile(
-    r"^\s*\S+\s+\((?:Codex|Claude)\)\s+at\s+([0-9a-f]{7,40}):\s*clean\b", re.IGNORECASE
+# The contract's only endings for a clean outcome: non-blocking notes, or a head
+# carried across a rebase for one of the listed reasons. Anything else is malformed.
+_CLEAN_ENDINGS = re.compile(
+    r"(?:[,;] (?:with )?(?:\d+ |one |two |three |some )?non-blocking (?:notes?|findings?)"
+    r"|; no blocking findings"
+    r"| \(carried from [0-9a-f]{7,40}: "
+    r"(?:clean rebase|rebase only|base merge only|no behavior change)\))?",
+    re.IGNORECASE,
 )
 
 
@@ -113,14 +119,49 @@ def reserved_values(body: str) -> list[str]:
     return _declarations(body, "reserved")
 
 
-def clean_review_for_head(body: str, head_oid: str) -> bool:
-    """Whether a ``Review:`` line records a clean review of this exact head."""
-    head = head_oid.lower()
-    for value in _declarations(body, "review"):
-        match = _CLEAN_REVIEW.match(value)
-        if match and head and head.startswith(match.group(1).lower()):
-            return True
-    return False
+def parse_review(value: str, repo: str | None = None, number: int | None = None) -> dict | None:
+    """``<review link> (Codex|Claude) at <sha>: clean[ allowed ending]`` or ``...: blocking``.
+
+    Returns None for anything else, so a qualified or unfinished outcome never counts.
+    With ``repo`` and ``number`` the link must be a review on that pull request.
+    """
+    if repo and number:
+        link = re.escape(f"https://github.com/{repo}/pull/{number}")
+    else:
+        link = r"https://github\.com/[^/\s]+/[^/\s]+/pull/\d+"
+    match = re.fullmatch(
+        link + r"#pullrequestreview-\d+ \((codex|claude)\) at ([0-9a-f]{7,40}): "
+        r"(clean|blocking)(.*)",
+        value,
+        re.IGNORECASE,
+    )
+    if not match:
+        return None
+    outcome, ending = match.group(3).lower(), match.group(4)
+    if outcome == "clean" and not _CLEAN_ENDINGS.fullmatch(ending):
+        return None
+    if outcome == "blocking" and ending and not re.match(r"\W", ending):
+        return None  # "blockingly" and the like are not an outcome
+    return {"family": match.group(1).lower(), "sha": match.group(2).lower(), "outcome": outcome}
+
+
+def clean_review_for_head(
+    body: str, head_oid: str, repo: str | None = None, number: int | None = None
+) -> bool:
+    """Whether the body's ``Review:`` lines confirm a clean review of this exact head.
+
+    Every Review line must be well formed (or ``none``), none may record a blocking
+    outcome for this head, and at least one must record a clean one.
+    """
+    head = (head_oid or "").lower()
+    if not head:
+        return False
+    values = [v for v in _declarations(body, "review") if not _NONE.fullmatch(v)]
+    reviews = [parse_review(v, repo, number) for v in values]
+    if any(r is None for r in reviews):
+        return False
+    current = [r for r in reviews if r and head.startswith(r["sha"])]
+    return bool(current) and all(r["outcome"] == "clean" for r in current)
 
 
 @dataclass(frozen=True)
@@ -135,6 +176,8 @@ def assess(
     body: str,
     head_oid: str,
     rj_authorized_head: str | None = None,
+    repo: str | None = None,
+    number: int | None = None,
 ) -> TriggerResult:
     """Apply reserved item (e) and the contract's Reserved line to one PR."""
     hits = tuple(trading_paths(paths))
@@ -170,7 +213,7 @@ def assess(
                 f"cross-family review of this head confirming it.{hit_note}",
                 hits,
             )
-        if not clean_review_for_head(body, head_oid):
+        if not clean_review_for_head(body, head_oid, repo, number):
             return TriggerResult(
                 "blocker",
                 "Trading or broker paths changed with `Reserved: none`; a clean cross-family "
@@ -206,7 +249,15 @@ def pr_files(repo: str, number: int) -> list[str]:
     pages = _gh_json(
         ["api", "--paginate", "--slurp", f"repos/{repo}/pulls/{number}/files?per_page=100"]
     )
-    return [item["filename"] for page in pages for item in page]
+    # A rename lists both paths, so moving a trading module out of the
+    # trigger's directories still counts as a trading change.
+    paths: list[str] = []
+    for page in pages:
+        for item in page:
+            paths.append(item["filename"])
+            if item.get("previous_filename"):
+                paths.append(item["previous_filename"])
+    return paths
 
 
 def replay(repo: str, limit: int) -> list[dict[str, Any]]:
