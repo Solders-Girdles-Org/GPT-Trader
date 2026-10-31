@@ -43,6 +43,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from gpt_trader.agents import trading_trigger
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Severity tokens emitted by review bots (CodeRabbit, Codex) in comment bodies,
@@ -124,6 +126,9 @@ class PullRequestState:
     head_committed_at: str | None = None
     head_updated_at: str | None = None
     review_signals: tuple[ReviewSignal, ...] = ()
+    # None means unknown (not fetched): the trading trigger is then skipped.
+    body: str | None = None
+    changed_paths: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -182,6 +187,7 @@ def parse_pr_state(
     *,
     review_bot: str | None = _DEFAULT_REVIEW_BOT,
     acceptance_marker: str | None = _DEFAULT_ACCEPTANCE_MARKER,
+    changed_paths: list[str] | None = None,
 ) -> PullRequestState:
     """Build PullRequestState from gh payloads + parsed branch protection."""
     required_names = set(protection.required_checks)
@@ -246,6 +252,8 @@ def parse_pr_state(
                 acceptance_marker=acceptance_marker,
             )
         ),
+        body=str(pr_json.get("body") or "") if changed_paths is not None else None,
+        changed_paths=tuple(changed_paths) if changed_paths is not None else None,
     )
 
 
@@ -254,9 +262,23 @@ def assess_readiness(
     *,
     require_current_head_review_signal: bool = False,
     merge_queue_active: bool = False,
+    rj_authorized_head: str | None = None,
+    repo: str | None = None,
 ) -> ReadinessReport:
     """Reconcile checks + protection + threads into a non-blocking verdict."""
     findings: list[Finding] = []
+
+    if state.body is not None and state.changed_paths is not None:
+        # RJ's reserved item (e): trades, broker accounts and their keys.
+        trigger = trading_trigger.assess(
+            state.changed_paths,
+            state.body,
+            state.head_oid,
+            rj_authorized_head,
+            repo=repo,
+            number=state.number or None,
+        )
+        findings.append(Finding(trigger.severity, trigger.message))
 
     observed_check_names = {check.name for check in state.checks}
     for name in sorted(set(state.protection.required_checks) - observed_check_names):
@@ -636,6 +658,11 @@ def format_json(state: PullRequestState | None, report: ReadinessReport) -> str:
             "base_ref_name": state.base_ref_name,
             "merge_state_status": state.merge_state_status,
             "review_decision": state.review_decision,
+            "trading_paths": (
+                trading_trigger.trading_paths(state.changed_paths)
+                if state.changed_paths is not None
+                else None
+            ),
             "head_committed_at": state.head_committed_at,
             "checks": [asdict(check) for check in state.checks],
             "threads": [asdict(thread) for thread in state.threads],
@@ -759,12 +786,17 @@ def fetch_pr_payload(repo: str, pr: int) -> dict[str, Any]:
             "--repo",
             repo,
             "--json",
-            "number,headRefOid,baseRefName,mergeStateStatus,reviewDecision,statusCheckRollup,reviews,commits",
+            "number,headRefOid,baseRefName,mergeStateStatus,reviewDecision,statusCheckRollup,reviews,commits,body",
         ]
     )
     if not isinstance(payload, dict):
         raise RuntimeError("Unexpected gh pr view payload")
     return payload
+
+
+def fetch_pr_files(repo: str, pr: int) -> list[str]:
+    """Every changed path, paginated (gh pr view --json files stops at 100)."""
+    return trading_trigger.pr_files(repo, pr)
 
 
 def fetch_pr_reactions(repo: str, pr: int) -> list[dict[str, Any]]:
@@ -1089,6 +1121,14 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="Treat a missing current-head review/reaction signal as NOT READY.",
     )
     parser.add_argument(
+        "--rj-authorized-head",
+        default=None,
+        help=(
+            "Head SHA RJ authorized for a reserved PR (trading, broker, or another reserved "
+            "effect). Clears the reserved blocker only when it matches the current head."
+        ),
+    )
+    parser.add_argument(
         "--exit-on-not-ready",
         action="store_true",
         help="Opt-in advisory gate: exit 1 when NOT READY (default exits 0).",
@@ -1138,6 +1178,7 @@ def main(argv: list[str] | None = None) -> int:
             head_committed_at,
             review_bot=args.review_bot or None,
             acceptance_marker=args.acceptance_marker or None,
+            changed_paths=fetch_pr_files(repo, pr),
         )
     except RuntimeError as error:
         return _github_failure(args, f"Could not load PR #{pr}: {error}")
@@ -1146,6 +1187,8 @@ def main(argv: list[str] | None = None) -> int:
         state,
         require_current_head_review_signal=args.require_current_head_review_signal,
         merge_queue_active=merge_queue_active,
+        rj_authorized_head=args.rj_authorized_head,
+        repo=repo,
     )
     apply_protection_drift(report, protection_raw, base_ref_name)
     print(_render(args.format, state, report))
