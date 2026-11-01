@@ -158,6 +158,48 @@ def test_pr_verdict_also_replaces_a_queued_copys_status(github: FakeGitHub) -> N
     ]
 
 
+class FlakyGitHub(FakeGitHub):
+    """Fails the first call whose arguments contain ``fail_on``."""
+
+    def __init__(self, fail_on: str, always: bool = False) -> None:
+        super().__init__("Reserved: none", [TRADING])
+        self.fail_on = fail_on
+        self.always = always
+
+    def __call__(self, args: list[str]) -> str:
+        if self.fail_on and any(self.fail_on in a for a in args):
+            if not self.always:
+                self.fail_on = ""
+            raise RuntimeError("HTTP 502")
+        return super().__call__(args)
+
+
+@pytest.mark.parametrize("fail_on", ["--paginate", "/git/matching-refs/", "--merge-group-ref"])
+def test_pr_run_error_still_reaches_queued_copies(
+    monkeypatch: pytest.MonkeyPatch, fail_on: str
+) -> None:
+    # An API failure in an edit run must not leave a queued copy's success.
+    fake = FlakyGitHub(fail_on)
+    fake.queue_refs = [_queue_ref(7, QUEUE_SHA)]
+    monkeypatch.setattr(status, "_gh", fake)
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    code = run("--pr", "7", "--expected-head", HEAD)
+    states = {p["sha"]: p["state"] for p in fake.posted}
+    if fail_on == "--merge-group-ref":  # never called: the healthy path
+        assert (code, states) == (0, {HEAD: "failure", QUEUE_SHA: "failure"})
+    else:
+        assert (code, states) == (1, {HEAD: "error", QUEUE_SHA: "error"})
+
+
+def test_error_posting_continues_past_a_failed_post(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FlakyGitHub(f"statuses/{HEAD}", always=True)
+    fake.queue_refs = [_queue_ref(7, QUEUE_SHA)]
+    monkeypatch.setattr(status, "_gh", fake)
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    assert run("--pr", "7", "--expected-head", HEAD) == 1
+    assert [(p["sha"], p["state"]) for p in fake.posted] == [(QUEUE_SHA, "error")]
+
+
 def test_queue_run_judges_again_when_the_body_changes_after_it_posts(
     github: FakeGitHub,
 ) -> None:

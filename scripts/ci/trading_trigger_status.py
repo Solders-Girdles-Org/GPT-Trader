@@ -160,10 +160,9 @@ def _snapshot(pr: dict[str, Any]) -> tuple[str, str]:
     return str(pr["head"]["sha"]), str(pr.get("body") or "")
 
 
-def queue_shas(repo: str, pr: dict[str, Any]) -> list[str]:
+def queue_shas(repo: str, number: int, base: str = "main") -> list[str]:
     """Commits of the merge-queue branches now testing this PR."""
-    number = int(pr["number"])
-    prefix = f"heads/gh-readonly-queue/{pr['base']['ref']}/pr-{number}-"
+    prefix = f"heads/gh-readonly-queue/{base}/pr-{number}-"
     refs = json.loads(_gh(["api", f"repos/{repo}/git/matching-refs/{prefix}"]))
     shas = []
     for ref in refs if isinstance(refs, list) else []:
@@ -230,6 +229,9 @@ def main(argv: list[str] | None = None) -> int:
     queued = args.merge_group_ref is not None
     number: int | None = None
     sha: str | None = args.status_sha or args.expected_head
+    # Merge-queue commits testing this PR: a PR run's verdict, or its error,
+    # replaces their status too, so a body edit reaches a queued copy.
+    targets: list[str] = []
 
     def publish(target: str, verdict: Verdict) -> None:
         print(f"{CONTEXT}: {verdict.state} on {target[:12]} (PR #{number}): {verdict.message}")
@@ -239,6 +241,8 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         number = queued_pr_number(args.merge_group_ref) if queued else int(args.pr)
+        if not queued:
+            targets = queue_shas(args.repo, number)
         trigger = load_trigger()
         verdict, pr = evaluate(
             trigger, args.repo, number, expected_head=args.expected_head, queued=queued
@@ -258,19 +262,24 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 publish(sha, Verdict("failure", f"PR #{number} kept changing while queued."))
         else:
-            # A queued copy of this PR keeps its own status; this verdict replaces it.
-            for group_sha in queue_shas(args.repo, pr):
-                publish(group_sha, verdict)
+            for target in targets:
+                publish(target, verdict)
     except Skip as skip:
         print(f"Skipped: {skip}")
         return 0
     except Exception as error:  # noqa: BLE001 - any failure must not leave an old success
         verdict = Verdict("error", f"Trading trigger failed to run: {error}")
         print(verdict.message, file=sys.stderr)
-        if sha is not None:
-            if not args.print_only:
-                post_status(args.repo, sha, verdict, args.target_url)
-            write_summary(os.environ.get("GITHUB_STEP_SUMMARY"), verdict, sha, number)
+        if number is not None and not queued and not targets:
+            try:
+                targets = queue_shas(args.repo, number)
+            except Exception as again:  # noqa: BLE001
+                print(f"Could not list queued copies: {again}", file=sys.stderr)
+        for target in dict.fromkeys(t for t in (sha, *targets) if t):
+            try:
+                publish(target, verdict)
+            except Exception as again:  # noqa: BLE001 - reach every target we can
+                print(f"Could not post on {target[:12]}: {again}", file=sys.stderr)
         return 1
     return 0
 
