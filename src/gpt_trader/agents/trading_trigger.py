@@ -8,12 +8,18 @@ trade, or that touches a broker or exchange account or its keys.
 Reserved is judged by what a change does, not by file names. These paths are
 the trigger: a PR that changes one must say so in its body, either declaring
 ``Reserved: e ...`` (RJ authorizes the head) or ``Reserved: none`` with a clean
-cross-family ``Review:`` line for the current head that confirms it.
+cross-family ``Review:`` line for the current head that confirms it. Every PR
+needs a ``Reserved:`` line; one without it is blocked even off these paths.
 ``agent-pr-ready`` reports the result.
 
-Replay the trigger over recent merged PRs::
+The trigger flags directories by default and lists its exceptions with
+reasons. A token scan backs it up: a tracked file that reads broker keys or
+builds a broker outside the trigger fails the unit test until classified.
 
-    uv run python -m gpt_trader.agents.trading_trigger --replay 20
+Replay the trigger over recent merged PRs, or run the scan::
+
+    uv run python -m gpt_trader.agents.trading_trigger --replay 60
+    uv run python -m gpt_trader.agents.trading_trigger --self-check
 """
 
 from __future__ import annotations
@@ -25,57 +31,122 @@ import subprocess
 import sys
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-# Paths whose changes can reach a real venue, a broker account or its keys.
+# The trigger flags whole directories that hold live-capable code, so a new
+# file there is caught by default; TRADING_EXCEPT then names, with a reason,
+# what inside them cannot reach a real venue, account or key. Widening the
+# trigger is not reserved; every exception added here must say why.
 TRADING_PATTERNS: tuple[str, ...] = (
-    "src/gpt_trader/features/brokerages/**",
-    "src/gpt_trader/features/live_trade/**",
-    "src/gpt_trader/features/idea_execution/**",
-    "src/gpt_trader/cli/commands/orders.py",
-    "src/gpt_trader/cli/commands/coinbase.py",
-    "src/gpt_trader/cli/commands/broker_connectivity.py",
-    "src/gpt_trader/security/secrets_manager.py",
-    "src/gpt_trader/security/order_validator.py",
-    "src/gpt_trader/app/config/bot_config.py",
-    "src/gpt_trader/app/config/profile_loader.py",
-    # Profiles and the code that applies them: any profile YAML can set
-    # mock_broker false (real Coinbase client, real keys) and dry_run false
-    # (no ReadOnlyBroker wrapper), and these two files decide what the YAML's
-    # silence and the profile's values turn into on the running config.
-    "src/gpt_trader/app/config/profile_schema.py",
-    "src/gpt_trader/cli/services.py",
-    "config/profiles/**",
-    "config/brokers/**",
-    "config/risk/**",
-    "config/environments/.env.template",
-    # Outside the broker package, these read real broker keys, build an
-    # authenticated client and call the account with it, or choose which broker
-    # gets built or handed out; the canary script can place a live order. Code
-    # that only uses an already-built broker (record, product_catalog_probe)
-    # stays out.
-    "src/gpt_trader/app/container.py",
-    "src/gpt_trader/app/containers/brokerage.py",
-    "src/gpt_trader/cli/commands/account.py",
-    "src/gpt_trader/preflight/core.py",
-    "src/gpt_trader/preflight/context.py",
-    "src/gpt_trader/preflight/diagnostics_bundle.py",
-    "src/gpt_trader/preflight/checks/connectivity.py",
-    "src/gpt_trader/preflight/checks/diagnostics.py",
-    "src/gpt_trader/preflight/checks/environment.py",
-    "src/gpt_trader/preflight/checks/system.py",
-    "scripts/monitoring/canary_reduce_only_test.py",
-    "scripts/ops/api_connectivity_smoke.py",
-    "scripts/ops/hybrid_paper_broker_smoke.py",
+    # Broker adapters, the live loop and idea execution, including any sibling
+    # package a refactor adds next to them (brokerages_v2, live_trade_v2, ...).
+    "src/gpt_trader/features/brokerages*/**",
+    "src/gpt_trader/features/live_trade*/**",
+    "src/gpt_trader/features/idea_execution*/**",
+    # Entry points and runtime wiring: the CLI parses --profile and --dry-run
+    # and runs the bot; app/ bootstraps, picks mock or real broker and builds
+    # the container; config/types.py names the profiles; preflight reads real
+    # keys and calls the account; security/ holds secrets and order checks.
+    "src/gpt_trader/cli/**",
+    "src/gpt_trader/app/**",
+    "src/gpt_trader/config/**",
+    "src/gpt_trader/preflight/**",
+    "src/gpt_trader/security/**",
+    # Profiles, broker specs, risk limits and the env template: any profile can
+    # set mock_broker false (real client, real keys) and dry_run false.
+    "config/**",
+    # Operator scripts that launch the canary, read real keys or place orders.
+    "scripts/ops/**",
+    "scripts/monitoring/**",
+    "scripts/production_preflight.py",
+    # Deployment: what the image runs, which profile, which keys it gets.
+    "deploy/**",
+    "Makefile",
+    "**/Dockerfile*",
+    "**/docker-compose*",
+    "**/.env*",
+    # Tests that read real keys and call a real account.
+    "tests/real_api/**",
 )
 
-# Inside those paths, these cannot reach a real venue or account.
-TRADING_EXCEPT: tuple[str, ...] = (
-    "**/*.md",
-    "src/gpt_trader/features/brokerages/mock/**",
-    "src/gpt_trader/features/brokerages/paper/**",
-    "src/gpt_trader/features/live_trade/telemetry/**",
+# Inside those directories, what cannot reach a real venue, account or key.
+TRADING_EXCEPT: dict[str, str] = {
+    "**/*.md": "documentation",
+    "src/gpt_trader/features/brokerages/mock/deterministic.py": (
+        "in-memory deterministic broker; no network or keys (the package __init__ "
+        "stays flagged because it decides what the factory imports)"
+    ),
+    "src/gpt_trader/features/live_trade/telemetry/**": "metrics and event emission only",
+    "src/gpt_trader/cli/response.py": "CLI output formatting",
+    "src/gpt_trader/cli/commands/console.py": (
+        "operator console over TradeIdeaService; never contacts a broker"
+    ),
+    "src/gpt_trader/cli/commands/experiment.py": (
+        "offline experiments over recorded inputs; imports no broker or container"
+    ),
+    "src/gpt_trader/cli/commands/ideas_input.py": "parses idea inputs from files",
+    "src/gpt_trader/cli/commands/report.py": "reports from local event files",
+    "src/gpt_trader/cli/commands/strategy_profile.py": "diffs strategy-profile JSON",
+    "src/gpt_trader/preflight/checks/risk.py": "checks local risk settings only",
+    "config/agents/**": "agent tooling settings (naming, docs currency)",
+    "config/experiments/**": "pinned experiment protocols; replayed offline",
+    "scripts/ops/controls_smoke.py": "exercises controls against a MagicMock broker",
+    "scripts/ops/formatting.py": "output helpers for the ops scripts",
+    "scripts/ops/liveness_check.py": "reads the local event store",
+    "scripts/ops/readiness_window.py": "reads the local event store",
+    "scripts/ops/runtime_fingerprint.py": "reads the local event store",
+    "scripts/ops/tail_decision_traces.py": "reads the local event store",
+    "scripts/ops/replay_evidence.sh": "broker-free replay over public candles",
+    "scripts/ops/stage1_rails_smoke.py": "offline smoke on the deterministic paper broker",
+    "scripts/monitoring/export_metrics.py": "serves local metrics over HTTP",
+    "scripts/monitoring/manage_logs.py": "rotates local logs",
+    "deploy/gpt_trader/docker/grafana/**": "dashboards over local metrics",
+    "deploy/gpt_trader/docker/prometheus*.yml": "metrics scrape settings",
+}
+
+# Backstop for the path rule: text that reads real broker keys, builds a broker
+# client or container, or picks mock versus real broker and dry run. Every
+# tracked file outside the skipped areas that contains one must be flagged,
+# be named exactly in TRADING_EXCEPT, or be listed in REVIEWED_OUTSIDE, so a
+# new live-capable file (including one under a wildcard exception) fails the
+# unit test (``--self-check``) until someone classifies it. Building the app
+# container counts: it holds whatever broker the profile picks, so one added
+# call in a script that builds it could place an order.
+LIVE_CAPABLE = re.compile(
+    r"COINBASE_[A-Z_]*(?:API_KEY|PRIVATE_KEY|API_SECRET|CDP|CREDENTIALS|SANDBOX|PASSPHRASE)"
+    r"|ROBINHOOD_[A-Z_]*(?:KEY|SECRET|TOKEN)"
+    r"|resolve_coinbase_credentials|create_brokerage|CoinbaseClient\(|CDPJWTAuth\("
+    r"|SimpleAuth\(|HybridPaperBroker\(|instantiate_container|create_application_container"
+    r"|MOCK_BROKER|\bDRY_RUN\b|--dry-run(?![-\w])|gpt-trader run|gpt_trader\.cli.{0,20}\brun\b"
+    r"""|["']run["'],\s*["']--(?:profile|dry-run)"""
 )
+
+# Areas the backstop does not scan: prose, and unit tests (mock-only in CI).
+SCAN_SKIP: tuple[str, ...] = ("**/*.md", "docs/**", "tests/unit/**", "uv.lock")
+
+# Files outside the trigger that contain a LIVE_CAPABLE token, and why each
+# still cannot reach a real venue, account or key.
+REVIEWED_OUTSIDE: dict[str, str] = {
+    "src/gpt_trader/agents/trading_trigger.py": "this rule's own token list",
+    ".github/actions/setup-coinbase-creds/action.yml": "writes placeholder test values",
+    ".github/workflows/ci.yml": "sets MOCK_BROKER=1 for CI test runs",
+    ".github/workflows/integration.yml": "sets MOCK_BROKER=1 for CI test runs",
+    "scripts/analysis/backtest_runner.py": "unauthenticated client for public candles",
+    "scripts/maintenance/feature_slice_scaffold.py": "its own --dry-run for file scaffolding",
+    "src/gpt_trader/backtesting/data/manager.py": "docstring example only",
+    "src/gpt_trader/features/data/data.py": "docstring example only",
+    "src/gpt_trader/features/recorder/candle_capture.py": "client built with auth=None",
+    "src/gpt_trader/features/recorder/snapshot_source.py": "client built with auth=None",
+    "src/gpt_trader/monitoring/configuration_guardian/environment.py": (
+        "watches MOCK_BROKER for drift; does not set it"
+    ),
+    "tests/constants.py": "test env defaults (mock broker, sandbox)",
+    "tests/contract/conftest.py": "client built with auth=None against recorded fixtures",
+    "tests/integration/conftest.py": "forces MOCK_BROKER=1",
+    "tests/integration/test_container_lifecycle_cli.py": "runs the CLI on the mock broker",
+    "tests/integration/test_risk_budget_seeded_breaker.py": "runs on the mock broker",
+}
 
 # The contract's PR-body lines. Like the Workspace Operations gate, read raw
 # lines: a line counts wherever it sits, so a declaration can't be hidden.
@@ -125,6 +196,36 @@ def trading_paths(paths: Iterable[str]) -> list[str]:
         if any(rx.match(path) for rx in _INCLUDE) and not any(rx.match(path) for rx in _EXCLUDE)
     }
     return sorted(hits)
+
+
+_SKIP = tuple(_glob_regex(p) for p in SCAN_SKIP)
+
+
+def _skipped(path: str) -> bool:
+    return any(rx.match(path) for rx in _SKIP)
+
+
+def tracked_files(root: Path) -> list[str]:
+    result = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=root, capture_output=True, text=True, check=True
+    )
+    return [p for p in result.stdout.split("\0") if p]
+
+
+def unflagged_live_capable(root: Path, paths: Iterable[str] | None = None) -> list[str]:
+    """Files with a LIVE_CAPABLE token that neither the trigger nor REVIEWED_OUTSIDE covers."""
+    misses = []
+    for path in tracked_files(root) if paths is None else paths:
+        reviewed = path in REVIEWED_OUTSIDE or path in TRADING_EXCEPT
+        if _skipped(path) or reviewed or trading_paths([path]):
+            continue
+        try:
+            text = (root / path).read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        if LIVE_CAPABLE.search(text):
+            misses.append(path)
+    return sorted(misses)
 
 
 def _declarations(body: str, name: str) -> list[str]:
@@ -249,8 +350,10 @@ def assess(
             hits,
         )
     if not values:
+        # A path the trigger misses must not merge undeclared: the line is the
+        # author's own check that the change cannot reach a trade or key.
         return TriggerResult(
-            "warning",
+            "blocker",
             "PR body has no `Reserved:` line; the shared handoff contract asks every PR "
             "for `Reserved: none` or the reserved effect.",
         )
@@ -310,8 +413,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--replay", type=int, metavar="N", help="Classify the last N merged PRs.")
     parser.add_argument("--repo", default="Solders-Girdles-Org/GPT-Trader")
+    parser.add_argument(
+        "--self-check",
+        action="store_true",
+        help="List tracked files that look live-capable but sit outside the trigger.",
+    )
     parser.add_argument("paths", nargs="*", help="Changed paths to classify.")
     args = parser.parse_args(argv)
+    if args.self_check:
+        misses = unflagged_live_capable(Path.cwd())
+        for path in misses:
+            print(path)
+        return 1 if misses else 0
     if args.replay:
         print("| PR | Title | Trigger | Trading paths |")
         print("| --- | --- | --- | --- |")

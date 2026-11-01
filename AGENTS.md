@@ -53,8 +53,9 @@ Agents merge their own PRs under RJ's standing policy in the shared
 [handoff contract](https://github.com/Solders-Girdles/workspace-operations/blob/main/HANDOFF-CONTRACT.md#what-needs-review);
 every PR body carries its `Reserved:` and `Self-check:` lines. A change that
 can place, change or cancel a trade, or touches a broker or exchange account
-or its keys, is RJ's (reserved item e). `agent-pr-ready` flags trading and
-broker paths ([trigger](src/gpt_trader/agents/trading_trigger.py)): declare
+or its keys, is RJ's (reserved item e). `agent-pr-ready` blocks a body with
+no `Reserved:` line and flags trading and broker paths
+([trigger](src/gpt_trader/agents/trading_trigger.py)): declare
 `Reserved: e - <effect>` and pass `--rj-authorized-head <sha>` once RJ
 authorizes that head, or keep `Reserved: none` with a clean cross-family
 `Review:` line for the current head confirming no such effect.
