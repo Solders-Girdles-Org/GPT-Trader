@@ -15,9 +15,15 @@ needs a ``Reserved:`` line; one without it is blocked even off these paths.
 The trigger flags directories by default and lists its exceptions with
 reasons; anything under ``src/gpt_trader/`` that no exception names, such as a
 new package, is flagged. The trigger also flags itself and the readiness check
-that applies it, so a PR cannot narrow the rule it is judged by. A token scan
-backs it up: a tracked file that reads broker keys or builds a broker outside
-the trigger fails the unit test until classified.
+that applies it, and ``agent-pr-ready`` judges each PR with the base branch's
+trigger as well as the checkout's, so a PR cannot narrow the rule it is judged
+by. A token scan backs it up: a tracked file that reads broker keys or builds
+a broker outside the trigger fails the unit test until classified.
+
+Limit: ``agent-pr-ready`` runs in the PR's checkout, and the merging agent
+runs it. It catches a mistaken ``Reserved: none``; it cannot stop code written
+to fool the process it runs in. That needs a required check run from trusted
+base-branch code.
 
 Replay the trigger over recent merged PRs, or run the scan::
 
@@ -85,6 +91,7 @@ TRADING_PATTERNS: tuple[str, ...] = (
     "**/sitecustomize.py",
     "**/usercustomize.py",
     "scripts/agents/**",
+    "scripts/ci/check_branch_protection.py",
     "tests/unit/gpt_trader/agents/test_trading_trigger*.py",
     "tests/unit/scripts/test_pr_readiness_base_trigger.py",
     # Everything else in the package, so a new package or module (a

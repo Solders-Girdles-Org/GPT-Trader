@@ -112,6 +112,7 @@ HEAD = "abcdef1234567890"
         "tests/constants.py",
         # A module next to pr_readiness.py could shadow a standard one.
         "scripts/agents/json.py",
+        "scripts/ci/check_branch_protection.py",
         # Python imports these at startup, before any gate code runs.
         "src/sitecustomize.py",
         "usercustomize.py",

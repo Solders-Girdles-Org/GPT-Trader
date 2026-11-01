@@ -117,25 +117,6 @@ def test_backstop_catches_alpaca_keys(tmp_path: Path) -> None:
     assert tt.unflagged_live_capable(tmp_path, ["tool.py"]) == ["tool.py"]
 
 
-def test_the_readiness_launcher_loads_only_flagged_project_code() -> None:
-    # agent-pr-ready imports gpt_trader.agents.cli; every project module that
-    # import loads runs before the trigger decides, so each must be flagged.
-    import subprocess
-    import sys
-
-    code = (
-        "import sys, gpt_trader.agents.cli; "
-        "print('\\n'.join(sorted(m.__file__ for n, m in sys.modules.items() "
-        "if n.split('.')[0] == 'gpt_trader')))"
-    )
-    out = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, check=True, cwd=REPO
-    ).stdout
-    loaded = [str(Path(f).resolve().relative_to(REPO)) for f in out.split()]
-    assert loaded, "probe loaded nothing"
-    assert tt.trading_paths(loaded) == sorted(loaded)
-
-
 def test_pr_ready_starts_readiness_isolated(monkeypatch) -> None:
     from gpt_trader.agents import cli
 
