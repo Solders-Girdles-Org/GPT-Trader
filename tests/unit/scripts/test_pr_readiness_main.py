@@ -54,6 +54,7 @@ def test_main_reports_missing_current_head_review_signal_by_default(monkeypatch,
             "mergeStateStatus": "CLEAN",
             "reviewDecision": "",
             "statusCheckRollup": [],
+            "body": "Reserved: none",
         },
     )
 

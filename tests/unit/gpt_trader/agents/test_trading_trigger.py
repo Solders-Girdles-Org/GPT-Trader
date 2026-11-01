@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from gpt_trader.agents import trading_trigger as tt
@@ -44,6 +46,40 @@ HEAD = "abcdef1234567890"
         "src/gpt_trader/preflight/checks/diagnostics.py",
         "src/gpt_trader/preflight/checks/environment.py",
         "src/gpt_trader/preflight/checks/system.py",
+        # RJ-1116: run entry points, canary launch, deploy, real-API tests,
+        # sibling packages, and scripts that build the app container.
+        "src/gpt_trader/cli/commands/run.py",
+        "src/gpt_trader/cli/options.py",
+        "src/gpt_trader/cli/__init__.py",
+        "src/gpt_trader/cli/__main__.py",
+        "src/gpt_trader/cli/commands/record.py",
+        "src/gpt_trader/app/bootstrap.py",
+        "src/gpt_trader/config/types.py",
+        "src/gpt_trader/features/brokerages/paper/hybrid.py",
+        "src/gpt_trader/features/brokerages/mock/__init__.py",
+        "src/gpt_trader/features/brokerages_v2/coinbase/client.py",
+        "src/gpt_trader/features/live_trade_v2/engine.py",
+        "scripts/ops/canary_process.py",
+        "scripts/ops/canary_watchdog.py",
+        "scripts/ops/product_catalog_probe.py",
+        "scripts/ops/decision_trace_probe.py",
+        "scripts/ops/stage1_cycle_turn.sh",
+        "scripts/monitoring/perps_dashboard.py",
+        "scripts/production_preflight.py",
+        "Makefile",
+        "deploy/gpt_trader/docker/Dockerfile",
+        "deploy/gpt_trader/docker/docker-compose.yaml",
+        "deploy/scripts/deploy.sh",
+        "docker-compose.yaml",
+        ".env.production",
+        "tests/real_api/test_coinbase_permissions.py",
+        "tests/real_api/test_coinbase_read_preview_non_mutation.py",
+        "tests/real_api/test_robinhood_agentic_read_review_non_mutation.py",
+        "tests/real_api/test_robinhood_crypto_read_preview_non_mutation.py",
+        # New files in a flagged directory are caught by default.
+        "src/gpt_trader/cli/commands/new_command.py",
+        "src/gpt_trader/app/containers/new_container.py",
+        "scripts/ops/new_launcher.py",
     ],
 )
 def test_trading_paths_hit(path: str) -> None:
@@ -54,7 +90,6 @@ def test_trading_paths_hit(path: str) -> None:
     "path",
     [
         "src/gpt_trader/features/brokerages/mock/deterministic.py",
-        "src/gpt_trader/features/brokerages/paper/hybrid.py",
         "src/gpt_trader/features/brokerages/coinbase/README.md",
         "src/gpt_trader/features/live_trade/telemetry/metrics.py",
         "src/gpt_trader/features/trade_ideas/store.py",
@@ -62,12 +97,16 @@ def test_trading_paths_hit(path: str) -> None:
         "scripts/analysis/backtest_runner.py",
         "scripts/ops/controls_smoke.py",
         "src/gpt_trader/preflight/checks/risk.py",
-        "src/gpt_trader/cli/commands/record.py",
-        "scripts/ops/product_catalog_probe.py",
+        "src/gpt_trader/cli/commands/experiment.py",
+        "src/gpt_trader/cli/commands/console.py",
+        "config/experiments/round-two-2026-10-20/protocol.json",
+        "config/agents/naming_patterns.yaml",
+        "deploy/gpt_trader/docker/grafana/dashboards/system_overview.json",
+        "scripts/ops/readiness_window.py",
         "tests/unit/gpt_trader/features/brokerages/coinbase/test_auth.py",
         "config/profiles/README.md",
         "src/gpt_trader/cli/commands/strategy_profile.py",
-        "deploy/gpt_trader/docker/Dockerfile",
+        "deploy/gpt_trader/README.md",
         "docs/COINBASE.md",
         "uv.lock",
         ".github/workflows/ci.yml",
@@ -157,9 +196,11 @@ def test_routine_pr_without_trading_paths_is_info() -> None:
     assert result.severity == "info"
 
 
-def test_missing_reserved_line_warns_on_routine_pr() -> None:
+def test_missing_reserved_line_blocks_even_off_trading_paths() -> None:
+    # A path the trigger misses must still carry the author's declaration.
     result = tt.assess(["uv.lock"], "bump deps", HEAD)
-    assert result.severity == "warning"
+    assert result.severity == "blocker"
+    assert result.paths == ()
 
 
 TRADING = ["src/gpt_trader/features/live_trade/execution/order_submission.py"]
@@ -196,3 +237,51 @@ def test_blank_reserved_line_blocks() -> None:
 def test_any_reserved_value_wins_over_none() -> None:
     body = "Reserved: none\nReserved: a - new API key scope"
     assert tt.assess(["docs/STATUS.md"], body, HEAD).severity == "blocker"
+
+
+REPO = Path(tt.__file__).resolve().parents[3]
+
+
+def test_every_exception_has_a_reason() -> None:
+    for table in (tt.TRADING_EXCEPT, tt.REVIEWED_OUTSIDE):
+        assert all(reason.strip() for reason in table.values())
+
+
+def test_exceptions_and_reviewed_files_are_current() -> None:
+    files = tt.tracked_files(REPO)
+    stale = [p for p in tt.TRADING_EXCEPT if not any(tt._glob_regex(p).match(f) for f in files)]
+    assert stale == []
+    for path in tt.REVIEWED_OUTSIDE:
+        text = (REPO / path).read_text(encoding="utf-8")
+        assert tt.LIVE_CAPABLE.search(text), f"{path} no longer needs review; drop it"
+        assert not tt.trading_paths([path]), f"{path} is flagged; drop it"
+
+
+def test_no_live_capable_file_sits_outside_the_trigger() -> None:
+    # A file that reads broker keys, builds a broker or container, or picks
+    # mock versus real must be flagged or carry a reviewed reason.
+    assert tt.unflagged_live_capable(REPO) == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        'key = os.getenv("COINBASE_PROD_CDP_API_KEY")',
+        "broker = create_brokerage(config)",
+        "container = create_application_container(config)",
+        'subprocess.run(["gpt-trader", "run", "--profile", "canary"])',
+        "CMD gpt-trader run --profile prod",
+        'os.environ["MOCK_BROKER"] = "0"',
+    ],
+)
+def test_backstop_catches_a_new_live_capable_file(tmp_path: Path, text: str) -> None:
+    (tmp_path / "scripts" / "analysis").mkdir(parents=True)
+    (tmp_path / "scripts/analysis/new_tool.py").write_text(text)
+    (tmp_path / "scripts/analysis/notes.md").write_text(text)
+    paths = ["scripts/analysis/new_tool.py", "scripts/analysis/notes.md"]
+    assert tt.unflagged_live_capable(tmp_path, paths) == ["scripts/analysis/new_tool.py"]
+
+
+def test_backstop_ignores_unrelated_dry_run_flags(tmp_path: Path) -> None:
+    (tmp_path / "tool.py").write_text('parser.add_argument("--dry-run-summary")')
+    assert tt.unflagged_live_capable(tmp_path, ["tool.py"]) == []
