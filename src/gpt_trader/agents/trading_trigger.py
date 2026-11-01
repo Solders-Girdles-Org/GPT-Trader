@@ -19,7 +19,9 @@ new package, is flagged. The trigger also flags itself and the readiness check
 that applies it, and ``agent-pr-ready`` judges each PR with the base branch's
 trigger as well as the checkout's, so a PR cannot narrow the rule it is judged
 by. A token scan backs it up: a tracked file that reads broker keys or builds
-a broker outside the trigger fails the unit test until classified.
+a broker outside the trigger fails the unit test until classified. A file
+reviewed as holding such a token harmlessly is flagged by its exact path, so
+any later edit to it is reviewed again.
 
 Two runners apply the rule. ``agent-pr-ready`` runs in the PR's checkout, and
 the merging agent runs it: it catches a mistaken ``Reserved: none`` but cannot
@@ -131,17 +133,12 @@ TRADING_EXCEPT: dict[str, str] = {
     "src/gpt_trader/features/intelligence/**": "signal and model helpers",
     # equities_candles.py and snapshot_source.py read Alpaca account keys, so stay flagged.
     "src/gpt_trader/features/recorder/__init__.py": "re-exports recorder names",
-    "src/gpt_trader/features/recorder/candle_capture.py": "public candles; client with auth=None",
     "src/gpt_trader/features/recorder/market_data_recorder.py": "records public market data",
     "src/gpt_trader/features/recorder/price_tick_store.py": "local tick store",
     "src/gpt_trader/features/recorder/snapshot_builder.py": "builds snapshots from fetched data",
     "src/gpt_trader/features/strategy_dev/**": "strategy development helpers",
     "src/gpt_trader/features/strategy_tools/**": "strategy helper functions",
     "src/gpt_trader/features/trade_ideas/**": "trade idea records; execution is idea_execution",
-    "src/gpt_trader/features/brokerages/mock/deterministic.py": (
-        "in-memory deterministic broker; no network or keys (the package __init__ "
-        "stays flagged because it decides what the factory imports)"
-    ),
     "src/gpt_trader/features/live_trade/telemetry/**": "metrics and event emission only",
     "src/gpt_trader/cli/response.py": "CLI output formatting",
     "src/gpt_trader/cli/commands/console.py": (
@@ -171,10 +168,10 @@ TRADING_EXCEPT: dict[str, str] = {
 
 # Backstop for the path rule: text that reads real broker keys, builds a broker
 # client or container, or picks mock versus real broker and dry run. Every
-# tracked file outside the skipped areas that contains one must be flagged,
-# be named exactly in TRADING_EXCEPT, or be listed in REVIEWED_OUTSIDE, so a
-# new live-capable file (including one under a wildcard exception) fails the
-# unit test (``--self-check``) until someone classifies it. Building the app
+# tracked file outside the skipped areas that contains one must be flagged
+# (listing it in REVIEWED_LIVE_TOKEN flags it), so a new live-capable file,
+# including an excepted one, fails the unit test (``--self-check``) until
+# someone classifies it. Building the app
 # container counts: it holds whatever broker the profile picks, so one added
 # call in a script that builds it could place an order.
 LIVE_CAPABLE = re.compile(
@@ -205,13 +202,16 @@ LIVE_CAPABLE = re.compile(
 # Areas the backstop does not scan: prose, and unit tests (mock-only in CI).
 SCAN_SKIP: tuple[str, ...] = ("**/*.md", "docs/**", "tests/unit/**", "uv.lock")
 
-# Files outside the trigger that contain a LIVE_CAPABLE token, and why each
-# still cannot reach a real venue, account or key.
-REVIEWED_OUTSIDE: dict[str, str] = {
+# Files that contain a LIVE_CAPABLE token but were reviewed as unable to reach
+# a real venue, account or key, and why. The review covers the content it saw,
+# so each is flagged by its exact path, ahead of any exception (RJ-1120): an
+# edit that turned ``auth=None`` into a real key would otherwise pass as
+# routine. Measured over the last 60 merged PRs on 2026-11-01, none of these
+# changed outside a PR already flagged; a busy file with only a passing
+# mention should drop the token instead (as ci.yml did).
+REVIEWED_LIVE_TOKEN: dict[str, str] = {
     ".github/CODEOWNERS": "review ownership by path",
     ".github/actions/setup-coinbase-creds/action.yml": "writes placeholder test values",
-    ".github/workflows/ci.yml": "sets MOCK_BROKER=1 for CI test runs",
-    ".github/workflows/integration.yml": "sets MOCK_BROKER=1 for CI test runs",
     "scripts/analysis/backtest_runner.py": "unauthenticated client for public candles",
     "scripts/ci/check_import_boundaries.py": "import-lint rules that name module paths",
     "scripts/ci/check_orchestration_imports.py": "import-lint rules that name module paths",
@@ -281,16 +281,18 @@ def _glob_regex(pattern: str) -> re.Pattern[str]:
 
 _INCLUDE = tuple(_glob_regex(p) for p in TRADING_PATTERNS)
 _EXCLUDE = tuple(_glob_regex(p) for p in TRADING_EXCEPT)
+_REVIEWED = tuple(_glob_regex(p) for p in REVIEWED_LIVE_TOKEN)
+
+
+def _flagged(path: str) -> bool:
+    if any(rx.match(path) for rx in _REVIEWED):
+        return True
+    return any(rx.match(path) for rx in _INCLUDE) and not any(rx.match(path) for rx in _EXCLUDE)
 
 
 def trading_paths(paths: Iterable[str]) -> list[str]:
     """Changed paths that hit the trading trigger, sorted and deduplicated."""
-    hits = {
-        path
-        for path in paths
-        if any(rx.match(path) for rx in _INCLUDE) and not any(rx.match(path) for rx in _EXCLUDE)
-    }
-    return sorted(hits)
+    return sorted({path for path in paths if _flagged(path)})
 
 
 _SKIP = tuple(_glob_regex(p) for p in SCAN_SKIP)
@@ -339,14 +341,14 @@ def scan_text(data: bytes) -> str:
 
 
 def unflagged_live_capable(root: Path, paths: Iterable[str] | None = None) -> list[str]:
-    """Files with a LIVE_CAPABLE token that neither the trigger nor REVIEWED_OUTSIDE covers.
+    """Files with a LIVE_CAPABLE token that the trigger does not flag.
 
     Exceptions in TRADING_EXCEPT are scanned too, exact names included, so an
     excepted file that starts building a broker fails until reclassified.
     """
     misses = []
     for path in tracked_files(root) if paths is None else paths:
-        if _skipped(path) or path in REVIEWED_OUTSIDE or trading_paths([path]):
+        if _skipped(path) or trading_paths([path]):
             continue
         try:
             data = (root / path).read_bytes()

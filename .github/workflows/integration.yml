@@ -35,7 +35,7 @@ jobs:
         run: uv sync --all-extras --dev
 
       # Full integration suite including slow tests. The suite runs against
-      # DeterministicBroker (tests/integration/conftest.py forces MOCK_BROKER=1),
+      # DeterministicBroker (tests/integration/conftest.py forces the mock broker),
       # so no Coinbase secrets or deployment environment are needed. The fast
       # subset (not slow) also runs on every PR via ci.yml.
       - name: Run integration tests
