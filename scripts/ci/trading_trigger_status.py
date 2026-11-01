@@ -9,9 +9,10 @@ PR's file list and body from the GitHub API, loads the base branch's
 ``src/gpt_trader/agents/trading_trigger.py`` by path and posts a commit status.
 No file from the PR runs. Standard library only.
 
-For a pull request event it posts on the PR's head. For a merge-queue entry it
-judges the queued PR again from the base branch and posts on the merge group's
-commit, which the queue also requires.
+For a pull request event it posts on the PR's head, and on the commit of any
+merge-queue entry testing the PR, so a body edit reaches a queued copy too. For
+a merge-queue entry it judges the queued PR again from the base branch and
+posts on the merge group's commit, which the queue also requires.
 
 Locally, print the verdict without posting it::
 
@@ -40,6 +41,8 @@ DEFAULT_REPOSITORY = "Solders-Girdles-Org/GPT-Trader"
 _DESCRIPTION_LIMIT = 140
 # Merge-queue branches are gh-readonly-queue/<base branch>/pr-<number>-<base sha>.
 _QUEUE_REF = re.compile(r"(?:refs/heads/)?gh-readonly-queue/.+/pr-(\d+)-[0-9a-f]{40}")
+# Times a queue run judges again when the PR changes under it, before failing.
+_SETTLE_ROUNDS = 3
 
 
 @dataclass(frozen=True)
@@ -135,8 +138,8 @@ def evaluate(
     *,
     expected_head: str | None = None,
     queued: bool = False,
-) -> tuple[Verdict, str]:
-    """Judge the PR as it stands now; returns the verdict and the head it covers."""
+) -> tuple[Verdict, dict[str, Any]]:
+    """Judge the PR as it stands now; returns the verdict and the PR read it covers."""
     pr = fetch_pr(repo, number)
     if not queued and pr.get("state") != "open":
         raise Skip(f"PR #{number} is {pr.get('state')}")
@@ -149,8 +152,25 @@ def evaluate(
     if str(again["head"]["sha"]) != head:
         if not queued:
             raise Skip(f"PR #{number} head moved while reading its files")
-        return Verdict("failure", f"PR #{number} head moved while queued."), head
-    return judge(trigger, again, paths, listed, repo), head
+        return Verdict("failure", f"PR #{number} head moved while queued."), again
+    return judge(trigger, again, paths, listed, repo), again
+
+
+def _snapshot(pr: dict[str, Any]) -> tuple[str, str]:
+    return str(pr["head"]["sha"]), str(pr.get("body") or "")
+
+
+def queue_shas(repo: str, pr: dict[str, Any]) -> list[str]:
+    """Commits of the merge-queue branches now testing this PR."""
+    number = int(pr["number"])
+    prefix = f"heads/gh-readonly-queue/{pr['base']['ref']}/pr-{number}-"
+    refs = json.loads(_gh(["api", f"repos/{repo}/git/matching-refs/{prefix}"]))
+    shas = []
+    for ref in refs if isinstance(refs, list) else []:
+        name = str(ref.get("ref") or "")
+        if _QUEUE_REF.fullmatch(name) and queued_pr_number(name) == number:
+            shas.append(str(ref["object"]["sha"]))
+    return shas
 
 
 def description(text: str) -> str:
@@ -210,30 +230,48 @@ def main(argv: list[str] | None = None) -> int:
     queued = args.merge_group_ref is not None
     number: int | None = None
     sha: str | None = args.status_sha or args.expected_head
+
+    def publish(target: str, verdict: Verdict) -> None:
+        print(f"{CONTEXT}: {verdict.state} on {target[:12]} (PR #{number}): {verdict.message}")
+        if not args.print_only:
+            post_status(args.repo, target, verdict, args.target_url)
+        write_summary(os.environ.get("GITHUB_STEP_SUMMARY"), verdict, target, number)
+
     try:
         number = queued_pr_number(args.merge_group_ref) if queued else int(args.pr)
-        verdict, head = evaluate(
-            load_trigger(), args.repo, number, expected_head=args.expected_head, queued=queued
+        trigger = load_trigger()
+        verdict, pr = evaluate(
+            trigger, args.repo, number, expected_head=args.expected_head, queued=queued
         )
-        sha = sha or head
+        sha = sha or str(pr["head"]["sha"])
+        publish(sha, verdict)
+        if queued:
+            # The PR's runs and the queue's run in separate concurrency groups,
+            # so a body edit can land while this one runs. Read the PR again
+            # after posting and judge again until it holds still: the last
+            # status on the queue commit then matches the PR as it stands.
+            for _ in range(_SETTLE_ROUNDS):
+                if _snapshot(fetch_pr(args.repo, number)) == _snapshot(pr):
+                    break
+                verdict, pr = evaluate(trigger, args.repo, number, queued=True)
+                publish(sha, verdict)
+            else:
+                publish(sha, Verdict("failure", f"PR #{number} kept changing while queued."))
+        else:
+            # A queued copy of this PR keeps its own status; this verdict replaces it.
+            for group_sha in queue_shas(args.repo, pr):
+                publish(group_sha, verdict)
     except Skip as skip:
         print(f"Skipped: {skip}")
         return 0
     except Exception as error:  # noqa: BLE001 - any failure must not leave an old success
         verdict = Verdict("error", f"Trading trigger failed to run: {error}")
-        if sha is None:
-            print(verdict.message, file=sys.stderr)
-            return 1
-        if not args.print_only:
-            post_status(args.repo, sha, verdict, args.target_url)
-        write_summary(os.environ.get("GITHUB_STEP_SUMMARY"), verdict, sha, number)
         print(verdict.message, file=sys.stderr)
+        if sha is not None:
+            if not args.print_only:
+                post_status(args.repo, sha, verdict, args.target_url)
+            write_summary(os.environ.get("GITHUB_STEP_SUMMARY"), verdict, sha, number)
         return 1
-
-    print(f"{CONTEXT}: {verdict.state} on {sha[:12]} (PR #{number}): {verdict.message}")
-    if not args.print_only:
-        post_status(args.repo, sha, verdict, args.target_url)
-    write_summary(os.environ.get("GITHUB_STEP_SUMMARY"), verdict, sha, number)
     return 0
 
 

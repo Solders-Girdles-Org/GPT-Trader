@@ -26,10 +26,12 @@ class FakeGitHub:
 
     def __init__(self, body: str, files: list[str], **pr: Any) -> None:
         self.pr = {"number": 7, "state": "open", "head": {"sha": HEAD}, "body": body}
+        self.pr["base"] = {"ref": "main"}
         self.pr["changed_files"] = len(files)
         self.pr.update(pr)
         self.files = [{"filename": f} for f in files]
-        self.heads: list[str] = []  # head returned by each later pulls read
+        self.updates: list[dict[str, Any]] = []  # applied to the PR, one per pulls read
+        self.queue_refs: list[dict[str, Any]] = []
         self.posted: list[dict[str, str]] = []
 
     def __call__(self, args: list[str]) -> str:
@@ -40,10 +42,12 @@ class FakeGitHub:
             return "{}"
         if "--paginate" in args:
             return json.dumps([self.files])
-        pr = dict(self.pr)
-        if self.heads:
-            pr["head"] = {"sha": self.heads.pop(0)}
-        return json.dumps(pr)
+        if "/git/matching-refs/" in args[1]:
+            assert args[1] == f"repos/{REPO}/git/matching-refs/heads/gh-readonly-queue/main/pr-7-"
+            return json.dumps(self.queue_refs)
+        if self.updates:
+            self.pr.update(self.updates.pop(0))
+        return json.dumps(self.pr)
 
 
 @pytest.fixture
@@ -120,7 +124,7 @@ def test_obsolete_event_posts_nothing(github: FakeGitHub, pr: dict[str, Any]) ->
 
 
 def test_head_moving_while_files_are_read_posts_nothing(github: FakeGitHub) -> None:
-    github.heads = [HEAD, "f" * 40]
+    github.updates = [{}, {"head": {"sha": "f" * 40}}]
     assert run("--pr", "7", "--expected-head", HEAD) == 0
     assert github.posted == []
 
@@ -133,9 +137,47 @@ def test_merge_group_judges_the_queued_pr_and_posts_on_the_group(github: FakeGit
 
 
 def test_merge_group_head_moving_fails(github: FakeGitHub) -> None:
-    github.heads = [HEAD, "f" * 40]
+    github.updates = [{}, {"head": {"sha": "f" * 40}}]
     run("--merge-group-ref", QUEUE_REF, "--status-sha", QUEUE_SHA)
     assert github.posted[0]["state"] == "failure"
+
+
+def _queue_ref(number: int, sha: str) -> dict[str, Any]:
+    ref = f"refs/heads/gh-readonly-queue/main/pr-{number}-" + "2" * 40
+    return {"ref": ref, "object": {"sha": sha}}
+
+
+def test_pr_verdict_also_replaces_a_queued_copys_status(github: FakeGitHub) -> None:
+    # A body edit after the queue judged the PR must reach the queue's commit.
+    github.files = [{"filename": TRADING}]
+    github.queue_refs = [_queue_ref(7, QUEUE_SHA), _queue_ref(70, "3" * 40)]
+    assert run("--pr", "7", "--expected-head", HEAD) == 0
+    assert [(p["sha"], p["state"]) for p in github.posted] == [
+        (HEAD, "failure"),
+        (QUEUE_SHA, "failure"),
+    ]
+
+
+def test_queue_run_judges_again_when_the_body_changes_after_it_posts(
+    github: FakeGitHub,
+) -> None:
+    # RJ's authorization is removed while the queue run is posting success.
+    github.files = [{"filename": TRADING}]
+    authorized = f"Reserved: e - cancels orders\nRJ-authorized: {HEAD[:7]}"
+    github.pr["body"] = authorized
+    github.updates = [{}, {}, {"body": "Reserved: e - cancels orders"}]
+    assert run("--merge-group-ref", QUEUE_REF, "--status-sha", QUEUE_SHA) == 0
+    assert [(p["sha"], p["state"]) for p in github.posted] == [
+        (QUEUE_SHA, "success"),
+        (QUEUE_SHA, "failure"),
+    ]
+
+
+def test_queue_run_fails_a_pr_that_keeps_changing(github: FakeGitHub) -> None:
+    github.updates = [{}, {}] + [{"body": f"Reserved: none\nedit {i}"} for i in range(20)]
+    run("--merge-group-ref", QUEUE_REF, "--status-sha", QUEUE_SHA)
+    assert github.posted[-1]["state"] == "failure"
+    assert "kept changing" in github.posted[-1]["description"]
 
 
 @pytest.mark.parametrize(
