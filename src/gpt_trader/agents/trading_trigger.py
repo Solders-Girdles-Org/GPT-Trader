@@ -47,8 +47,10 @@ TRADING_PATTERNS: tuple[str, ...] = (
     "config/environments/.env.template",
     # Outside the broker package, these read real broker keys, build an
     # authenticated client and call the account with it, or choose which broker
-    # gets built; the canary script can place a live order. Code that only uses
-    # an already-built broker (record, product_catalog_probe) stays out.
+    # gets built or handed out; the canary script can place a live order. Code
+    # that only uses an already-built broker (record, product_catalog_probe)
+    # stays out.
+    "src/gpt_trader/app/container.py",
     "src/gpt_trader/app/containers/brokerage.py",
     "src/gpt_trader/cli/commands/account.py",
     "src/gpt_trader/preflight/core.py",
