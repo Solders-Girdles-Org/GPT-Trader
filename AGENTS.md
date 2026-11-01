@@ -66,6 +66,15 @@ PR is the queue, not a failure. `scripts/ci/check_branch_protection.py` owns
 the expected protection contract; drift surfaces as an `agent-pr-ready`
 warning.
 
+## Releases and images
+
+`Release Image` ([workflow](.github/workflows/deploy.yml)) publishes and scans a
+GHCR image; it does not deploy, call a broker or move money. Agents may run it,
+or push the `v*` tag that starts it, under RJ's standing
+[publishing rule](https://github.com/Solders-Girdles/workspace-operations/blob/main/docs/agents/linear.md#access-automation-and-limits)
+once CI passes on that commit. A manual run's `release_note` names the card;
+record the tag or digest and run link there. Deploying stays RJ's.
+
 ## Hosted agents
 
 A hosted agent (Jules or similar) bootstraps with `uv sync --all-extras --dev`,
