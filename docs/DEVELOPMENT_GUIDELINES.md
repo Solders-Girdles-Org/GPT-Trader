@@ -55,12 +55,24 @@ when you add a deprecation shim.
 | Check | Status |
 | --- | --- |
 | `CI` / Lint & Format, Docs Link Audit, Type Check, Test Guardrails, Unit Tests (Core), Property Tests, Contract Tests, Integration Tests | Required by `main` protection; also run on `merge_group` |
+| `trading-trigger/base` commit status, from `Trading trigger` | Required by `main` protection, pinned to the GitHub Actions app; posted on the PR head and on `merge_group` |
 | `CI` / Windows Unit Tests, Dependency Review, `CodeQL` | Advisory |
 | `Release Image` (version-tag push) and `Integration Tests (Manual)` | Outside the merge gate; neither deploys, moves money or submits orders |
 
 Merges go through the merge queue, which re-validates each entry against the
 latest `main`, so strict up-to-date is off. Conversation resolution is
 required.
+
+`trading-trigger/base` applies the trading trigger (reserved item e,
+`src/gpt_trader/agents/trading_trigger.py`) from the base branch: a
+`pull_request_target` job fetches only `main` and judges the PR's file list
+and body, so code in the PR can't change the verdict. It reruns when the body
+is edited. It fails a PR whose body has no `Reserved:` line, so a Dependabot
+PR needs `Reserved: none` added once you have read its diff (again if
+Dependabot rewrites the body). A reserved PR passes only once its body
+carries `RJ-authorized: <head SHA>` for the current head, after RJ authorizes
+that head. Limit: a status is identified by name and app, so a PR that adds a
+workflow could post the same name; read any new workflow in review.
 
 ### Local CI troubleshooting
 

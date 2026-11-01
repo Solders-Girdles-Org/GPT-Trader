@@ -1,0 +1,64 @@
+name: Trading trigger
+
+# Applies reserved item (e) from trusted base-branch code and posts the
+# required `trading-trigger/base` commit status (scripts/ci/trading_trigger_status.py).
+# pull_request_target runs this file as the base branch has it, with a write
+# token, so: never fetch, check out or run the PR's head here, use no
+# third-party actions, and pass no secrets.
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, reopened, synchronize, edited, ready_for_review]
+  merge_group:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  # One run at a time per PR or queue entry, so an older body's verdict can't land last.
+  group: trading-trigger-${{ github.event.pull_request.number || github.event.merge_group.head_ref }}
+  cancel-in-progress: false
+
+jobs:
+  judge:
+    name: Trading trigger (base branch)
+    # An edit to a merged or closed PR still sends `edited`; leave its head alone.
+    if: github.event_name == 'merge_group' || github.event.pull_request.state == 'open'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: write
+    steps:
+      - name: Fetch the base branch only
+        env:
+          REPO: ${{ github.repository }}
+          # pull_request_target: the base branch commit this workflow file came
+          # from. merge_group: main itself, not the queue branch, which holds
+          # the PR's changes.
+          BASE_REF: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref || github.sha }}
+        run: |
+          git init -q base
+          git -C base fetch -q --depth 1 --no-tags "https://github.com/$REPO" "$BASE_REF"
+          git -C base checkout -q FETCH_HEAD
+          git -C base log -1 --format='Judging with base commit %H'
+      - name: Judge the PR and post the status
+        working-directory: base
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          QUEUE_REF: ${{ github.event.merge_group.head_ref }}
+          QUEUE_SHA: ${{ github.event.merge_group.head_sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$EVENT_NAME" = merge_group ]; then
+            python3 -I -S scripts/ci/trading_trigger_status.py --repo "$REPO" \
+              --merge-group-ref "$QUEUE_REF" --status-sha "$QUEUE_SHA" --target-url "$RUN_URL"
+          else
+            python3 -I -S scripts/ci/trading_trigger_status.py --repo "$REPO" \
+              --pr "$PR_NUMBER" --expected-head "$PR_HEAD" --target-url "$RUN_URL"
+          fi
