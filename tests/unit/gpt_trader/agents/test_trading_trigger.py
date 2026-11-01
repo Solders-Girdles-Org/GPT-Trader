@@ -23,6 +23,12 @@ HEAD = "abcdef1234567890"
         "config/brokers/coinbase_perp_specs.yaml",
         "config/profiles/prod.yaml",
         "config/environments/.env.template",
+        "scripts/monitoring/canary_reduce_only_test.py",
+        "scripts/ops/api_connectivity_smoke.py",
+        "scripts/ops/hybrid_paper_broker_smoke.py",
+        "src/gpt_trader/preflight/context.py",
+        "src/gpt_trader/preflight/checks/connectivity.py",
+        "src/gpt_trader/preflight/checks/system.py",
     ],
 )
 def test_trading_paths_hit(path: str) -> None:
@@ -38,6 +44,9 @@ def test_trading_paths_hit(path: str) -> None:
         "src/gpt_trader/features/live_trade/telemetry/metrics.py",
         "src/gpt_trader/features/trade_ideas/store.py",
         "src/gpt_trader/backtesting/simulation/broker.py",
+        "scripts/analysis/backtest_runner.py",
+        "scripts/ops/controls_smoke.py",
+        "src/gpt_trader/preflight/checks/risk.py",
         "tests/unit/gpt_trader/features/brokerages/coinbase/test_auth.py",
         "config/profiles/paper.yaml",
         "deploy/gpt_trader/docker/Dockerfile",

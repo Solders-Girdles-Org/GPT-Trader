@@ -45,6 +45,15 @@ TRADING_PATTERNS: tuple[str, ...] = (
     "config/profiles/canary.yaml",
     "config/profiles/spot.yaml",
     "config/environments/.env.template",
+    # Outside the broker package, these load real broker keys and build an
+    # authenticated production client or call the account with it; the canary
+    # script can place a live order.
+    "scripts/monitoring/canary_reduce_only_test.py",
+    "scripts/ops/api_connectivity_smoke.py",
+    "scripts/ops/hybrid_paper_broker_smoke.py",
+    "src/gpt_trader/preflight/context.py",
+    "src/gpt_trader/preflight/checks/connectivity.py",
+    "src/gpt_trader/preflight/checks/system.py",
 )
 
 # Inside those paths, these cannot reach a real venue or account.
