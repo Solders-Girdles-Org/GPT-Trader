@@ -45,6 +45,24 @@ TRADING_PATTERNS: tuple[str, ...] = (
     "config/profiles/canary.yaml",
     "config/profiles/spot.yaml",
     "config/environments/.env.template",
+    # Outside the broker package, these read real broker keys, build an
+    # authenticated client and call the account with it, or choose which broker
+    # gets built or handed out; the canary script can place a live order. Code
+    # that only uses an already-built broker (record, product_catalog_probe)
+    # stays out.
+    "src/gpt_trader/app/container.py",
+    "src/gpt_trader/app/containers/brokerage.py",
+    "src/gpt_trader/cli/commands/account.py",
+    "src/gpt_trader/preflight/core.py",
+    "src/gpt_trader/preflight/context.py",
+    "src/gpt_trader/preflight/diagnostics_bundle.py",
+    "src/gpt_trader/preflight/checks/connectivity.py",
+    "src/gpt_trader/preflight/checks/diagnostics.py",
+    "src/gpt_trader/preflight/checks/environment.py",
+    "src/gpt_trader/preflight/checks/system.py",
+    "scripts/monitoring/canary_reduce_only_test.py",
+    "scripts/ops/api_connectivity_smoke.py",
+    "scripts/ops/hybrid_paper_broker_smoke.py",
 )
 
 # Inside those paths, these cannot reach a real venue or account.
