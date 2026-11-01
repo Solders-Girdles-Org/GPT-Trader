@@ -46,13 +46,54 @@ def load_config_from_yaml(path: str | Path) -> BotConfig:
     Strict: unknown keys or non-mapping ``strategy``/``risk`` sections raise
     ``ConfigValidationError`` naming the file and keys, so a misspelled risk
     key stops the run instead of falling back to default risk (#1329).
+
+    Safe by default: a file can sit anywhere, outside the directories the
+    trading trigger flags, so it trades live only when it says so. Each of
+    ``dry_run`` and ``mock_broker`` the file leaves out is set to true, where
+    ``BotConfig`` would default it to false (live orders on the real broker).
+    A file that sets both to false carries lower-case keys the trigger's
+    token scan flags for RJ wherever the file sits.
     """
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore",
             message="Legacy profile-style YAML mapping via BotConfig.from_dict\\(\\) is deprecated.*",
         )
-        return BotConfig.from_yaml(path, strict=True)
+        config = BotConfig.from_yaml(path, strict=True)
+    unset = [key for key in _LIVE_KEYS if key not in _explicit_live_keys(path)]
+    for key in unset:
+        setattr(config, key, True)
+    if unset:
+        logger.info(
+            "Config %s does not set %s; defaulting to true so it cannot trade live",
+            path,
+            " or ".join(unset),
+        )
+    return config
+
+
+# Keys that keep a run off the real broker and order path when true.
+_LIVE_KEYS: tuple[str, ...] = ("dry_run", "mock_broker")
+
+
+def _explicit_live_keys(path: str | Path) -> set[str]:
+    """Which of ``_LIVE_KEYS`` the YAML file sets itself.
+
+    Read where ``BotConfig.from_dict`` reads them: a legacy profile-style file
+    (any of ``trading``, ``risk_management``, ``profile_name``) under
+    ``execution``, any other file at the root. A key in the other place is
+    ignored by the loader, so it does not count as set. ``from_yaml`` has
+    already rejected a non-mapping root.
+    """
+    import yaml
+
+    with open(path) as f:
+        data = yaml.safe_load(f) or {}
+    if any(key in data for key in ("trading", "risk_management", "profile_name")):
+        data = data.get("execution")
+        if not isinstance(data, dict):
+            return set()
+    return {key for key in _LIVE_KEYS if key in data}
 
 
 def load_profile_config(profile: Profile | str) -> BotConfig:
