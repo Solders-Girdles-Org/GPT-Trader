@@ -91,6 +91,8 @@ HEAD = "abcdef1234567890"
         "scripts/agents/pr_readiness.py",
         "scripts/agents/__init__.py",
         "tests/unit/gpt_trader/agents/test_trading_trigger.py",
+        "tests/unit/gpt_trader/agents/test_trading_trigger_backstop.py",
+        "tests/unit/scripts/test_pr_readiness_base_trigger.py",
         # RJ-1118: a new package or module under src/gpt_trader is flagged by default.
         "src/gpt_trader/live/runner.py",
         "src/gpt_trader/live.py",
@@ -98,6 +100,12 @@ HEAD = "abcdef1234567890"
         "src/gpt_trader/features/new_feature/runner.py",
         # Builds the app container from BotConfig defaults (real broker, not dry run).
         "scripts/ops/controls_smoke.py",
+        # Read Alpaca account keys, so they stay flagged inside the recorder.
+        "src/gpt_trader/features/recorder/equities_candles.py",
+        "src/gpt_trader/features/recorder/snapshot_source.py",
+        # Python imports these at startup, before any gate code runs.
+        "src/sitecustomize.py",
+        "usercustomize.py",
     ],
 )
 def test_trading_paths_hit(path: str) -> None:
@@ -346,93 +354,4 @@ def test_backstop_ignores_safe_switches_and_type_hints(tmp_path: Path) -> None:
 
 def test_backstop_ignores_unrelated_dry_run_flags(tmp_path: Path) -> None:
     (tmp_path / "tool.py").write_text('parser.add_argument("--dry-run-summary")')
-    assert tt.unflagged_live_capable(tmp_path, ["tool.py"]) == []
-
-
-def test_a_pr_that_adds_its_own_exception_is_flagged() -> None:
-    # RJ-1118: excepting a live file and changing it in the same diff must not
-    # read as a routine change.
-    paths = [
-        "src/gpt_trader/agents/trading_trigger.py",
-        "src/gpt_trader/features/brokerages/coinbase/client/orders.py",
-    ]
-    result = tt.assess(paths, "Reserved: none", HEAD)
-    assert result.severity == "blocker"
-    assert "src/gpt_trader/agents/trading_trigger.py" in result.paths
-
-
-def test_agent_pr_ready_runs_the_flagged_readiness_check() -> None:
-    # The entry point must stay on the flagged files; pyproject.toml is not
-    # flagged, so this pin (in a flagged file) is what holds it.
-    import tomllib
-
-    scripts = tomllib.loads((REPO / "pyproject.toml").read_text())["project"]["scripts"]
-    assert scripts["agent-pr-ready"] == "gpt_trader.agents.cli:pr_ready"
-    cli = (REPO / "src/gpt_trader/agents/cli.py").read_text()
-    assert '_run_script("pr_readiness.py")' in cli
-    readiness = (REPO / "scripts/agents/pr_readiness.py").read_text()
-    assert "from gpt_trader.agents import trading_trigger" in readiness
-    assert "trading_trigger.assess(" in readiness
-
-
-EVASIONS = {
-    # Each built a real CoinbaseClient in Grok Scout's RJ-1118 check.
-    "container": (
-        "from gpt_trader.app.config import BotConfig\n"
-        "from gpt_trader.app.container import ApplicationContainer as AC\n"
-        "def broker_for(config: BotConfig):\n    return AC(config).broker\n"
-    ),
-    "importlib": (
-        "import importlib\n"
-        "m = importlib.import_module('gpt_trader.features.' + 'brokerages.factory')\n"
-        "build = getattr(m, 'create_' + 'brokerage')\n"
-    ),
-    "aliased": (
-        "from gpt_trader.features.brokerages.coinbase.client import CoinbaseClient as C\n"
-        "from gpt_trader.features.brokerages.coinbase.auth import SimpleAuth as A\n"
-        "def client(key, pem):\n    return C(auth=A(key, pem))\n"
-    ),
-    "package_import": (
-        "from gpt_trader.features import brokerages\n"
-        "client = brokerages.coinbase.client.CoinbaseClient\n"
-    ),
-    "dunder_import": "m = __import__('gpt_trader.feat' + 'ures.brokerages.factory')\n",
-}
-
-
-@pytest.mark.parametrize("name", sorted(EVASIONS))
-@pytest.mark.parametrize(
-    "encoding", ["utf-8", "utf-16", "utf-16-le", "utf-16-be", "utf-8-sig", "utf-32"]
-)
-def test_backstop_catches_broker_building_evasions(
-    tmp_path: Path, name: str, encoding: str
-) -> None:
-    # A wildcard exception's files are scanned, so the path rule and the scan
-    # together catch a new broker builder anywhere under src/gpt_trader.
-    path = "src/gpt_trader/monitoring/runner.py"
-    assert tt.trading_paths([path]) == []
-    (tmp_path / path).parent.mkdir(parents=True)
-    (tmp_path / path).write_bytes(EVASIONS[name].encode(encoding))
-    assert tt.unflagged_live_capable(tmp_path, [path]) == [path]
-
-
-def test_backstop_reads_a_python_coding_cookie(tmp_path: Path) -> None:
-    # Python runs UTF-7 source, where "+AGM-" is "c", so the raw bytes hide the name.
-    data = b"# -*- coding: utf-7 -*-\nbroker = +AGM-reate_brokerage(config)\n"
-    assert "create_brokerage" in data.decode("utf-7")
-    (tmp_path / "tool.py").write_bytes(data)
-    assert tt.unflagged_live_capable(tmp_path, ["tool.py"]) == ["tool.py"]
-
-
-def test_backstop_scans_exactly_named_exceptions(tmp_path: Path) -> None:
-    # An excepted file that starts building a broker fails until reclassified.
-    path = "src/gpt_trader/cli/response.py"
-    assert path in tt.TRADING_EXCEPT
-    (tmp_path / path).parent.mkdir(parents=True)
-    (tmp_path / path).write_text("client = CoinbaseClient(auth=auth)\n")
-    assert tt.unflagged_live_capable(tmp_path, [path]) == [path]
-
-
-def test_backstop_ignores_resource_loading(tmp_path: Path) -> None:
-    (tmp_path / "tool.py").write_text("from importlib import resources\n")
     assert tt.unflagged_live_capable(tmp_path, ["tool.py"]) == []

@@ -75,9 +75,12 @@ TRADING_PATTERNS: tuple[str, ...] = (
     # readiness check that applies it, the entry point that runs that check,
     # or the tests that pin them could narrow the rule it is judged by.
     "src/gpt_trader/agents/**",
+    "**/sitecustomize.py",
+    "**/usercustomize.py",
     "scripts/agents/__init__.py",
     "scripts/agents/pr_readiness.py",
-    "tests/unit/gpt_trader/agents/test_trading_trigger.py",
+    "tests/unit/gpt_trader/agents/test_trading_trigger*.py",
+    "tests/unit/scripts/test_pr_readiness_base_trigger.py",
     # Everything else in the package, so a new package or module (a
     # ``src/gpt_trader/live/`` runner, say) is flagged until an exception below
     # names it with a reason.
@@ -104,7 +107,12 @@ TRADING_EXCEPT: dict[str, str] = {
     "src/gpt_trader/features/data/**": "market data access over public endpoints",
     "src/gpt_trader/features/experiment/**": "offline experiments over recorded inputs",
     "src/gpt_trader/features/intelligence/**": "signal and model helpers",
-    "src/gpt_trader/features/recorder/**": "public market-data capture with auth=None",
+    # equities_candles.py and snapshot_source.py read Alpaca account keys, so stay flagged.
+    "src/gpt_trader/features/recorder/__init__.py": "re-exports recorder names",
+    "src/gpt_trader/features/recorder/candle_capture.py": "public candles; client with auth=None",
+    "src/gpt_trader/features/recorder/market_data_recorder.py": "records public market data",
+    "src/gpt_trader/features/recorder/price_tick_store.py": "local tick store",
+    "src/gpt_trader/features/recorder/snapshot_builder.py": "builds snapshots from fetched data",
     "src/gpt_trader/features/strategy_dev/**": "strategy development helpers",
     "src/gpt_trader/features/strategy_tools/**": "strategy helper functions",
     "src/gpt_trader/features/trade_ideas/**": "trade idea records; execution is idea_execution",
@@ -149,7 +157,7 @@ TRADING_EXCEPT: dict[str, str] = {
 # call in a script that builds it could place an order.
 LIVE_CAPABLE = re.compile(
     r"COINBASE_[A-Z_]*(?:API_KEY|PRIVATE_KEY|API_SECRET|CDP|CREDENTIALS|SANDBOX|PASSPHRASE)"
-    r"|ROBINHOOD_[A-Z_]*(?:KEY|SECRET|TOKEN)"
+    r"|ROBINHOOD_[A-Z_]*(?:KEY|SECRET|TOKEN)|ALPACA_[A-Z_]*(?:KEY|SECRET)"
     r"|resolve_coinbase_credentials|create_brokerage|CoinbaseClient\(|CDPJWTAuth\("
     r"|SimpleAuth\(|HybridPaperBroker\(|instantiate_container|create_application_container"
     # Ways around the names above (RJ-1118): the container class itself, any
@@ -167,18 +175,8 @@ LIVE_CAPABLE = re.compile(
     r"""|(?i:\b(?:dry_run|mock_broker)["']?\s*:\s*["']?(?:false|no|off|0)\b)"""
 )
 
-# Areas the backstop does not scan: prose, and the test suites CI runs on the
-# mock broker and placeholder keys. Their conftest files stay scanned, since
-# those set the mock broker for the suite.
-SCAN_SKIP: tuple[str, ...] = (
-    "**/*.md",
-    "docs/**",
-    "tests/unit/**",
-    "tests/integration/test_*.py",
-    "tests/contract/test_*.py",
-    "tests/property/**",
-    "uv.lock",
-)
+# Areas the backstop does not scan: prose, and unit tests (mock-only in CI).
+SCAN_SKIP: tuple[str, ...] = ("**/*.md", "docs/**", "tests/unit/**", "uv.lock")
 
 # Files outside the trigger that contain a LIVE_CAPABLE token, and why each
 # still cannot reach a real venue, account or key.
@@ -200,7 +198,6 @@ REVIEWED_OUTSIDE: dict[str, str] = {
     ),
     "src/gpt_trader/features/data/data.py": "docstring example only",
     "src/gpt_trader/features/recorder/candle_capture.py": "client built with auth=None",
-    "src/gpt_trader/features/recorder/snapshot_source.py": "client built with auth=None",
     "src/gpt_trader/logging/setup.py": "sets a log level by logger name",
     "src/gpt_trader/monitoring/configuration_guardian/environment.py": (
         "watches MOCK_BROKER for drift; does not set it"
@@ -214,7 +211,25 @@ REVIEWED_OUTSIDE: dict[str, str] = {
     "tests/conftest.py": "container fixture over each test module's mock config",
     "tests/constants.py": "test env defaults (mock broker, sandbox)",
     "tests/contract/conftest.py": "client built with auth=None against recorded fixtures",
+    "tests/contract/test_coinbase_order_contract.py": "imports an error type only",
     "tests/integration/conftest.py": "forces MOCK_BROKER=1",
+    "tests/integration/test_boot_container_perps_bot.py": "container over mock_broker=True",
+    "tests/integration/test_container_lifecycle_cli.py": "container over mock_broker=True",
+    "tests/integration/test_container_lifecycle_runtime.py": "container over mock_broker=True",
+    "tests/integration/test_core_validation.py": "websocket sequence guard only",
+    "tests/integration/test_crash_recovery.py": "container over mock_broker=True",
+    "tests/integration/test_end_to_end_buy.py": "container over mock_broker=True",
+    "tests/integration/test_risk_budget_seeded_breaker.py": "container over mock_broker=True",
+    "tests/integration/test_runtime_engine_lifecycle.py": "container over a MagicMock broker",
+    "tests/integration/test_validation_escalation_flow.py": "container over a MagicMock broker",
+    "tests/integration/test_validation_escalation_metrics.py": (
+        "container over a MagicMock broker"
+    ),
+    "tests/property/test_coinbase_invariants_order_lifecycle.py": "pure order-spec functions",
+    "tests/property/test_coinbase_invariants_pagination.py": "pagination over a stub transport",
+    "tests/property/test_coinbase_invariants_quantization.py": "pure order-spec functions",
+    "tests/property/test_coinbase_invariants_safe_position_size.py": "pure order-spec functions",
+    "tests/property/test_coinbase_invariants_validate_order.py": "pure order-spec functions",
 }
 
 # The contract's PR-body lines. Like the Workspace Operations gate, read raw
@@ -309,7 +324,7 @@ def scan_text(data: bytes) -> str:
     for codec in codecs:
         try:
             readings.append(data.decode(codec, errors="ignore"))
-        except LookupError:
+        except Exception:  # noqa: BLE001 - any codec a cookie names; keep the other readings
             continue
     return "\n".join(readings)
 
