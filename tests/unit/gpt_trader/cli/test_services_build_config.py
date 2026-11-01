@@ -133,3 +133,38 @@ def test_apply_profile_kwargs_maps_risk_budget_runtime_seed_gate() -> None:
     services._apply_profile_kwargs(config, {"risk_budget_runtime_seed_enabled": True})
 
     assert config.risk_budget_runtime_seed_enabled is True
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # RJ-1117: a switch the file omits defaults to true, not live.
+        ("symbols: [BTC-USD]\ninterval: 60\n", (True, True)),
+        ("dry_run: false\n", (False, True)),
+        ("mock_broker: false\n", (True, False)),
+        ("dry_run: false\nmock_broker: false\n", (False, False)),
+        # Legacy profile-style files are read under execution; a root key
+        # there is ignored by the loader, so it does not count as set.
+        ("trading:\n  symbols: [BTC-USD]\n", (True, True)),
+        ("trading:\n  symbols: [BTC-USD]\ndry_run: false\n", (True, True)),
+        (
+            "trading:\n  symbols: [BTC-USD]\nexecution:\n  dry_run: false\n  mock_broker: false\n",
+            (False, False),
+        ),
+        (
+            "trading:\n  symbols: [BTC-USD]\n  execution:\n    dry_run: false\n"
+            "    mock_broker: false\n",
+            (False, False),
+        ),
+        ("trading:\n  execution:\n    mock_broker: false\n", (True, False)),
+    ],
+)
+def test_config_file_runs_live_only_when_it_says_so(
+    tmp_path: Path, text: str, expected: tuple[bool, bool]
+) -> None:
+    path = tmp_path / "run.yaml"
+    path.write_text(text)
+
+    config = services.build_config_from_args(_make_args(config=str(path)))
+
+    assert (config.dry_run, config.mock_broker) == expected

@@ -120,6 +120,10 @@ LIVE_CAPABLE = re.compile(
     r"|SimpleAuth\(|HybridPaperBroker\(|instantiate_container|create_application_container"
     r"|MOCK_BROKER|\bDRY_RUN\b|--dry-run(?![-\w])|gpt-trader run|gpt_trader\.cli.{0,20}\brun\b"
     r"""|["']run["'],\s*["']--(?:profile|dry-run)"""
+    # A YAML or JSON file that turns live off-switches off. ``run --config``
+    # takes a file from anywhere and defaults each switch it omits to true, so
+    # a file outside config/ trades live only by carrying one of these lines.
+    r"""|(?i:\b(?:dry_run|mock_broker)["']?\s*:\s*["']?(?:false|no|off|0)\b)"""
 )
 
 # Areas the backstop does not scan: prose, and unit tests (mock-only in CI).
@@ -181,7 +185,9 @@ def _glob_regex(pattern: str) -> re.Pattern[str]:
         else:
             out += re.escape(pattern[i])
             i += 1
-    return re.compile(out + r"\Z")
+    # Case-insensitive: the runtime Mac's default APFS volume is, so
+    # ``Config/profiles/x.yaml`` there is the flagged file.
+    return re.compile(out + r"\Z", re.IGNORECASE)
 
 
 _INCLUDE = tuple(_glob_regex(p) for p in TRADING_PATTERNS)

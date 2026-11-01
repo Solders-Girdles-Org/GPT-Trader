@@ -80,6 +80,10 @@ HEAD = "abcdef1234567890"
         "src/gpt_trader/cli/commands/new_command.py",
         "src/gpt_trader/app/containers/new_container.py",
         "scripts/ops/new_launcher.py",
+        # RJ-1117: the runtime Mac's filesystem is case-insensitive.
+        "Config/profiles/prod.yaml",
+        "src/gpt_trader/features/Brokerages/coinbase/client.py",
+        "SRC/gpt_trader/CLI/commands/run.py",
     ],
 )
 def test_trading_paths_hit(path: str) -> None:
@@ -280,6 +284,48 @@ def test_backstop_catches_a_new_live_capable_file(tmp_path: Path, text: str) -> 
     (tmp_path / "scripts/analysis/notes.md").write_text(text)
     paths = ["scripts/analysis/new_tool.py", "scripts/analysis/notes.md"]
     assert tt.unflagged_live_capable(tmp_path, paths) == ["scripts/analysis/new_tool.py"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "execution:\n  dry_run: false\n  mock_broker: false\n",
+        "symbols: [BTC-USD]\nmock_broker: false\n",
+        "dry_run: False\n",
+        'dry_run: "no"\n',
+        '{"mock_broker": false}',
+    ],
+)
+def test_backstop_catches_a_yaml_that_turns_live_switches_off(tmp_path: Path, text: str) -> None:
+    # RJ-1117: run --config takes a file from anywhere, so a file outside the
+    # flagged directories that turns a live switch off must fail the scan.
+    (tmp_path / "strategies").mkdir()
+    (tmp_path / "strategies/live.yaml").write_text(text)
+    assert tt.unflagged_live_capable(tmp_path, ["strategies/live.yaml"]) == ["strategies/live.yaml"]
+
+
+def test_config_file_outside_the_trigger_runs_non_live(tmp_path: Path) -> None:
+    # RJ-1117 pin: the trigger does not flag this file, so loading it with
+    # run --config must not pick live orders on the real broker.
+    from argparse import Namespace
+
+    from gpt_trader.cli import services
+
+    (tmp_path / "strategies").mkdir()
+    path = tmp_path / "strategies/live.yaml"
+    path.write_text("symbols: [BTC-USD]\ninterval: 60\n")
+    assert tt.trading_paths(["strategies/live.yaml"]) == []
+    assert tt.unflagged_live_capable(tmp_path, ["strategies/live.yaml"]) == []
+    config = services.build_config_from_args(
+        Namespace(config=str(path), profile=None, dry_run=False)
+    )
+    assert (config.dry_run, config.mock_broker) == (True, True)
+
+
+def test_backstop_ignores_safe_switches_and_type_hints(tmp_path: Path) -> None:
+    (tmp_path / "safe.yaml").write_text("dry_run: true\nmock_broker: yes\n")
+    (tmp_path / "model.py").write_text("dry_run: bool = False\nmock_broker: bool\n")
+    assert tt.unflagged_live_capable(tmp_path, ["safe.yaml", "model.py"]) == []
 
 
 def test_backstop_ignores_unrelated_dry_run_flags(tmp_path: Path) -> None:
