@@ -14,14 +14,16 @@ Once RJ authorizes a reserved head, an ``RJ-authorized: <head SHA>`` line
 records it; it clears the reserved blocker for that head only.
 
 The trigger flags directories by default and lists its exceptions with
-reasons; anything under ``src/gpt_trader/`` that no exception names, such as a
-new package, is flagged. The trigger also flags itself and the readiness check
+reasons; anything under ``src/`` that no exception names, such as a new
+package, is flagged. So is any path whose top-level directory or root file is
+not in TOP_LEVEL_REVIEWED, such as a new ``newdir/run.py``. The trigger also flags itself and the readiness check
 that applies it, and ``agent-pr-ready`` judges each PR with the base branch's
 trigger as well as the checkout's, so a PR cannot narrow the rule it is judged
 by. A token scan backs it up: a tracked file that reads broker keys or builds
 a broker outside the trigger fails the unit test until classified. A file
 reviewed as holding such a token harmlessly is flagged by its exact path, so
-any later edit to it is reviewed again.
+any later edit to it is reviewed again. The scan also fails on a tracked
+symlink or submodule that REVIEWED_LINKS does not name.
 
 Two runners apply the rule. ``agent-pr-ready`` runs in the PR's checkout, and
 the merging agent runs it: it catches a mistaken ``Reserved: none`` but cannot
@@ -45,6 +47,7 @@ import json
 import re
 import subprocess
 import sys
+import unicodedata
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -105,11 +108,52 @@ TRADING_PATTERNS: tuple[str, ...] = (
     "tests/unit/scripts/test_trading_trigger_status.py",
     "tests/unit/gpt_trader/agents/test_trading_trigger*.py",
     "tests/unit/scripts/test_pr_readiness_base_trigger.py",
-    # Everything else in the package, so a new package or module (a
-    # ``src/gpt_trader/live/`` runner, say) is flagged until an exception below
-    # names it with a reason.
-    "src/gpt_trader/**",
+    # Files that decide what other code runs (RJ-1143): pytest loads every
+    # conftest.py above a test it collects, and pytest.ini plugins and options,
+    # before any fixture can enforce mocks; pyproject.toml names the ``gpt-trader``
+    # entry point and what the image installs; coverage and pre-commit load
+    # plugins and hooks.
+    "**/conftest.py",
+    "pytest.ini",
+    "pyproject.toml",
+    ".coveragerc",
+    ".pre-commit-config.yaml",
+    # docs/ holds only Markdown, which the token scan skips, so anything else
+    # there is flagged (the **/*.md exception keeps prose unflagged).
+    "docs/**",
+    # Everything else under src/, so a new package or module (a
+    # ``src/gpt_trader/live/`` runner, or a sibling package setuptools would
+    # install next to gpt_trader) is flagged until an exception below names it
+    # with a reason.
+    "src/**",
 )
+
+# Fail closed at the top of the tree (RJ-1143): a path whose first segment is
+# not named here, such as a new top-level directory or root file, is flagged.
+# Each entry says why paths under it are handled. A directory ends in "/"; a
+# root file matches only itself, so ``LICENSE/run.py`` is still flagged. The full fail-closed design
+# (flag everything outside a short allowlist) was measured and declined: over
+# the last 60 merged PRs it flagged 50 against 14, mostly Dependabot action
+# bumps and offline experiment code, for a gain only against code that avoids
+# every LIVE_CAPABLE token.
+TOP_LEVEL_REVIEWED: dict[str, str] = {
+    "src/": "flagged by default above; exceptions name what cannot trade",
+    "config/": "profiles and broker specs flagged above; exceptions name the rest",
+    "deploy/": "flagged above; exceptions name dashboards and scrape settings",
+    "scripts/": "launchers and the gate flagged above; the token scan covers the rest",
+    "tests/": "suites that can reach a real account flagged above; unit tests run on mocks",
+    "docs/": "Markdown only; anything else there is flagged above",
+    ".github/": (
+        "CI only: GitHub holds no broker keys and the image publishes on a tag or "
+        "manual dispatch; trading-trigger.yml is flagged above"
+    ),
+    "var/": "local runtime state placeholder",
+    "review_artifacts/": "local review output placeholder",
+    ".gitignore": "which files git ignores; a new .env file is flagged by its own path",
+    ".python-version": "the interpreter version uv selects",
+    "LICENSE": "license text",
+    "uv.lock": "pins versions of what pyproject.toml, flagged above, declares",
+}
 
 # Inside those directories, what cannot reach a real venue, account or key.
 # A wildcard exception's files stay under the LIVE_CAPABLE scan below, so a new
@@ -174,6 +218,21 @@ TRADING_EXCEPT: dict[str, str] = {
 # someone classifies it. Building the app
 # container counts: it holds whatever broker the profile picks, so one added
 # call in a script that builds it could place an order.
+# A YAML or JSON file that turns live off-switches off. ``run --config``
+# takes a file from anywhere, whatever its extension, and sets each switch to
+# true unless the file sets it to a boolean false, so a file outside config/
+# trades live only by carrying one of these lines. Empty and null values are
+# flagged too (RJ-1127): another loader may read them as false. A bare key line
+# is matched only at line start, so Python's ``if dry_run:`` is not. Markdown
+# is scanned for these lines alone (RJ-1143), so ``docs/live.md`` can't serve
+# as a live config.
+_SWITCH_OFF = (
+    r"""(?i:\b(?:dry_run|mock_broker)["']?\s*:\s*"""
+    r"""(?:["']?(?:false|no|off|0|null|none)\b|~|""|''))"""
+    r"""|(?im:^[ \t-]*["']?(?:dry_run|mock_broker)["']?[ \t]*:[ \t]*(?:#.*)?$)"""
+)
+LIVE_SWITCH_OFF = re.compile(_SWITCH_OFF)
+
 LIVE_CAPABLE = re.compile(
     r"COINBASE_[A-Z_]*(?:API_KEY|PRIVATE_KEY|API_SECRET|CDP|CREDENTIALS|SANDBOX|PASSPHRASE)"
     r"|ROBINHOOD_[A-Z_]*(?:KEY|SECRET|TOKEN)|ALPACA_[A-Z_]*(?:KEY|SECRET)"
@@ -188,18 +247,12 @@ LIVE_CAPABLE = re.compile(
     r"|\bimport_module\b|\b__import__\b|\bspec_from_file_location\b|\brunpy\b"
     r"|MOCK_BROKER|\bDRY_RUN\b|--dry-run(?![-\w])|gpt-trader run|gpt_trader\.cli.{0,20}\brun\b"
     r"""|["']run["'],\s*["']--(?:profile|dry-run)"""
-    # A YAML or JSON file that turns live off-switches off. ``run --config``
-    # takes a file from anywhere and sets each switch to true unless the file
-    # sets it to a boolean false, so a file outside config/ trades live only
-    # by carrying one of these lines. Empty and null values are flagged too
-    # (RJ-1127): another loader may read them as false. A bare key line is
-    # matched only at line start, so Python's ``if dry_run:`` is not.
-    r"""|(?i:\b(?:dry_run|mock_broker)["']?\s*:\s*"""
-    r"""(?:["']?(?:false|no|off|0|null|none)\b|~|""|''))"""
-    r"""|(?im:^[ \t-]*["']?(?:dry_run|mock_broker)["']?[ \t]*:[ \t]*(?:#.*)?$)"""
+    # Live off-switches turned off, defined above.
+    "|" + _SWITCH_OFF
 )
 
-# Areas the backstop does not scan: prose, and unit tests (mock-only in CI).
+# Areas the backstop does not scan for every token: prose (scanned for
+# LIVE_SWITCH_OFF only), and unit tests (mock-only in CI).
 SCAN_SKIP: tuple[str, ...] = ("**/*.md", "docs/**", "tests/unit/**", "uv.lock")
 
 # Files that contain a LIVE_CAPABLE token but were reviewed as unable to reach
@@ -235,6 +288,13 @@ REVIEWED_LIVE_TOKEN: dict[str, str] = {
         "generic optional import; callers name the module"
     ),
     "src/gpt_trader/utilities/importing/profiling.py": "times imports by wrapping __import__",
+}
+
+# Tracked symlinks and submodules, and why each is safe (RJ-1143). Either makes
+# a path's content come from somewhere else, so a path rule over the link's own
+# name can't judge it; ``--self-check`` fails on any link not named here.
+REVIEWED_LINKS: dict[str, str] = {
+    "CLAUDE.md": "symlink to AGENTS.md",
 }
 
 # The contract's PR-body lines. Like the Workspace Operations gate, read raw
@@ -280,14 +340,28 @@ def _glob_regex(pattern: str) -> re.Pattern[str]:
 
 
 _INCLUDE = tuple(_glob_regex(p) for p in TRADING_PATTERNS)
+_TOP_LEVEL = frozenset(name.lower() for name in TOP_LEVEL_REVIEWED)
 _EXCLUDE = tuple(_glob_regex(p) for p in TRADING_EXCEPT)
 _REVIEWED = tuple(_glob_regex(p) for p in REVIEWED_LIVE_TOKEN)
+
+
+def _top_level(path: str) -> str:
+    """``src/`` for a path under a directory, the name itself for a root file."""
+    head, sep, _ = path.partition("/")
+    return head + sep
+
+
+def _unreviewed_top_level(path: str) -> bool:
+    # Lowercased like the globs: the runtime Mac's volume is case-insensitive.
+    return _top_level(path).lower() not in _TOP_LEVEL
 
 
 def _flagged(path: str) -> bool:
     if any(rx.match(path) for rx in _REVIEWED):
         return True
-    return any(rx.match(path) for rx in _INCLUDE) and not any(rx.match(path) for rx in _EXCLUDE)
+    if not (any(rx.match(path) for rx in _INCLUDE) or _unreviewed_top_level(path)):
+        return False
+    return not any(rx.match(path) for rx in _EXCLUDE)
 
 
 def trading_paths(paths: Iterable[str]) -> list[str]:
@@ -296,6 +370,7 @@ def trading_paths(paths: Iterable[str]) -> list[str]:
 
 
 _SKIP = tuple(_glob_regex(p) for p in SCAN_SKIP)
+_PROSE = _glob_regex("**/*.md")
 
 
 def _skipped(path: str) -> bool:
@@ -324,6 +399,8 @@ def scan_text(data: bytes) -> str:
 
     UTF-8 always; the codec a byte-order mark names; UTF-16 both ways when the
     bytes hold NULs (UTF-16 text without a mark); and a Python coding cookie.
+    Each reading is also NFKC-normalized, as Python normalizes identifiers, so
+    ``ｂrokerages`` (fullwidth b) imports, and is scanned as, ``brokerages``.
     """
     readings = [data.decode("utf-8", errors="ignore")]
     codecs = [codec for bom, codec in _BOMS if data.startswith(bom)][:1]
@@ -337,6 +414,7 @@ def scan_text(data: bytes) -> str:
             readings.append(data.decode(codec, errors="ignore"))
         except Exception:  # noqa: BLE001 - any codec a cookie names; keep the other readings
             continue
+    readings += [unicodedata.normalize("NFKC", text) for text in readings]
     return "\n".join(readings)
 
 
@@ -348,15 +426,32 @@ def unflagged_live_capable(root: Path, paths: Iterable[str] | None = None) -> li
     """
     misses = []
     for path in tracked_files(root) if paths is None else paths:
-        if _skipped(path) or trading_paths([path]):
+        prose = _PROSE.match(path)
+        if (_skipped(path) and not prose) or trading_paths([path]):
             continue
         try:
             data = (root / path).read_bytes()
         except OSError:
             continue
-        if LIVE_CAPABLE.search(scan_text(data)):
+        if (LIVE_SWITCH_OFF if prose else LIVE_CAPABLE).search(scan_text(data)):
             misses.append(path)
     return sorted(misses)
+
+
+_LINK_MODES = ("120000", "160000")  # git's symlink and submodule modes
+
+
+def unreviewed_links(root: Path) -> list[str]:
+    """Tracked symlinks and submodules that REVIEWED_LINKS does not name."""
+    result = subprocess.run(
+        ["git", "ls-files", "-s", "-z"], cwd=root, capture_output=True, text=True, check=True
+    )
+    links = []
+    for entry in filter(None, result.stdout.split("\0")):
+        meta, path = entry.split("\t", 1)
+        if meta.split()[0] in _LINK_MODES and path not in REVIEWED_LINKS:
+            links.append(path)
+    return sorted(links)
 
 
 def _declarations(body: str, name: str) -> list[str]:
@@ -562,15 +657,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--self-check",
         action="store_true",
-        help="List tracked files that look live-capable but sit outside the trigger.",
+        help=(
+            "List tracked files that look live-capable but sit outside the trigger, "
+            "and symlinks or submodules no one has reviewed."
+        ),
     )
     parser.add_argument("paths", nargs="*", help="Changed paths to classify.")
     args = parser.parse_args(argv)
     if args.self_check:
         misses = unflagged_live_capable(Path.cwd())
+        links = unreviewed_links(Path.cwd())
         for path in misses:
             print(path)
-        return 1 if misses else 0
+        for path in links:
+            print(f"{path} (unreviewed symlink or submodule)")
+        return 1 if misses or links else 0
     if args.replay:
         print("| PR | Title | Trigger | Trading paths |")
         print("| --- | --- | --- | --- |")

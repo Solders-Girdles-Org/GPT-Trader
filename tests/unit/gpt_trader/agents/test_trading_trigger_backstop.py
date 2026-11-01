@@ -8,6 +8,14 @@ import pytest
 
 from gpt_trader.agents import trading_trigger as tt
 
+
+def _at(root: Path, path: str) -> Path:
+    # Under a reviewed top-level directory: a root-level file is flagged by
+    # path (RJ-1143), so the scan would skip it.
+    (root / path).parent.mkdir(parents=True, exist_ok=True)
+    return root / path
+
+
 HEAD = "abcdef1234567890"
 REPO = Path(tt.__file__).resolve().parents[3]
 
@@ -84,8 +92,8 @@ def test_backstop_reads_a_python_coding_cookie(tmp_path: Path) -> None:
     # Python runs UTF-7 source, where "+AGM-" is "c", so the raw bytes hide the name.
     data = b"# -*- coding: utf-7 -*-\nbroker = +AGM-reate_brokerage(config)\n"
     assert "create_brokerage" in data.decode("utf-7")
-    (tmp_path / "tool.py").write_bytes(data)
-    assert tt.unflagged_live_capable(tmp_path, ["tool.py"]) == ["tool.py"]
+    _at(tmp_path, "scripts/tool.py").write_bytes(data)
+    assert tt.unflagged_live_capable(tmp_path, ["scripts/tool.py"]) == ["scripts/tool.py"]
 
 
 def test_backstop_scans_exactly_named_exceptions(tmp_path: Path) -> None:
@@ -98,8 +106,8 @@ def test_backstop_scans_exactly_named_exceptions(tmp_path: Path) -> None:
 
 
 def test_backstop_ignores_resource_loading(tmp_path: Path) -> None:
-    (tmp_path / "tool.py").write_text("from importlib import resources\n")
-    assert tt.unflagged_live_capable(tmp_path, ["tool.py"]) == []
+    _at(tmp_path, "scripts/tool.py").write_text("from importlib import resources\n")
+    assert tt.unflagged_live_capable(tmp_path, ["scripts/tool.py"]) == []
 
 
 @pytest.mark.parametrize(
@@ -107,14 +115,16 @@ def test_backstop_ignores_resource_loading(tmp_path: Path) -> None:
 )
 def test_backstop_survives_any_coding_cookie(tmp_path: Path, cookie: str) -> None:
     # A cookie naming an odd codec must not crash the scan or hide other files.
-    (tmp_path / "odd.py").write_bytes(f"# coding: {cookie}\nx = 1\n".encode() + b"\xff-+")
-    (tmp_path / "tool.py").write_text("broker = create_brokerage(config)\n")
-    assert tt.unflagged_live_capable(tmp_path, ["odd.py", "tool.py"]) == ["tool.py"]
+    _at(tmp_path, "scripts/odd.py").write_bytes(f"# coding: {cookie}\nx = 1\n".encode() + b"\xff-+")
+    _at(tmp_path, "scripts/tool.py").write_text("broker = create_brokerage(config)\n")
+    assert tt.unflagged_live_capable(tmp_path, ["scripts/odd.py", "scripts/tool.py"]) == [
+        "scripts/tool.py"
+    ]
 
 
 def test_backstop_catches_alpaca_keys(tmp_path: Path) -> None:
-    (tmp_path / "tool.py").write_text('key = os.environ["ALPACA_API_SECRET_KEY"]\n')
-    assert tt.unflagged_live_capable(tmp_path, ["tool.py"]) == ["tool.py"]
+    _at(tmp_path, "scripts/tool.py").write_text('key = os.environ["ALPACA_API_SECRET_KEY"]\n')
+    assert tt.unflagged_live_capable(tmp_path, ["scripts/tool.py"]) == ["scripts/tool.py"]
 
 
 def test_pr_ready_starts_readiness_isolated(monkeypatch) -> None:
