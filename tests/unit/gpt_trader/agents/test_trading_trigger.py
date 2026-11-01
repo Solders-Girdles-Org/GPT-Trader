@@ -116,6 +116,11 @@ HEAD = "abcdef1234567890"
         # Python imports these at startup, before any gate code runs.
         "src/sitecustomize.py",
         "usercustomize.py",
+        # Reviewed files holding a live-capable token (RJ-1120): any edit is flagged.
+        "src/gpt_trader/features/brokerages/mock/deterministic.py",
+        "src/gpt_trader/features/recorder/candle_capture.py",
+        "scripts/analysis/backtest_runner.py",
+        ".github/actions/setup-coinbase-creds/action.yml",
     ],
 )
 def test_trading_paths_hit(path: str) -> None:
@@ -125,12 +130,11 @@ def test_trading_paths_hit(path: str) -> None:
 @pytest.mark.parametrize(
     "path",
     [
-        "src/gpt_trader/features/brokerages/mock/deterministic.py",
         "src/gpt_trader/features/brokerages/coinbase/README.md",
         "src/gpt_trader/features/live_trade/telemetry/metrics.py",
         "src/gpt_trader/features/trade_ideas/store.py",
         "src/gpt_trader/backtesting/simulation/broker.py",
-        "scripts/analysis/backtest_runner.py",
+        "scripts/analysis/new_report.py",
         "src/gpt_trader/monitoring/health_checks.py",
         "src/gpt_trader/features/experiment/runner.py",
         "src/gpt_trader/preflight/checks/risk.py",
@@ -280,7 +284,7 @@ REPO = Path(tt.__file__).resolve().parents[3]
 
 
 def test_every_exception_has_a_reason() -> None:
-    for table in (tt.TRADING_EXCEPT, tt.REVIEWED_OUTSIDE):
+    for table in (tt.TRADING_EXCEPT, tt.REVIEWED_LIVE_TOKEN):
         assert all(reason.strip() for reason in table.values())
 
 
@@ -288,10 +292,10 @@ def test_exceptions_and_reviewed_files_are_current() -> None:
     files = tt.tracked_files(REPO)
     stale = [p for p in tt.TRADING_EXCEPT if not any(tt._glob_regex(p).match(f) for f in files)]
     assert stale == []
-    for path in tt.REVIEWED_OUTSIDE:
+    for path in tt.REVIEWED_LIVE_TOKEN:
+        assert "*" not in path, f"{path}: reviewed files are named exactly"
         text = (REPO / path).read_text(encoding="utf-8")
         assert tt.LIVE_CAPABLE.search(text), f"{path} no longer needs review; drop it"
-        assert not tt.trading_paths([path]), f"{path} is flagged; drop it"
 
 
 def test_no_live_capable_file_sits_outside_the_trigger() -> None:
