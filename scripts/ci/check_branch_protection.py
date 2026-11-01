@@ -38,8 +38,14 @@ EXPECTED_REQUIRED_CHECKS = frozenset(
         "Property Tests",
         "Contract Tests",
         "Integration Tests",
+        # The trading trigger run from base-branch code (trading-trigger.yml).
+        "trading-trigger/base",
     }
 )
+# GitHub Actions' app id. A required status pinned to it can't be met by a
+# status an agent posts with its own token.
+GITHUB_ACTIONS_APP_ID = 15368
+EXPECTED_CHECK_SOURCES = {"trading-trigger/base": GITHUB_ACTIONS_APP_ID}
 EXPECTED_STRICT = False
 EXPECTED_ENFORCE_ADMINS = True
 EXPECTED_CONVERSATION_RESOLUTION = True
@@ -67,6 +73,14 @@ def assess_protection_drift(raw: dict[str, Any] | None) -> list[str]:
         drift.append(f"required checks missing: {', '.join(missing)}")
     if extra:
         drift.append(f"unexpected required checks: {', '.join(extra)}")
+    sources = {
+        item.get("context"): item.get("app_id")
+        for item in checks_block.get("checks") or []
+        if isinstance(item, dict)
+    }
+    for name, app_id in sorted(EXPECTED_CHECK_SOURCES.items()):
+        if name in live_checks and sources.get(name) != app_id:
+            drift.append(f"required check {name} is not pinned to app {app_id}")
 
     strict = bool(checks_block.get("strict", False))
     if strict != EXPECTED_STRICT:

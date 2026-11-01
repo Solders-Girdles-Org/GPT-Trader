@@ -8,11 +8,19 @@ from scripts.agents.pr_readiness import ReadinessReport, apply_protection_drift
 from scripts.ci import check_branch_protection as checker
 
 
+def _checks() -> list[dict[str, Any]]:
+    return [
+        {"context": name, "app_id": checker.EXPECTED_CHECK_SOURCES.get(name, 15368)}
+        for name in sorted(checker.EXPECTED_REQUIRED_CHECKS)
+    ]
+
+
 def _matching_payload() -> dict[str, Any]:
     return {
         "required_status_checks": {
             "strict": False,
             "contexts": sorted(checker.EXPECTED_REQUIRED_CHECKS),
+            "checks": _checks(),
         },
         "enforce_admins": {"enabled": True},
         "required_conversation_resolution": {"enabled": True},
@@ -28,9 +36,34 @@ def test_matching_payload_modern_checks_shape() -> None:
     payload = _matching_payload()
     payload["required_status_checks"] = {
         "strict": False,
-        "checks": [{"context": name} for name in checker.EXPECTED_REQUIRED_CHECKS],
+        "checks": _checks(),
     }
     assert checker.assess_protection_drift(payload) == []
+
+
+def test_trading_trigger_is_required() -> None:
+    assert "trading-trigger/base" in checker.EXPECTED_REQUIRED_CHECKS
+
+
+@pytest.mark.parametrize("app_id", [None, -1, 1])
+def test_trading_trigger_must_be_pinned_to_github_actions(app_id: int | None) -> None:
+    # Unpinned, a status posted with an agent's own token would satisfy it.
+    payload = _matching_payload()
+    for item in payload["required_status_checks"]["checks"]:
+        if item["context"] == "trading-trigger/base":
+            item["app_id"] = app_id
+
+    assert checker.assess_protection_drift(payload) == [
+        "required check trading-trigger/base is not pinned to app 15368"
+    ]
+
+
+def test_legacy_only_payload_cannot_show_the_pin() -> None:
+    payload = _matching_payload()
+    del payload["required_status_checks"]["checks"]
+    assert checker.assess_protection_drift(payload) == [
+        "required check trading-trigger/base is not pinned to app 15368"
+    ]
 
 
 def test_missing_payload_is_drift() -> None:
@@ -46,6 +79,10 @@ def test_missing_and_extra_required_checks_are_drift() -> None:
     contexts.discard("Unit Tests (Core)")
     contexts.add("Nightly Extras")
     payload["required_status_checks"]["contexts"] = sorted(contexts)
+    del payload["required_status_checks"]["checks"]
+    payload["required_status_checks"]["checks"] = [
+        item for item in _checks() if item["context"] != "Unit Tests (Core)"
+    ]
 
     drift = checker.assess_protection_drift(payload)
 

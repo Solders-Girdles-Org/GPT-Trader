@@ -10,7 +10,8 @@ the trigger: a PR that changes one must say so in its body, either declaring
 ``Reserved: e ...`` (RJ authorizes the head) or ``Reserved: none`` with a clean
 cross-family ``Review:`` line for the current head that confirms it. Every PR
 needs a ``Reserved:`` line; one without it is blocked even off these paths.
-``agent-pr-ready`` reports the result.
+Once RJ authorizes a reserved head, an ``RJ-authorized: <head SHA>`` line
+records it; it clears the reserved blocker for that head only.
 
 The trigger flags directories by default and lists its exceptions with
 reasons; anything under ``src/gpt_trader/`` that no exception names, such as a
@@ -20,10 +21,14 @@ trigger as well as the checkout's, so a PR cannot narrow the rule it is judged
 by. A token scan backs it up: a tracked file that reads broker keys or builds
 a broker outside the trigger fails the unit test until classified.
 
-Limit: ``agent-pr-ready`` runs in the PR's checkout, and the merging agent
-runs it. It catches a mistaken ``Reserved: none``; it cannot stop code written
-to fool the process it runs in. That needs a required check run from trusted
-base-branch code.
+Two runners apply the rule. ``agent-pr-ready`` runs in the PR's checkout, and
+the merging agent runs it: it catches a mistaken ``Reserved: none`` but cannot
+stop code written to fool the process it runs in. The required
+``trading-trigger/base`` status can't be fooled that way: a
+``pull_request_target`` workflow runs this file from the base branch over the
+PR's file list and body (``scripts/ci/trading_trigger_status.py``), and no file
+from the PR runs. Its limit: GitHub identifies a status by name and the app
+that posted it, so a PR that adds its own workflow could post the same name.
 
 Replay the trigger over recent merged PRs, or run the scan::
 
@@ -92,6 +97,10 @@ TRADING_PATTERNS: tuple[str, ...] = (
     "**/usercustomize.py",
     "scripts/agents/**",
     "scripts/ci/check_branch_protection.py",
+    # The required status that applies this rule from base-branch code.
+    ".github/workflows/trading-trigger.yml",
+    "scripts/ci/trading_trigger_status.py",
+    "tests/unit/scripts/test_trading_trigger_status.py",
     "tests/unit/gpt_trader/agents/test_trading_trigger*.py",
     "tests/unit/scripts/test_pr_readiness_base_trigger.py",
     # Everything else in the package, so a new package or module (a
@@ -226,8 +235,12 @@ REVIEWED_OUTSIDE: dict[str, str] = {
 # The contract's PR-body lines. Like the Workspace Operations gate, read raw
 # lines: a line counts wherever it sits, so a declaration can't be hidden.
 _DECLARATION = re.compile(
-    r"^(?:[-*] )?(?:\*\*)?(reserved|review)(?:\*\*)?:(?:\*\*)?(.*)$", re.IGNORECASE
+    r"^(?:[-*] )?(?:\*\*)?(reserved|review|rj-authorized)(?:\*\*)?:(?:\*\*)?(.*)$",
+    re.IGNORECASE,
 )
+# ``RJ-authorized: <head SHA> ...``: the head RJ authorized, then free text
+# (his words or where they are recorded).
+_AUTHORIZED_HEAD = re.compile(r"([0-9a-f]{7,40})(?![0-9a-z])", re.IGNORECASE)
 _NONE = re.compile(r"\s*none\.?\s*", re.IGNORECASE)
 # The contract's only endings for a clean outcome: non-blocking notes, or a head
 # carried across a rebase for one of the listed reasons. Anything else is malformed.
@@ -353,6 +366,20 @@ def reserved_values(body: str) -> list[str]:
     return _declarations(body, "reserved")
 
 
+def rj_authorized_heads(body: str) -> list[str]:
+    """Heads named by ``RJ-authorized:`` lines, lowercased; malformed lines are ignored."""
+    heads = []
+    for value in _declarations(body, "rj-authorized"):
+        match = _AUTHORIZED_HEAD.match(value)
+        if match:
+            heads.append(match.group(1).lower())
+    return heads
+
+
+def _authorizes(sha: str | None, head_oid: str) -> bool:
+    return bool(sha and head_oid and len(sha) >= 7 and head_oid.lower().startswith(sha.lower()))
+
+
 def parse_review(value: str, repo: str | None = None, number: int | None = None) -> dict | None:
     """``<review link> (Codex|Claude) at <sha>: clean[ allowed ending]`` or ``...: blocking``.
 
@@ -413,16 +440,17 @@ def assess(
     repo: str | None = None,
     number: int | None = None,
 ) -> TriggerResult:
-    """Apply reserved item (e) and the contract's Reserved line to one PR."""
+    """Apply reserved item (e) and the contract's Reserved line to one PR.
+
+    RJ's authorization comes from ``rj_authorized_head`` or an ``RJ-authorized:``
+    line in the body; either counts only for the current head.
+    """
     hits = tuple(trading_paths(paths))
     values = reserved_values(body)
     reserved = [v for v in values if not _NONE.fullmatch(v)]
     blank = [v for v in values if not v]
-    authorized = bool(
-        rj_authorized_head
-        and head_oid
-        and head_oid.lower().startswith(rj_authorized_head.lower())
-        and len(rj_authorized_head) >= 7
+    authorized = any(
+        _authorizes(sha, head_oid) for sha in (rj_authorized_head, *rj_authorized_heads(body))
     )
     hit_note = f" Trading paths: {', '.join(hits)}." if hits else ""
 
@@ -435,7 +463,7 @@ def assess(
         return TriggerResult(
             "blocker",
             f"Reserved ({label}): RJ must authorize head {head_oid[:7]} before merge; "
-            f"pass --rj-authorized-head once he has.{hit_note}",
+            f"once he has, add `RJ-authorized: {head_oid[:7]}` to the PR body.{hit_note}",
             hits,
         )
     if hits:
