@@ -33,19 +33,54 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import importlib.util  # naming: allow
 import json
 import re
 import subprocess
 import sys
+import tempfile
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
-from gpt_trader.agents import trading_trigger
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+TRIGGER_PATH = "src/gpt_trader/agents/trading_trigger.py"
+
+
+def _load_trigger() -> Any:
+    """Load the trigger from its file, without importing the gpt_trader package.
+
+    Importing the package runs its __init__, which loads the CLI and most of the
+    app; any of those modules could then patch the trigger in this process.
+    The trigger imports only the standard library.
+    """
+    spec = importlib.util.spec_from_file_location(  # naming: allow
+        "_readiness_trading_trigger", PROJECT_ROOT / TRIGGER_PATH
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load {TRIGGER_PATH}")
+    module = importlib.util.module_from_spec(spec)  # naming: allow
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+trading_trigger = _load_trigger()
+
+# Runs the base branch's trigger source in a fresh interpreter started with
+# -I -S: no site-packages, no .pth or sitecustomize, no project path, so no
+# file from the PR's checkout can run before it decides.
+_ISOLATED_ASSESS = """
+import json, sys, types
+payload = json.load(sys.stdin)
+module = types.ModuleType("base_trading_trigger")
+sys.modules[module.__name__] = module
+exec(compile(payload["source"], "base:trading_trigger.py", "exec"), module.__dict__)
+result = module.assess(*payload["args"], **payload["kwargs"])
+json.dump({"severity": result.severity, "message": result.message}, sys.stdout)
+"""
 
 # Severity tokens emitted by review bots (CodeRabbit, Codex) in comment bodies,
 # ordered most-severe first so the highest match wins.
@@ -257,6 +292,53 @@ def parse_pr_state(
     )
 
 
+_SEVERITY_RANK = {"info": 0, "warning": 1, "blocker": 2}
+
+
+def run_base_trigger(
+    source: str,
+    state: PullRequestState,
+    rj_authorized_head: str | None,
+    repo: str | None,
+) -> Finding:
+    """Judge the PR with the base branch's trigger source, isolated from this checkout."""
+    payload = {
+        "source": source,
+        "args": [list(state.changed_paths or ()), state.body or "", state.head_oid],
+        "kwargs": {
+            "rj_authorized_head": rj_authorized_head,
+            "repo": repo,
+            "number": state.number or None,
+        },
+    }
+    try:
+        result = subprocess.run(
+            [sys.executable, "-I", "-S", "-c", _ISOLATED_ASSESS],
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            cwd=tempfile.gettempdir(),
+            check=False,
+            timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return Finding("blocker", f"Base-branch trading trigger failed to run: {error}")
+    detail = (result.stderr.strip().splitlines() or ["no output"])[-1]
+    if result.returncode != 0:
+        return Finding(
+            "blocker",
+            f"Base-branch trading trigger exited {result.returncode}: {detail}",
+        )
+    try:
+        verdict = json.loads(result.stdout)
+        severity, message = str(verdict["severity"]), str(verdict["message"])
+    except (ValueError, KeyError, TypeError):
+        return Finding("blocker", f"Base-branch trading trigger failed to run: {detail}")
+    if severity not in _SEVERITY_RANK:
+        return Finding("blocker", f"Base-branch trading trigger gave severity {severity!r}.")
+    return Finding(severity, f"Base-branch trading trigger: {message}")
+
+
 def assess_readiness(
     state: PullRequestState,
     *,
@@ -264,8 +346,14 @@ def assess_readiness(
     merge_queue_active: bool = False,
     rj_authorized_head: str | None = None,
     repo: str | None = None,
+    base_trigger: Finding | None = None,
 ) -> ReadinessReport:
-    """Reconcile checks + protection + threads into a non-blocking verdict."""
+    """Reconcile checks + protection + threads into a non-blocking verdict.
+
+    ``base_trigger`` is the base branch's verdict on reserved item (e); when
+    it is stricter than this checkout's trigger, it is reported too, so a PR
+    cannot narrow the rule it is judged by.
+    """
     findings: list[Finding] = []
 
     if state.body is not None and state.changed_paths is not None:
@@ -279,6 +367,10 @@ def assess_readiness(
             number=state.number or None,
         )
         findings.append(Finding(trigger.severity, trigger.message))
+        if base_trigger is not None and (
+            _SEVERITY_RANK.get(base_trigger.severity, 2) > _SEVERITY_RANK[trigger.severity]
+        ):
+            findings.append(base_trigger)
 
     observed_check_names = {check.name for check in state.checks}
     for name in sorted(set(state.protection.required_checks) - observed_check_names):
@@ -794,6 +886,22 @@ def fetch_pr_payload(repo: str, pr: int) -> dict[str, Any]:
     return payload
 
 
+def fetch_base_trigger_source(repo: str, base_ref_name: str) -> str:
+    """The trading trigger as the base branch has it, read from GitHub."""
+    result = _run(
+        [
+            "gh",
+            "api",
+            "-H",
+            "Accept: application/vnd.github.raw",
+            f"repos/{repo}/contents/{TRIGGER_PATH}?ref={quote(base_ref_name, safe='')}",
+        ]
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        raise RuntimeError(result.stderr.strip() or "empty trigger source")
+    return result.stdout
+
+
 def fetch_pr_files(repo: str, pr: int) -> list[str]:
     """Every changed path, paginated (gh pr view --json files stops at 100)."""
     return trading_trigger.pr_files(repo, pr)
@@ -1183,12 +1291,20 @@ def main(argv: list[str] | None = None) -> int:
     except RuntimeError as error:
         return _github_failure(args, f"Could not load PR #{pr}: {error}")
 
+    try:
+        base_source = fetch_base_trigger_source(repo, base_ref_name)
+    except RuntimeError as error:
+        base_trigger = Finding("blocker", f"Could not read the base branch's trigger: {error}")
+    else:
+        base_trigger = run_base_trigger(base_source, state, args.rj_authorized_head, repo)
+
     report = assess_readiness(
         state,
         require_current_head_review_signal=args.require_current_head_review_signal,
         merge_queue_active=merge_queue_active,
         rj_authorized_head=args.rj_authorized_head,
         repo=repo,
+        base_trigger=base_trigger,
     )
     apply_protection_drift(report, protection_raw, base_ref_name)
     print(_render(args.format, state, report))

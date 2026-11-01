@@ -84,6 +84,38 @@ HEAD = "abcdef1234567890"
         "Config/profiles/prod.yaml",
         "src/gpt_trader/features/Brokerages/coinbase/client.py",
         "SRC/gpt_trader/CLI/commands/run.py",
+        # RJ-1118: the gate itself, so a PR can't narrow the rule it is judged by.
+        "src/gpt_trader/agents/trading_trigger.py",
+        "src/gpt_trader/agents/cli.py",
+        "src/gpt_trader/agents/__init__.py",
+        "scripts/agents/pr_readiness.py",
+        "scripts/agents/__init__.py",
+        "tests/unit/gpt_trader/agents/test_trading_trigger.py",
+        "tests/unit/gpt_trader/agents/test_trading_trigger_backstop.py",
+        "tests/unit/scripts/test_pr_readiness_base_trigger.py",
+        # RJ-1118: a new package or module under src/gpt_trader is flagged by default.
+        "src/gpt_trader/live/runner.py",
+        "src/gpt_trader/live.py",
+        "src/gpt_trader/__init__.py",
+        "src/gpt_trader/features/new_feature/runner.py",
+        # Builds the app container from BotConfig defaults (real broker, not dry run).
+        "scripts/ops/controls_smoke.py",
+        # Read Alpaca account keys, so they stay flagged inside the recorder.
+        "src/gpt_trader/features/recorder/equities_candles.py",
+        "src/gpt_trader/features/recorder/snapshot_source.py",
+        # Suites that build the container or broker clients (RJ-1118 review).
+        "tests/integration/test_boot_container_perps_bot.py",
+        "tests/integration/conftest.py",
+        "tests/contract/conftest.py",
+        "tests/property/test_coinbase_invariants_pagination.py",
+        "tests/conftest.py",
+        "tests/constants.py",
+        # A module next to pr_readiness.py could shadow a standard one.
+        "scripts/agents/json.py",
+        "scripts/ci/check_branch_protection.py",
+        # Python imports these at startup, before any gate code runs.
+        "src/sitecustomize.py",
+        "usercustomize.py",
     ],
 )
 def test_trading_paths_hit(path: str) -> None:
@@ -99,7 +131,8 @@ def test_trading_paths_hit(path: str) -> None:
         "src/gpt_trader/features/trade_ideas/store.py",
         "src/gpt_trader/backtesting/simulation/broker.py",
         "scripts/analysis/backtest_runner.py",
-        "scripts/ops/controls_smoke.py",
+        "src/gpt_trader/monitoring/health_checks.py",
+        "src/gpt_trader/features/experiment/runner.py",
         "src/gpt_trader/preflight/checks/risk.py",
         "src/gpt_trader/cli/commands/experiment.py",
         "src/gpt_trader/cli/commands/console.py",

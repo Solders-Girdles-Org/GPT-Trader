@@ -22,11 +22,14 @@ def _get_scripts_dir() -> Path:
     return Path(__file__).parent.parent.parent.parent / "scripts" / "agents"
 
 
-def _run_script(script_name: str) -> int:
+def _run_script(script_name: str, *, isolated: bool = False) -> int:
     """Run a script from scripts/agents/ with forwarded args.
 
     Args:
         script_name: Name of the script file (e.g., "pr_readiness.py")
+        isolated: Start Python with -I -S, so nothing from the checkout or
+            site-packages (a shadowing module, a .pth, sitecustomize) loads;
+            for scripts that need only the standard library.
 
     Returns:
         Exit code from the script
@@ -40,8 +43,9 @@ def _run_script(script_name: str) -> int:
 
     # Run from project root for consistent path resolution
     project_root = scripts_dir.parent.parent
+    flags = ["-I", "-S"] if isolated else []
     result = subprocess.run(
-        [sys.executable, str(script)] + sys.argv[1:],
+        [sys.executable, *flags, str(script)] + sys.argv[1:],
         cwd=project_root,
     )
     return result.returncode
@@ -79,4 +83,4 @@ def pr_ready() -> int:
         uv run agent-pr-ready --no-github          # skip gh; local-only report
         uv run agent-pr-ready --exit-on-not-ready  # opt-in advisory gate
     """
-    return _run_script("pr_readiness.py")
+    return _run_script("pr_readiness.py", isolated=True)
