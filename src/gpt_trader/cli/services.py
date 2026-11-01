@@ -81,7 +81,7 @@ def _explicit_live_keys(path: str | Path) -> set[str]:
 
     Read where ``BotConfig.from_dict`` reads them: a legacy profile-style file
     (any of ``trading``, ``risk_management``, ``profile_name``) under
-    ``execution``, any other file at the root. A key in the other place is
+    ``execution`` or ``trading.execution``, any other file at the root. A key in the other place is
     ignored by the loader, so it does not count as set. ``from_yaml`` has
     already rejected a non-mapping root.
     """
@@ -90,7 +90,12 @@ def _explicit_live_keys(path: str | Path) -> set[str]:
     with open(path) as f:
         data = yaml.safe_load(f) or {}
     if any(key in data for key in ("trading", "risk_management", "profile_name")):
-        data = data.get("execution")
+        # Mirror ProfileSchema.from_yaml: an empty root execution falls back
+        # to trading.execution.
+        trading = data.get("trading")
+        data = data.get("execution") or (
+            trading.get("execution") if isinstance(trading, dict) else None
+        )
         if not isinstance(data, dict):
             return set()
     return {key for key in _LIVE_KEYS if key in data}

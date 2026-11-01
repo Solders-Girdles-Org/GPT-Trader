@@ -151,6 +151,12 @@ def test_apply_profile_kwargs_maps_risk_budget_runtime_seed_gate() -> None:
             "trading:\n  symbols: [BTC-USD]\nexecution:\n  dry_run: false\n  mock_broker: false\n",
             (False, False),
         ),
+        (
+            "trading:\n  symbols: [BTC-USD]\n  execution:\n    dry_run: false\n"
+            "    mock_broker: false\n",
+            (False, False),
+        ),
+        ("trading:\n  execution:\n    mock_broker: false\n", (True, False)),
     ],
 )
 def test_config_file_runs_live_only_when_it_says_so(
