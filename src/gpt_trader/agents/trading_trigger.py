@@ -39,11 +39,15 @@ TRADING_PATTERNS: tuple[str, ...] = (
     "src/gpt_trader/security/order_validator.py",
     "src/gpt_trader/app/config/bot_config.py",
     "src/gpt_trader/app/config/profile_loader.py",
+    # Profiles and the code that applies them: any profile YAML can set
+    # mock_broker false (real Coinbase client, real keys) and dry_run false
+    # (no ReadOnlyBroker wrapper), and these two files decide what the YAML's
+    # silence and the profile's values turn into on the running config.
+    "src/gpt_trader/app/config/profile_schema.py",
+    "src/gpt_trader/cli/services.py",
+    "config/profiles/**",
     "config/brokers/**",
     "config/risk/**",
-    "config/profiles/prod.yaml",
-    "config/profiles/canary.yaml",
-    "config/profiles/spot.yaml",
     "config/environments/.env.template",
     # Outside the broker package, these read real broker keys, build an
     # authenticated client and call the account with it, or choose which broker
