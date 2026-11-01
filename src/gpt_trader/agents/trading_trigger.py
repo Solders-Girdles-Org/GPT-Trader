@@ -129,24 +129,25 @@ TRADING_PATTERNS: tuple[str, ...] = (
 
 # Fail closed at the top of the tree (RJ-1143): a path whose first segment is
 # not named here, such as a new top-level directory or root file, is flagged.
-# Each entry says why paths under it are handled. The full fail-closed design
+# Each entry says why paths under it are handled. A directory ends in "/"; a
+# root file matches only itself, so ``LICENSE/run.py`` is still flagged. The full fail-closed design
 # (flag everything outside a short allowlist) was measured and declined: over
 # the last 60 merged PRs it flagged 50 against 14, mostly Dependabot action
 # bumps and offline experiment code, for a gain only against code that avoids
 # every LIVE_CAPABLE token.
 TOP_LEVEL_REVIEWED: dict[str, str] = {
-    "src": "flagged by default above; exceptions name what cannot trade",
-    "config": "profiles and broker specs flagged above; exceptions name the rest",
-    "deploy": "flagged above; exceptions name dashboards and scrape settings",
-    "scripts": "launchers and the gate flagged above; the token scan covers the rest",
-    "tests": "suites that can reach a real account flagged above; unit tests run on mocks",
-    "docs": "Markdown only; anything else there is flagged above",
-    ".github": (
+    "src/": "flagged by default above; exceptions name what cannot trade",
+    "config/": "profiles and broker specs flagged above; exceptions name the rest",
+    "deploy/": "flagged above; exceptions name dashboards and scrape settings",
+    "scripts/": "launchers and the gate flagged above; the token scan covers the rest",
+    "tests/": "suites that can reach a real account flagged above; unit tests run on mocks",
+    "docs/": "Markdown only; anything else there is flagged above",
+    ".github/": (
         "CI only: GitHub holds no broker keys and the image publishes on a tag or "
         "manual dispatch; trading-trigger.yml is flagged above"
     ),
-    "var": "local runtime state placeholder",
-    "review_artifacts": "local review output placeholder",
+    "var/": "local runtime state placeholder",
+    "review_artifacts/": "local review output placeholder",
     ".gitignore": "which files git ignores; a new .env file is flagged by its own path",
     ".python-version": "the interpreter version uv selects",
     "LICENSE": "license text",
@@ -334,9 +335,15 @@ _EXCLUDE = tuple(_glob_regex(p) for p in TRADING_EXCEPT)
 _REVIEWED = tuple(_glob_regex(p) for p in REVIEWED_LIVE_TOKEN)
 
 
+def _top_level(path: str) -> str:
+    """``src/`` for a path under a directory, the name itself for a root file."""
+    head, sep, _ = path.partition("/")
+    return head + sep
+
+
 def _unreviewed_top_level(path: str) -> bool:
     # Lowercased like the globs: the runtime Mac's volume is case-insensitive.
-    return path.split("/", 1)[0].lower() not in _TOP_LEVEL
+    return _top_level(path).lower() not in _TOP_LEVEL
 
 
 def _flagged(path: str) -> bool:

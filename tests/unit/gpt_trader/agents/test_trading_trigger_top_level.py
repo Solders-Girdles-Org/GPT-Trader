@@ -32,6 +32,10 @@ REPO = Path(tt.__file__).resolve().parents[3]
         "pyproject.toml",
         ".coveragerc",
         ".pre-commit-config.yaml",
+        # A reviewed root file's name doesn't cover a directory of that name.
+        "LICENSE/run.py",
+        "uv.lock/run.py",
+        "src",
     ],
 )
 def test_unreviewed_top_level_and_run_config_paths_hit(path: str) -> None:
@@ -75,7 +79,7 @@ def test_self_check_flags_a_new_symlink(tmp_path: Path) -> None:
 
 
 def test_every_top_level_entry_is_reviewed_or_flagged() -> None:
-    tops = {f.split("/", 1)[0] for f in tt.tracked_files(REPO)}
+    tops = {tt._top_level(f) for f in tt.tracked_files(REPO)}
     for name in tops:
         assert name in tt.TOP_LEVEL_REVIEWED or tt._flagged(name) or name.endswith(".md"), name
     assert all(reason.strip() for reason in tt.TOP_LEVEL_REVIEWED.values())
