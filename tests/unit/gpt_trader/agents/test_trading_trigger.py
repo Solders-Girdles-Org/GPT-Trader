@@ -327,6 +327,13 @@ def test_backstop_catches_a_new_live_capable_file(tmp_path: Path, text: str) -> 
         "dry_run: False\n",
         'dry_run: "no"\n',
         '{"mock_broker": false}',
+        # RJ-1127: empty and null values are flagged too.
+        "symbols: [BTC-USD]\ndry_run:\nmock_broker:\n",
+        "dry_run: ~\n",
+        "mock_broker: null  # typo\n",
+        'dry_run: ""\n',
+        "execution:\n  mock_broker:   # unset\n",
+        '{"dry_run": null}',
     ],
 )
 def test_backstop_catches_a_yaml_that_turns_live_switches_off(tmp_path: Path, text: str) -> None:
@@ -335,6 +342,21 @@ def test_backstop_catches_a_yaml_that_turns_live_switches_off(tmp_path: Path, te
     (tmp_path / "strategies").mkdir()
     (tmp_path / "strategies/live.yaml").write_text(text)
     assert tt.unflagged_live_capable(tmp_path, ["strategies/live.yaml"]) == ["strategies/live.yaml"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "dry_run: true\nmock_broker: true\n",
+        "def run(dry_run: bool = False) -> None:\n    if dry_run:\n        return\n",
+        "    if config.mock_broker:\n        pass\n",
+    ],
+)
+def test_backstop_skips_switches_left_on_and_python_uses(tmp_path: Path, text: str) -> None:
+    # RJ-1127: the bare-key form matches a YAML key line, not Python code.
+    (tmp_path / "strategies").mkdir()
+    (tmp_path / "strategies/ok.yaml").write_text(text)
+    assert tt.unflagged_live_capable(tmp_path, ["strategies/ok.yaml"]) == []
 
 
 def test_config_file_outside_the_trigger_runs_non_live(tmp_path: Path) -> None:

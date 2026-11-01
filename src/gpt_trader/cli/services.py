@@ -49,10 +49,12 @@ def load_config_from_yaml(path: str | Path) -> BotConfig:
 
     Safe by default: a file can sit anywhere, outside the directories the
     trading trigger flags, so it trades live only when it says so. Each of
-    ``dry_run`` and ``mock_broker`` the file leaves out is set to true, where
-    ``BotConfig`` would default it to false (live orders on the real broker).
-    A file that sets both to false carries lower-case keys the trigger's
-    token scan flags for RJ wherever the file sits.
+    ``dry_run`` and ``mock_broker`` the file does not set to a boolean false
+    is set to true: left out, where ``BotConfig`` would default it to false
+    (live orders on the real broker), or left empty, null or any other value,
+    which would load as a falsy ``None``, ``""`` or ``0`` (RJ-1127). A file
+    that sets both to false carries lower-case keys the trigger's token scan
+    flags for RJ wherever the file sits.
     """
     with warnings.catch_warnings():
         warnings.filterwarnings(
@@ -60,12 +62,12 @@ def load_config_from_yaml(path: str | Path) -> BotConfig:
             message="Legacy profile-style YAML mapping via BotConfig.from_dict\\(\\) is deprecated.*",
         )
         config = BotConfig.from_yaml(path, strict=True)
-    unset = [key for key in _LIVE_KEYS if key not in _explicit_live_keys(path)]
+    unset = [key for key in _LIVE_KEYS if key not in _keys_set_false(path)]
     for key in unset:
         setattr(config, key, True)
     if unset:
         logger.info(
-            "Config %s does not set %s; defaulting to true so it cannot trade live",
+            "Config %s does not set %s to false; using true so it cannot trade live",
             path,
             " or ".join(unset),
         )
@@ -76,8 +78,12 @@ def load_config_from_yaml(path: str | Path) -> BotConfig:
 _LIVE_KEYS: tuple[str, ...] = ("dry_run", "mock_broker")
 
 
-def _explicit_live_keys(path: str | Path) -> set[str]:
-    """Which of ``_LIVE_KEYS`` the YAML file sets itself.
+def _keys_set_false(path: str | Path) -> set[str]:
+    """Which of ``_LIVE_KEYS`` the YAML file sets to a boolean false.
+
+    Only a YAML boolean counts (``false``, ``no``, ``off``, as PyYAML reads
+    them): an
+    empty value, ``~``, ``null``, ``""``, ``0`` or a quoted string does not.
 
     Read where ``BotConfig.from_dict`` reads them: a legacy profile-style file
     (any of ``trading``, ``risk_management``, ``profile_name``) under
@@ -98,7 +104,7 @@ def _explicit_live_keys(path: str | Path) -> set[str]:
         )
         if not isinstance(data, dict):
             return set()
-    return {key for key in _LIVE_KEYS if key in data}
+    return {key for key in _LIVE_KEYS if data.get(key) is False}
 
 
 def load_profile_config(profile: Profile | str) -> BotConfig:

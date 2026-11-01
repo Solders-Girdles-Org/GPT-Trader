@@ -157,6 +157,18 @@ def test_apply_profile_kwargs_maps_risk_budget_runtime_seed_gate() -> None:
             (False, False),
         ),
         ("trading:\n  execution:\n    mock_broker: false\n", (True, False)),
+        # RJ-1127: only a boolean false counts; empty, null and other values
+        # would load falsy, so they run non-live too.
+        ("dry_run:\nmock_broker:\n", (True, True)),
+        ("dry_run: ~\nmock_broker: null\n", (True, True)),
+        ("dry_run: \"\"\nmock_broker: ''\n", (True, True)),
+        ("dry_run: 0\nmock_broker: 0\n", (True, True)),
+        ('dry_run: "false"\nmock_broker: false\n', (True, False)),
+        ("dry_run: no\nmock_broker: OFF\n", (False, False)),
+        (
+            "trading:\n  symbols: [BTC-USD]\nexecution:\n  dry_run:\n  mock_broker: ~\n",
+            (True, True),
+        ),
     ],
 )
 def test_config_file_runs_live_only_when_it_says_so(

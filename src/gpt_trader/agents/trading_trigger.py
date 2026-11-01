@@ -192,9 +192,14 @@ LIVE_CAPABLE = re.compile(
     r"|MOCK_BROKER|\bDRY_RUN\b|--dry-run(?![-\w])|gpt-trader run|gpt_trader\.cli.{0,20}\brun\b"
     r"""|["']run["'],\s*["']--(?:profile|dry-run)"""
     # A YAML or JSON file that turns live off-switches off. ``run --config``
-    # takes a file from anywhere and defaults each switch it omits to true, so
-    # a file outside config/ trades live only by carrying one of these lines.
-    r"""|(?i:\b(?:dry_run|mock_broker)["']?\s*:\s*["']?(?:false|no|off|0)\b)"""
+    # takes a file from anywhere and sets each switch to true unless the file
+    # sets it to a boolean false, so a file outside config/ trades live only
+    # by carrying one of these lines. Empty and null values are flagged too
+    # (RJ-1127): another loader may read them as false. A bare key line is
+    # matched only at line start, so Python's ``if dry_run:`` is not.
+    r"""|(?i:\b(?:dry_run|mock_broker)["']?\s*:\s*"""
+    r"""(?:["']?(?:false|no|off|0|null|none)\b|~|""|''))"""
+    r"""|(?im:^[ \t-]*["']?(?:dry_run|mock_broker)["']?[ \t]*:[ \t]*(?:#.*)?$)"""
 )
 
 # Areas the backstop does not scan: prose, and unit tests (mock-only in CI).
