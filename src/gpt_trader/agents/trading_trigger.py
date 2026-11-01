@@ -69,16 +69,22 @@ TRADING_PATTERNS: tuple[str, ...] = (
     "**/Dockerfile*",
     "**/docker-compose*",
     "**/.env*",
-    # Tests that read real keys and call a real account.
+    # Tests that read real keys and call a real account, and the suites that
+    # build the app container or broker clients: one flipped mock_broker or
+    # auth argument there reaches the real account when run with keys.
     "tests/real_api/**",
+    "tests/integration/**",
+    "tests/contract/**",
+    "tests/property/**",
+    "tests/conftest.py",
+    "tests/constants.py",
     # The gate itself. A PR that edits the trigger, its exceptions, the
     # readiness check that applies it, the entry point that runs that check,
     # or the tests that pin them could narrow the rule it is judged by.
     "src/gpt_trader/agents/**",
     "**/sitecustomize.py",
     "**/usercustomize.py",
-    "scripts/agents/__init__.py",
-    "scripts/agents/pr_readiness.py",
+    "scripts/agents/**",
     "tests/unit/gpt_trader/agents/test_trading_trigger*.py",
     "tests/unit/scripts/test_pr_readiness_base_trigger.py",
     # Everything else in the package, so a new package or module (a
@@ -208,28 +214,6 @@ REVIEWED_OUTSIDE: dict[str, str] = {
         "generic optional import; callers name the module"
     ),
     "src/gpt_trader/utilities/importing/profiling.py": "times imports by wrapping __import__",
-    "tests/conftest.py": "container fixture over each test module's mock config",
-    "tests/constants.py": "test env defaults (mock broker, sandbox)",
-    "tests/contract/conftest.py": "client built with auth=None against recorded fixtures",
-    "tests/contract/test_coinbase_order_contract.py": "imports an error type only",
-    "tests/integration/conftest.py": "forces MOCK_BROKER=1",
-    "tests/integration/test_boot_container_perps_bot.py": "container over mock_broker=True",
-    "tests/integration/test_container_lifecycle_cli.py": "container over mock_broker=True",
-    "tests/integration/test_container_lifecycle_runtime.py": "container over mock_broker=True",
-    "tests/integration/test_core_validation.py": "websocket sequence guard only",
-    "tests/integration/test_crash_recovery.py": "container over mock_broker=True",
-    "tests/integration/test_end_to_end_buy.py": "container over mock_broker=True",
-    "tests/integration/test_risk_budget_seeded_breaker.py": "container over mock_broker=True",
-    "tests/integration/test_runtime_engine_lifecycle.py": "container over a MagicMock broker",
-    "tests/integration/test_validation_escalation_flow.py": "container over a MagicMock broker",
-    "tests/integration/test_validation_escalation_metrics.py": (
-        "container over a MagicMock broker"
-    ),
-    "tests/property/test_coinbase_invariants_order_lifecycle.py": "pure order-spec functions",
-    "tests/property/test_coinbase_invariants_pagination.py": "pagination over a stub transport",
-    "tests/property/test_coinbase_invariants_quantization.py": "pure order-spec functions",
-    "tests/property/test_coinbase_invariants_safe_position_size.py": "pure order-spec functions",
-    "tests/property/test_coinbase_invariants_validate_order.py": "pure order-spec functions",
 }
 
 # The contract's PR-body lines. Like the Workspace Operations gate, read raw

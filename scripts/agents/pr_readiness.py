@@ -323,11 +323,16 @@ def run_base_trigger(
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         return Finding("blocker", f"Base-branch trading trigger failed to run: {error}")
+    detail = (result.stderr.strip().splitlines() or ["no output"])[-1]
+    if result.returncode != 0:
+        return Finding(
+            "blocker",
+            f"Base-branch trading trigger exited {result.returncode}: {detail}",
+        )
     try:
         verdict = json.loads(result.stdout)
         severity, message = str(verdict["severity"]), str(verdict["message"])
     except (ValueError, KeyError, TypeError):
-        detail = (result.stderr.strip().splitlines() or ["no output"])[-1]
         return Finding("blocker", f"Base-branch trading trigger failed to run: {detail}")
     if severity not in _SEVERITY_RANK:
         return Finding("blocker", f"Base-branch trading trigger gave severity {severity!r}.")

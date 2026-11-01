@@ -32,7 +32,7 @@ def test_agent_pr_ready_runs_the_flagged_readiness_check() -> None:
     scripts = tomllib.loads((REPO / "pyproject.toml").read_text())["project"]["scripts"]
     assert scripts["agent-pr-ready"] == "gpt_trader.agents.cli:pr_ready"
     cli = (REPO / "src/gpt_trader/agents/cli.py").read_text()
-    assert '_run_script("pr_readiness.py")' in cli
+    assert '_run_script("pr_readiness.py", isolated=True)' in cli
     readiness = (REPO / "scripts/agents/pr_readiness.py").read_text()
     assert 'TRIGGER_PATH = "src/gpt_trader/agents/trading_trigger.py"' in readiness
     assert "trading_trigger.assess(" in readiness
@@ -115,3 +115,37 @@ def test_backstop_survives_any_coding_cookie(tmp_path: Path, cookie: str) -> Non
 def test_backstop_catches_alpaca_keys(tmp_path: Path) -> None:
     (tmp_path / "tool.py").write_text('key = os.environ["ALPACA_API_SECRET_KEY"]\n')
     assert tt.unflagged_live_capable(tmp_path, ["tool.py"]) == ["tool.py"]
+
+
+def test_the_readiness_launcher_loads_only_flagged_project_code() -> None:
+    # agent-pr-ready imports gpt_trader.agents.cli; every project module that
+    # import loads runs before the trigger decides, so each must be flagged.
+    import subprocess
+    import sys
+
+    code = (
+        "import sys, gpt_trader.agents.cli; "
+        "print('\\n'.join(sorted(m.__file__ for n, m in sys.modules.items() "
+        "if n.split('.')[0] == 'gpt_trader')))"
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True, cwd=REPO
+    ).stdout
+    loaded = [str(Path(f).resolve().relative_to(REPO)) for f in out.split()]
+    assert loaded, "probe loaded nothing"
+    assert tt.trading_paths(loaded) == sorted(loaded)
+
+
+def test_pr_ready_starts_readiness_isolated(monkeypatch) -> None:
+    from gpt_trader.agents import cli
+
+    seen: list[list[str]] = []
+
+    class Done:
+        returncode = 0
+
+    monkeypatch.setattr(cli.subprocess, "run", lambda argv, **kw: seen.append(argv) or Done())
+    monkeypatch.setattr(cli.sys, "argv", ["agent-pr-ready", "--pr", "1"])
+    assert cli.pr_ready() == 0
+    assert seen[0][1:3] == ["-I", "-S"]
+    assert seen[0][3].endswith("scripts/agents/pr_readiness.py")

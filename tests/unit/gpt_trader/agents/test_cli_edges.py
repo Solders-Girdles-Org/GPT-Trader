@@ -55,15 +55,15 @@ def test_run_script_forwards_args_and_sets_cwd(tmp_path, monkeypatch) -> None:
 
 
 @pytest.mark.parametrize(
-    ("func", "script_name"),
+    ("func", "script_name", "kwargs"),
     [
-        (cli.naming, "naming_inventory.py"),
-        (cli.pr_ready, "pr_readiness.py"),
+        (cli.naming, "naming_inventory.py", {}),
+        (cli.pr_ready, "pr_readiness.py", {"isolated": True}),
     ],
 )
-def test_entrypoints_call_run_script(func, script_name, monkeypatch) -> None:
+def test_entrypoints_call_run_script(func, script_name, kwargs, monkeypatch) -> None:
     run_mock = Mock(return_value=0)
     monkeypatch.setattr(cli, "_run_script", run_mock)
 
     assert func() == 0
-    run_mock.assert_called_once_with(script_name)
+    run_mock.assert_called_once_with(script_name, **kwargs)

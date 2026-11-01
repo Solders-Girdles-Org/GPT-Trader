@@ -81,6 +81,17 @@ def test_broken_base_trigger_fails_closed() -> None:
     assert finding.severity == "blocker"
 
 
+def test_failing_base_trigger_is_not_clean_even_with_a_verdict() -> None:
+    source = (
+        "import json\n"
+        'print(json.dumps({"severity": "info", "message": "looks clean"}), flush=True)\n'
+        "raise SystemExit(1)\n"
+    )
+    finding = pr_readiness.run_base_trigger(source, _state([LIVE]), None, "o/r")
+    assert finding.severity == "blocker"
+    assert "exited 1" in finding.message
+
+
 def test_unreadable_base_trigger_blocks_main(monkeypatch, capsys) -> None:
     for name, value in {
         "fetch_review_threads": lambda repo, pr: [],

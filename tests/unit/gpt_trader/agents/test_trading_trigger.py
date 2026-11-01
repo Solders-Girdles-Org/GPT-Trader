@@ -103,6 +103,15 @@ HEAD = "abcdef1234567890"
         # Read Alpaca account keys, so they stay flagged inside the recorder.
         "src/gpt_trader/features/recorder/equities_candles.py",
         "src/gpt_trader/features/recorder/snapshot_source.py",
+        # Suites that build the container or broker clients (RJ-1118 review).
+        "tests/integration/test_boot_container_perps_bot.py",
+        "tests/integration/conftest.py",
+        "tests/contract/conftest.py",
+        "tests/property/test_coinbase_invariants_pagination.py",
+        "tests/conftest.py",
+        "tests/constants.py",
+        # A module next to pr_readiness.py could shadow a standard one.
+        "scripts/agents/json.py",
         # Python imports these at startup, before any gate code runs.
         "src/sitecustomize.py",
         "usercustomize.py",
@@ -123,7 +132,6 @@ def test_trading_paths_hit(path: str) -> None:
         "scripts/analysis/backtest_runner.py",
         "src/gpt_trader/monitoring/health_checks.py",
         "src/gpt_trader/features/experiment/runner.py",
-        "scripts/agents/naming_inventory.py",
         "src/gpt_trader/preflight/checks/risk.py",
         "src/gpt_trader/cli/commands/experiment.py",
         "src/gpt_trader/cli/commands/console.py",

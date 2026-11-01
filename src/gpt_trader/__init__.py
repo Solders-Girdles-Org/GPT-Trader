@@ -46,7 +46,17 @@ if not hasattr(asyncio, "coroutine"):  # pragma: no cover - compatibility shim
 
     asyncio.coroutine = _asyncio_coroutine  # type: ignore[attr-defined]
 
-from . import cli
+
+def __getattr__(name: str) -> Any:
+    # Load the CLI on first use, not at package import: ``agent-pr-ready``
+    # imports this package, and must not run the app's modules before the
+    # trading trigger decides (RJ-1118).
+    if name == "cli":
+        import importlib
+
+        return importlib.import_module(f"{__name__}.cli")
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "__version__",
