@@ -30,6 +30,8 @@ REPO = Path(tt.__file__).resolve().parents[3]
         "conftest.py",
         "pytest.ini",
         "pyproject.toml",
+        "tests/unit/conftest.py",
+        "tests/unit/gpt_trader/new_area/conftest.py",
         ".coveragerc",
         ".pre-commit-config.yaml",
         # A reviewed root file's name doesn't cover a directory of that name.
@@ -85,3 +87,30 @@ def test_every_top_level_entry_is_reviewed_or_flagged() -> None:
     assert all(reason.strip() for reason in tt.TOP_LEVEL_REVIEWED.values())
     stale = [name for name in tt.TOP_LEVEL_REVIEWED if name not in tops]
     assert stale == []
+
+
+def test_scan_reads_python_identifiers_as_python_does(tmp_path: Path) -> None:
+    # Python NFKC-normalizes identifiers: the fullwidth "ｂ" imports brokerages.
+    path = "src/gpt_trader/utilities/new_helper.py"
+    (tmp_path / path).parent.mkdir(parents=True)
+    (tmp_path / path).write_text(
+        "from gpt_trader.features.\uff42rokerages.coinbase.client import CoinbaseClient as C\n",
+        encoding="utf-8",
+    )
+    assert tt.unflagged_live_capable(tmp_path, [path]) == [path]
+
+
+@pytest.mark.parametrize("text", ["dry_run: false\nmock_broker: false\n", "mock_broker: ~\n"])
+def test_markdown_that_turns_live_switches_off_fails_the_scan(tmp_path: Path, text: str) -> None:
+    # run --config reads YAML whatever the extension.
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs/live.md").write_text(text)
+    assert tt.unflagged_live_capable(tmp_path, ["docs/live.md"]) == ["docs/live.md"]
+
+
+def test_markdown_naming_keys_and_switches_left_on_passes(tmp_path: Path) -> None:
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs/guide.md").write_text(
+        "Set `COINBASE_API_KEY` and run `gpt-trader run --profile dev`.\n\ndry_run: true\n"
+    )
+    assert tt.unflagged_live_capable(tmp_path, ["docs/guide.md"]) == []

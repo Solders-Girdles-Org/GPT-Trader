@@ -47,6 +47,7 @@ import json
 import re
 import subprocess
 import sys
+import unicodedata
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -107,12 +108,12 @@ TRADING_PATTERNS: tuple[str, ...] = (
     "tests/unit/scripts/test_trading_trigger_status.py",
     "tests/unit/gpt_trader/agents/test_trading_trigger*.py",
     "tests/unit/scripts/test_pr_readiness_base_trigger.py",
-    # Root files that decide what other code runs (RJ-1143): pytest loads the
-    # root conftest.py and pytest.ini plugins and options on every run,
-    # including the real-API suites; pyproject.toml names the ``gpt-trader``
+    # Files that decide what other code runs (RJ-1143): pytest loads every
+    # conftest.py above a test it collects, and pytest.ini plugins and options,
+    # before any fixture can enforce mocks; pyproject.toml names the ``gpt-trader``
     # entry point and what the image installs; coverage and pre-commit load
     # plugins and hooks.
-    "conftest.py",
+    "**/conftest.py",
     "pytest.ini",
     "pyproject.toml",
     ".coveragerc",
@@ -217,6 +218,21 @@ TRADING_EXCEPT: dict[str, str] = {
 # someone classifies it. Building the app
 # container counts: it holds whatever broker the profile picks, so one added
 # call in a script that builds it could place an order.
+# A YAML or JSON file that turns live off-switches off. ``run --config``
+# takes a file from anywhere, whatever its extension, and sets each switch to
+# true unless the file sets it to a boolean false, so a file outside config/
+# trades live only by carrying one of these lines. Empty and null values are
+# flagged too (RJ-1127): another loader may read them as false. A bare key line
+# is matched only at line start, so Python's ``if dry_run:`` is not. Markdown
+# is scanned for these lines alone (RJ-1143), so ``docs/live.md`` can't serve
+# as a live config.
+_SWITCH_OFF = (
+    r"""(?i:\b(?:dry_run|mock_broker)["']?\s*:\s*"""
+    r"""(?:["']?(?:false|no|off|0|null|none)\b|~|""|''))"""
+    r"""|(?im:^[ \t-]*["']?(?:dry_run|mock_broker)["']?[ \t]*:[ \t]*(?:#.*)?$)"""
+)
+LIVE_SWITCH_OFF = re.compile(_SWITCH_OFF)
+
 LIVE_CAPABLE = re.compile(
     r"COINBASE_[A-Z_]*(?:API_KEY|PRIVATE_KEY|API_SECRET|CDP|CREDENTIALS|SANDBOX|PASSPHRASE)"
     r"|ROBINHOOD_[A-Z_]*(?:KEY|SECRET|TOKEN)|ALPACA_[A-Z_]*(?:KEY|SECRET)"
@@ -231,18 +247,12 @@ LIVE_CAPABLE = re.compile(
     r"|\bimport_module\b|\b__import__\b|\bspec_from_file_location\b|\brunpy\b"
     r"|MOCK_BROKER|\bDRY_RUN\b|--dry-run(?![-\w])|gpt-trader run|gpt_trader\.cli.{0,20}\brun\b"
     r"""|["']run["'],\s*["']--(?:profile|dry-run)"""
-    # A YAML or JSON file that turns live off-switches off. ``run --config``
-    # takes a file from anywhere and sets each switch to true unless the file
-    # sets it to a boolean false, so a file outside config/ trades live only
-    # by carrying one of these lines. Empty and null values are flagged too
-    # (RJ-1127): another loader may read them as false. A bare key line is
-    # matched only at line start, so Python's ``if dry_run:`` is not.
-    r"""|(?i:\b(?:dry_run|mock_broker)["']?\s*:\s*"""
-    r"""(?:["']?(?:false|no|off|0|null|none)\b|~|""|''))"""
-    r"""|(?im:^[ \t-]*["']?(?:dry_run|mock_broker)["']?[ \t]*:[ \t]*(?:#.*)?$)"""
+    # Live off-switches turned off, defined above.
+    "|" + _SWITCH_OFF
 )
 
-# Areas the backstop does not scan: prose, and unit tests (mock-only in CI).
+# Areas the backstop does not scan for every token: prose (scanned for
+# LIVE_SWITCH_OFF only), and unit tests (mock-only in CI).
 SCAN_SKIP: tuple[str, ...] = ("**/*.md", "docs/**", "tests/unit/**", "uv.lock")
 
 # Files that contain a LIVE_CAPABLE token but were reviewed as unable to reach
@@ -360,6 +370,7 @@ def trading_paths(paths: Iterable[str]) -> list[str]:
 
 
 _SKIP = tuple(_glob_regex(p) for p in SCAN_SKIP)
+_PROSE = _glob_regex("**/*.md")
 
 
 def _skipped(path: str) -> bool:
@@ -388,6 +399,8 @@ def scan_text(data: bytes) -> str:
 
     UTF-8 always; the codec a byte-order mark names; UTF-16 both ways when the
     bytes hold NULs (UTF-16 text without a mark); and a Python coding cookie.
+    Each reading is also NFKC-normalized, as Python normalizes identifiers, so
+    ``ｂrokerages`` (fullwidth b) imports, and is scanned as, ``brokerages``.
     """
     readings = [data.decode("utf-8", errors="ignore")]
     codecs = [codec for bom, codec in _BOMS if data.startswith(bom)][:1]
@@ -401,6 +414,7 @@ def scan_text(data: bytes) -> str:
             readings.append(data.decode(codec, errors="ignore"))
         except Exception:  # noqa: BLE001 - any codec a cookie names; keep the other readings
             continue
+    readings += [unicodedata.normalize("NFKC", text) for text in readings]
     return "\n".join(readings)
 
 
@@ -412,13 +426,14 @@ def unflagged_live_capable(root: Path, paths: Iterable[str] | None = None) -> li
     """
     misses = []
     for path in tracked_files(root) if paths is None else paths:
-        if _skipped(path) or trading_paths([path]):
+        prose = _PROSE.match(path)
+        if (_skipped(path) and not prose) or trading_paths([path]):
             continue
         try:
             data = (root / path).read_bytes()
         except OSError:
             continue
-        if LIVE_CAPABLE.search(scan_text(data)):
+        if (LIVE_SWITCH_OFF if prose else LIVE_CAPABLE).search(scan_text(data)):
             misses.append(path)
     return sorted(misses)
 
