@@ -10,8 +10,9 @@ the trigger: a PR that changes one must say so in its body, either declaring
 ``Reserved: e ...`` (RJ authorizes the head) or ``Reserved: none`` with a clean
 cross-family ``Review:`` line for the current head that confirms it. Every PR
 needs a ``Reserved:`` line; one without it is blocked even off these paths.
-Once RJ authorizes a reserved head, an ``RJ-authorized: <head SHA>`` line
-records it; it clears the reserved blocker for that head only.
+Once RJ authorizes a reserved head, an ``RJ-authorized: <head SHA> <link>``
+line records it, linking his words; it clears the reserved blocker for that
+head only, and doesn't count inside an HTML comment.
 
 The trigger flags directories by default and lists its exceptions with
 reasons; anything under ``src/`` that no exception names, such as a new
@@ -105,7 +106,7 @@ TRADING_PATTERNS: tuple[str, ...] = (
     # The required status that applies this rule from base-branch code.
     ".github/workflows/trading-trigger.yml",
     "scripts/ci/trading_trigger_status.py",
-    "tests/unit/scripts/test_trading_trigger_status.py",
+    "tests/unit/scripts/test_trading_trigger_status*.py",
     "tests/unit/gpt_trader/agents/test_trading_trigger*.py",
     "tests/unit/scripts/test_pr_readiness_base_trigger.py",
     # Files that decide what other code runs (RJ-1143): pytest loads every
@@ -303,9 +304,26 @@ _DECLARATION = re.compile(
     r"^(?:[-*] )?(?:\*\*)?(reserved|review|rj-authorized)(?:\*\*)?:(?:\*\*)?(.*)$",
     re.IGNORECASE,
 )
-# ``RJ-authorized: <head SHA> ...``: the head RJ authorized, then free text
-# (his words or where they are recorded).
-_AUTHORIZED_HEAD = re.compile(r"([0-9a-f]{7,40})(?![0-9a-z])", re.IGNORECASE)
+# ``RJ-authorized: <head SHA> <link to RJ's words>``: the head RJ authorized,
+# then the comment that records his authorization, on a Linear card or a
+# GitHub issue or PR. A commit link is not his words.
+_RJ_WORDS = (
+    r"https://(?:linear\.app/\S+#comment-[\w-]+"
+    r"|github\.com/[^/\s]+/[^/\s]+/(?:pull|issues)/\d+"
+    r"#(?:(?:issuecomment|pullrequestreview)-|discussion_r)\d+)"
+)
+_AUTHORIZED_HEAD = re.compile(r"([0-9a-f]{7,40})(?![0-9a-z]).*?" + _RJ_WORDS, re.IGNORECASE)
+# The same declaration as a shown line: its text, then its link targets.
+_SHOWN_AUTHORIZATION = re.compile(
+    r"rj-authorized: ([0-9a-f]{7,40})(?![0-9a-z]).*?" + _RJ_WORDS, re.IGNORECASE
+)
+# HTML comments hide text in the rendered PR; an unclosed one hides the rest.
+_HTML_COMMENT = re.compile(r"<!--.*?(?:-->|\Z)", re.DOTALL)
+# The review a ``Review:`` line names, and the head it was carried from, if any.
+_REVIEW_ID = re.compile(
+    r"#pullrequestreview-(\d+) \((?:codex|claude)\) at ([0-9a-f]{7,40}): ", re.I
+)
+_CARRIED_FROM = re.compile(r"\(carried from ([0-9a-f]{7,40}): ", re.IGNORECASE)
 _NONE = re.compile(r"\s*none\.?\s*", re.IGNORECASE)
 # The contract's only endings for a clean outcome: non-blocking notes, or a head
 # carried across a rebase for one of the listed reasons. Anything else is malformed.
@@ -468,14 +486,39 @@ def reserved_values(body: str) -> list[str]:
     return _declarations(body, "reserved")
 
 
-def rj_authorized_heads(body: str) -> list[str]:
-    """Heads named by ``RJ-authorized:`` lines, lowercased; malformed lines are ignored."""
+def rj_authorized_heads(body: str, rendered: Sequence[str] | None = None) -> list[str]:
+    """Heads named by ``RJ-authorized:`` lines, lowercased.
+
+    A line counts only with a link to the comment holding RJ's words, and not
+    inside an HTML comment; others are ignored. Given ``rendered``, the lines GitHub shows
+    when it renders the body (with each line's link targets), a head also
+    counts only if one shown line itself starts ``RJ-authorized: <SHA>`` and
+    carries such a link (link targets follow a line's text), so Markdown that
+    hides the line can't carry one.
+    """
+    shown = [" ".join(line.split()).lower() for line in rendered or ()]
     heads = []
-    for value in _declarations(body, "rj-authorized"):
+    for value in _declarations(_HTML_COMMENT.sub("", body or ""), "rj-authorized"):
         match = _AUTHORIZED_HEAD.match(value)
-        if match:
-            heads.append(match.group(1).lower())
+        if not match:
+            continue
+        head = match.group(1).lower()
+        if rendered is None or any(_shows(line, head) for line in shown):
+            heads.append(head)
     return heads
+
+
+def _shows(line: str, head: str) -> bool:
+    """Whether a shown line is an authorization of ``head`` with its link.
+
+    GitHub shows a commit SHA shortened, so either SHA may be the other's prefix.
+    """
+    match = _SHOWN_AUTHORIZATION.match(line)
+    return bool(match and (head.startswith(match.group(1)) or match.group(1).startswith(head)))
+
+
+def has_rj_authorized_line(body: str) -> bool:
+    return bool(_declarations(body, "rj-authorized"))
 
 
 def _authorizes(sha: str | None, head_oid: str) -> bool:
@@ -506,6 +549,32 @@ def parse_review(value: str, repo: str | None = None, number: int | None = None)
     if outcome == "blocking" and ending and not re.match(r"\W", ending):
         return None  # "blockingly" and the like are not an outcome
     return {"family": match.group(1).lower(), "sha": match.group(2).lower(), "outcome": outcome}
+
+
+def review_claims(body: str, repo: str, number: int) -> list[dict[str, Any]]:
+    """What each well-formed ``Review:`` line on this PR claims.
+
+    Each claim names the review ``id``, the ``sha`` it says was reviewed (for a
+    carried line, the head it was carried from, with ``carried`` true) and its
+    ``outcome``. The text can't prove a review exists; the caller checks each
+    claim against GitHub.
+    """
+    claims = []
+    for value in _declarations(body, "review"):
+        parsed = None if _NONE.fullmatch(value) else parse_review(value, repo, number)
+        match = _REVIEW_ID.search(value) if parsed else None
+        if parsed and match:
+            carried = _CARRIED_FROM.search(value)
+            sha = carried.group(1) if carried else match.group(2)
+            claims.append(
+                {
+                    "id": int(match.group(1)),
+                    "sha": sha.lower(),
+                    "outcome": parsed["outcome"],
+                    "carried": bool(carried),
+                }
+            )
+    return claims
 
 
 def clean_review_for_head(
@@ -541,18 +610,21 @@ def assess(
     rj_authorized_head: str | None = None,
     repo: str | None = None,
     number: int | None = None,
+    rendered: Sequence[str] | None = None,
 ) -> TriggerResult:
     """Apply reserved item (e) and the contract's Reserved line to one PR.
 
     RJ's authorization comes from ``rj_authorized_head`` or an ``RJ-authorized:``
-    line in the body; either counts only for the current head.
+    line in the body; either counts only for the current head. ``rendered`` is
+    the body's lines as GitHub shows them, where an authorization line must be.
     """
     hits = tuple(trading_paths(paths))
     values = reserved_values(body)
     reserved = [v for v in values if not _NONE.fullmatch(v)]
     blank = [v for v in values if not v]
     authorized = any(
-        _authorizes(sha, head_oid) for sha in (rj_authorized_head, *rj_authorized_heads(body))
+        _authorizes(sha, head_oid)
+        for sha in (rj_authorized_head, *rj_authorized_heads(body, rendered))
     )
     hit_note = f" Trading paths: {', '.join(hits)}." if hits else ""
 
@@ -565,7 +637,8 @@ def assess(
         return TriggerResult(
             "blocker",
             f"Reserved ({label}): RJ must authorize head {head_oid[:7]} before merge; "
-            f"once he has, add `RJ-authorized: {head_oid[:7]}` to the PR body.{hit_note}",
+            f"once he has, add `RJ-authorized: {head_oid[:7]} <link to his words>` to the PR "
+            f"body.{hit_note}",
             hits,
         )
     if hits:

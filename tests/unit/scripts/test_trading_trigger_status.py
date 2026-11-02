@@ -32,14 +32,34 @@ class FakeGitHub:
         self.files = [{"filename": f} for f in files]
         self.updates: list[dict[str, Any]] = []  # applied to the PR, one per pulls read
         self.queue_refs: list[dict[str, Any]] = []
-        self.posted: list[dict[str, str]] = []
+        self.posted: list[dict[str, str]] = []  # verdicts
+        self.pending: list[str] = []  # commits marked pending, in order
+        self.order: list[str] = []  # state of every post, in order
+        self.reviews: dict[int, str] = {}  # review id -> commit it reviewed
+        self.review_state = "COMMENTED"
+        self.rendered: str | None = None  # HTML for the markdown API; None shows the body
+        self.markdown_calls = 0
 
-    def __call__(self, args: list[str]) -> str:
+    def __call__(self, args: list[str], stdin: str | None = None) -> str:
+        if args[:2] == ["api", "markdown"]:
+            self.markdown_calls += 1
+            text = json.loads(stdin or "{}")["text"]
+            return self.rendered if self.rendered is not None else f"<p>{text}</p>"
         if args[:3] == ["api", "--method", "POST"]:
             fields = dict(a.split("=", 1) for a in args[4:] if a != "-f")
             fields["sha"] = args[3].rsplit("/", 1)[1]
-            self.posted.append(fields)
+            self.order.append(fields["state"])
+            if fields["state"] == "pending":
+                self.pending.append(fields["sha"])
+            else:
+                self.posted.append(fields)
             return "{}"
+        if "/reviews/" in args[1]:
+            review_id = int(args[1].rsplit("/", 1)[1])
+            if review_id not in self.reviews:
+                raise RuntimeError("gh: Not Found (HTTP 404)")
+            commit = self.reviews[review_id]
+            return json.dumps({"id": review_id, "commit_id": commit, "state": self.review_state})
         if "--paginate" in args:
             return json.dumps([self.files])
         if "/git/matching-refs/" in args[1]:
@@ -50,12 +70,16 @@ class FakeGitHub:
         return json.dumps(self.pr)
 
 
-@pytest.fixture
-def github(monkeypatch: pytest.MonkeyPatch) -> FakeGitHub:
+def install_fake(monkeypatch: pytest.MonkeyPatch) -> FakeGitHub:
     fake = FakeGitHub("Reserved: none", ["docs/STATUS.md"])
     monkeypatch.setattr(status, "_gh", fake)
     monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
     return fake
+
+
+@pytest.fixture
+def github(monkeypatch: pytest.MonkeyPatch) -> FakeGitHub:
+    return install_fake(monkeypatch)
 
 
 def run(*args: str) -> int:
@@ -78,13 +102,6 @@ def test_trading_path_with_unconfirmed_none_posts_failure(github: FakeGitHub) ->
     assert len(github.posted[0]["description"]) <= 140
 
 
-def test_clean_review_of_this_head_posts_success(github: FakeGitHub) -> None:
-    github.files = [{"filename": TRADING}]
-    github.pr["body"] = f"Reserved: none\nReview: {LINK} (Codex) at {HEAD[:7]}: clean"
-    run("--pr", "7", "--expected-head", HEAD)
-    assert github.posted[0]["state"] == "success"
-
-
 def test_review_link_must_be_on_this_pr(github: FakeGitHub) -> None:
     github.files = [{"filename": TRADING}]
     other = f"https://github.com/{REPO}/pull/8#pullrequestreview-1"
@@ -97,7 +114,7 @@ def test_reserved_pr_passes_only_with_rj_authorization_for_this_head(github: Fak
     github.files = [{"filename": TRADING}]
     github.pr["body"] = "Reserved: e - cancels orders"
     run("--pr", "7", "--expected-head", HEAD)
-    github.pr["body"] += f"\nRJ-authorized: {HEAD[:7]}"
+    github.pr["body"] += f"\nRJ-authorized: {HEAD[:7]} https://linear.app/x/issue/RJ-1#comment-1"
     run("--pr", "7", "--expected-head", HEAD)
     assert [p["state"] for p in github.posted] == ["failure", "success"]
 
@@ -166,12 +183,12 @@ class FlakyGitHub(FakeGitHub):
         self.fail_on = fail_on
         self.always = always
 
-    def __call__(self, args: list[str]) -> str:
+    def __call__(self, args: list[str], stdin: str | None = None) -> str:
         if self.fail_on and any(self.fail_on in a for a in args):
             if not self.always:
                 self.fail_on = ""
             raise RuntimeError("HTTP 502")
-        return super().__call__(args)
+        return super().__call__(args, stdin)
 
 
 @pytest.mark.parametrize("fail_on", ["--paginate", "/git/matching-refs/", "--merge-group-ref"])
@@ -205,7 +222,7 @@ def test_queue_run_judges_again_when_the_body_changes_after_it_posts(
 ) -> None:
     # RJ's authorization is removed while the queue run is posting success.
     github.files = [{"filename": TRADING}]
-    authorized = f"Reserved: e - cancels orders\nRJ-authorized: {HEAD[:7]}"
+    authorized = f"Reserved: e - cancels orders\nRJ-authorized: {HEAD[:7]} https://github.com/o/r/pull/7#issuecomment-1"
     github.pr["body"] = authorized
     github.updates = [{}, {}, {"body": "Reserved: e - cancels orders"}]
     assert run("--merge-group-ref", QUEUE_REF, "--status-sha", QUEUE_SHA) == 0

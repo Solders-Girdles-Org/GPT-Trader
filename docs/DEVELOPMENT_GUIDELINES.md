@@ -70,9 +70,12 @@ and body, so code in the PR can't change the verdict. It reruns when the body
 is edited. It fails a PR whose body has no `Reserved:` line, so a Dependabot
 PR needs `Reserved: none` added once you have read its diff (again if
 Dependabot rewrites the body). A reserved PR passes only once its body
-carries `RJ-authorized: <head SHA>` for the current head, after RJ authorizes
-that head. Limit: a status is identified by name and app, so a PR that adds a
-workflow could post the same name; read any new workflow in review.
+carries `RJ-authorized: <head SHA> <link to RJ's words>` for the current
+head, outside any HTML comment, after RJ authorizes that head; the link is the
+Linear or GitHub comment that records it. Each `Review:` line must name a
+review that exists on the PR for the commit it states (the earlier head, for a
+carried line). Limit: a status is identified by name and app, so a PR that
+adds a workflow could post the same name; read any new workflow in review.
 
 ### Local CI troubleshooting
 

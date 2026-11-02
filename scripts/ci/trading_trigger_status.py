@@ -28,7 +28,9 @@ import os
 import re
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
+from html.parser import HTMLParser
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -47,7 +49,7 @@ _SETTLE_ROUNDS = 3
 
 @dataclass(frozen=True)
 class Verdict:
-    state: str  # success / failure / error
+    state: str  # pending / success / failure / error
     message: str
     paths: tuple[str, ...] = ()
 
@@ -67,8 +69,8 @@ def load_trigger(path: Path = TRIGGER_PATH) -> ModuleType:
     return module
 
 
-def _gh(args: list[str]) -> str:
-    result = subprocess.run(["gh", *args], capture_output=True, text=True, check=False)
+def _gh(args: list[str], stdin: str | None = None) -> str:
+    result = subprocess.run(["gh", *args], input=stdin, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or f"gh {args[0]} failed")
     return result.stdout
@@ -97,6 +99,106 @@ def fetch_files(repo: str, number: int) -> tuple[list[str], int]:
     return paths, listed
 
 
+def fetch_review(repo: str, number: int, review_id: int) -> dict[str, Any] | None:
+    """The review on this PR, or None when GitHub has no such review there."""
+    try:
+        payload = json.loads(_gh(["api", f"repos/{repo}/pulls/{number}/reviews/{review_id}"]))
+    except RuntimeError as error:
+        if "HTTP 404" in str(error):
+            return None
+        raise
+    return payload if isinstance(payload, dict) else None
+
+
+# Review states that can back a clean claim. A pending review is a draft only
+# its author sees; changes requested or dismissed is not clean.
+_CLEAN_STATES = {"APPROVED", "COMMENTED"}
+
+
+def unbacked_review(trigger: ModuleType, pr: dict[str, Any], repo: str) -> str | None:
+    """Why a ``Review:`` line names no real review of its commit on this PR, if one doesn't.
+
+    The trigger reads the lines as text, so without this a line could cite a
+    review that doesn't exist, one of another commit, or one that isn't clean,
+    and still count. A line about the current head needs a review of that exact
+    commit, not just one whose SHA shares the line's prefix.
+    """
+    number = int(pr["number"])
+    head = str(pr["head"]["sha"]).lower()
+    for claim in trigger.review_claims(str(pr.get("body") or ""), repo, number):
+        review_id, sha = claim["id"], claim["sha"]
+        review = fetch_review(repo, number, review_id) or {}
+        commit = str(review.get("commit_id") or "").lower()
+        current = not claim["carried"] and head.startswith(sha)
+        state = str(review.get("state") or "")
+        if not commit or (commit != head if current else not commit.startswith(sha)):
+            return (
+                f"A Review: line names review {review_id} at {sha[:7]}, but this PR has no "
+                f"review {review_id} of {sha[:7]}."
+            )
+        if claim["outcome"] == "clean" and state not in _CLEAN_STATES:
+            return f"A Review: line calls review {review_id} clean, but its state is {state}."
+    return None
+
+
+def rendered_lines(repo: str, body: str) -> list[str]:
+    """The body's lines as GitHub renders and shows them, each followed by its link targets.
+
+    Comments and Markdown that hides text drop out. Block elements and line
+    breaks end a line, so prose that mentions an authorization stays a
+    separate line from one that is hidden.
+    """
+    html = _gh(
+        ["api", "markdown", "--input", "-"],
+        stdin=json.dumps({"text": body, "mode": "gfm", "context": repo}),
+    )
+    parser = _ShownLines()
+    parser.feed(html)
+    parser.close()
+    return parser.lines()
+
+
+class _ShownLines(HTMLParser):
+    _BREAKS = {
+        "p", "li", "div", "pre", "blockquote", "details", "summary", "br", "hr", "tr",
+        "td", "th", "dt", "dd", "h1", "h2", "h3", "h4", "h5", "h6", "table", "ul", "ol",
+    }  # fmt: skip
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.current: list[str] = []
+        self.links: list[str] = []
+        self.done: list[str] = []
+
+    def _end_line(self) -> None:
+        # Link targets go after the text, so the shown text keeps its order.
+        line = " ".join(" ".join([*self.current, *self.links]).split())
+        if line:
+            self.done.append(line)
+        self.current, self.links = [], []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in self._BREAKS:
+            self._end_line()
+        if tag == "a":
+            self.links.extend(value for name, value in attrs if name == "href" and value)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self._BREAKS:
+            self._end_line()
+
+    def handle_data(self, data: str) -> None:
+        parts = data.split("\n")
+        for index, part in enumerate(parts):
+            if index:
+                self._end_line()
+            self.current.append(part)
+
+    def lines(self) -> list[str]:
+        self._end_line()
+        return self.done
+
+
 def queued_pr_number(ref: str) -> int:
     match = _QUEUE_REF.fullmatch(ref or "")
     if not match:
@@ -120,12 +222,19 @@ def judge(
             f"GitHub listed {listed} of {expected} changed files; "
             "the trigger must see every file. Split the PR.",
         )
+    unbacked = unbacked_review(trigger, pr, repo)
+    if unbacked:
+        return Verdict("failure", unbacked)
+    body = str(pr.get("body") or "")
+    # Only a reserved PR's authorization line needs the rendered text.
+    rendered = rendered_lines(repo, body) if trigger.has_rj_authorized_line(body) else None
     result = trigger.assess(
         paths,
-        str(pr.get("body") or ""),
+        body,
         str(pr["head"]["sha"]),
         repo=repo,
         number=int(pr["number"]),
+        rendered=rendered,
     )
     state = "failure" if result.severity == "blocker" else "success"
     return Verdict(state, str(result.message), tuple(result.paths))
@@ -138,14 +247,20 @@ def evaluate(
     *,
     expected_head: str | None = None,
     queued: bool = False,
+    on_current: Callable[[str], None] | None = None,
 ) -> tuple[Verdict, dict[str, Any]]:
-    """Judge the PR as it stands now; returns the verdict and the PR read it covers."""
+    """Judge the PR as it stands now; returns the verdict and the PR read it covers.
+
+    ``on_current`` is called with the head once the event is known to be current.
+    """
     pr = fetch_pr(repo, number)
     if not queued and pr.get("state") != "open":
         raise Skip(f"PR #{number} is {pr.get('state')}")
     head = str(pr["head"]["sha"])
     if expected_head and head != expected_head:
         raise Skip(f"PR #{number} head moved from {expected_head[:7]} to {head[:7]}")
+    if on_current:
+        on_current(head)
     paths, listed = fetch_files(repo, number)
     # Read the PR again: the files must belong to the head and body being judged.
     again = fetch_pr(repo, number)
@@ -244,8 +359,23 @@ def main(argv: list[str] | None = None) -> int:
         if not queued:
             targets = queue_shas(args.repo, number)
         trigger = load_trigger()
+
+        def judging(head: str) -> None:
+            # Pending first: if this run is killed (the job's time limit), an
+            # earlier success for the same commit doesn't stand. Keep the head,
+            # so an error after this replaces the pending.
+            nonlocal sha
+            sha = sha or head
+            for target in dict.fromkeys((sha, *targets)):
+                publish(target, Verdict("pending", "Judging with the base trading trigger."))
+
         verdict, pr = evaluate(
-            trigger, args.repo, number, expected_head=args.expected_head, queued=queued
+            trigger,
+            args.repo,
+            number,
+            expected_head=args.expected_head,
+            queued=queued,
+            on_current=judging,
         )
         sha = sha or str(pr["head"]["sha"])
         publish(sha, verdict)
