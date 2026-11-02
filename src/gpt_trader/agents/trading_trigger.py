@@ -10,8 +10,9 @@ the trigger: a PR that changes one must say so in its body, either declaring
 ``Reserved: e ...`` (RJ authorizes the head) or ``Reserved: none`` with a clean
 cross-family ``Review:`` line for the current head that confirms it. Every PR
 needs a ``Reserved:`` line; one without it is blocked even off these paths.
-Once RJ authorizes a reserved head, an ``RJ-authorized: <head SHA>`` line
-records it; it clears the reserved blocker for that head only.
+Once RJ authorizes a reserved head, an ``RJ-authorized: <head SHA> <link>``
+line records it, linking his words; it clears the reserved blocker for that
+head only, and doesn't count inside an HTML comment.
 
 The trigger flags directories by default and lists its exceptions with
 reasons; anything under ``src/`` that no exception names, such as a new
@@ -303,9 +304,18 @@ _DECLARATION = re.compile(
     r"^(?:[-*] )?(?:\*\*)?(reserved|review|rj-authorized)(?:\*\*)?:(?:\*\*)?(.*)$",
     re.IGNORECASE,
 )
-# ``RJ-authorized: <head SHA> ...``: the head RJ authorized, then free text
-# (his words or where they are recorded).
-_AUTHORIZED_HEAD = re.compile(r"([0-9a-f]{7,40})(?![0-9a-z])", re.IGNORECASE)
+# ``RJ-authorized: <head SHA> <link to RJ's words>``: the head RJ authorized,
+# then where his authorization is recorded (a Linear or GitHub comment).
+_AUTHORIZED_HEAD = re.compile(
+    r"([0-9a-f]{7,40})(?![0-9a-z]).*?\bhttps://(?:linear\.app|github\.com)/\S+", re.IGNORECASE
+)
+# HTML comments hide text in the rendered PR; an unclosed one hides the rest.
+_HTML_COMMENT = re.compile(r"<!--.*?(?:-->|\Z)", re.DOTALL)
+# The review a ``Review:`` line names, and the head it was carried from, if any.
+_REVIEW_ID = re.compile(
+    r"#pullrequestreview-(\d+) \((?:codex|claude)\) at ([0-9a-f]{7,40}): ", re.I
+)
+_CARRIED_FROM = re.compile(r"\(carried from ([0-9a-f]{7,40}): ", re.IGNORECASE)
 _NONE = re.compile(r"\s*none\.?\s*", re.IGNORECASE)
 # The contract's only endings for a clean outcome: non-blocking notes, or a head
 # carried across a rebase for one of the listed reasons. Anything else is malformed.
@@ -469,9 +479,13 @@ def reserved_values(body: str) -> list[str]:
 
 
 def rj_authorized_heads(body: str) -> list[str]:
-    """Heads named by ``RJ-authorized:`` lines, lowercased; malformed lines are ignored."""
+    """Heads named by ``RJ-authorized:`` lines, lowercased.
+
+    A line counts only where the rendered PR shows it (not inside an HTML
+    comment) and only with a link to RJ's words; others are ignored.
+    """
     heads = []
-    for value in _declarations(body, "rj-authorized"):
+    for value in _declarations(_HTML_COMMENT.sub("", body or ""), "rj-authorized"):
         match = _AUTHORIZED_HEAD.match(value)
         if match:
             heads.append(match.group(1).lower())
@@ -506,6 +520,25 @@ def parse_review(value: str, repo: str | None = None, number: int | None = None)
     if outcome == "blocking" and ending and not re.match(r"\W", ending):
         return None  # "blockingly" and the like are not an outcome
     return {"family": match.group(1).lower(), "sha": match.group(2).lower(), "outcome": outcome}
+
+
+def review_claims(body: str, repo: str, number: int) -> list[tuple[int, str]]:
+    """``(review id, reviewed commit)`` for each well-formed ``Review:`` line on this PR.
+
+    The reviewed commit is the line's head, or for a carried line the head it
+    was carried from. The text can't prove a review exists; the caller checks
+    each claim against GitHub.
+    """
+    claims = []
+    for value in _declarations(body, "review"):
+        if _NONE.fullmatch(value) or parse_review(value, repo, number) is None:
+            continue
+        match = _REVIEW_ID.search(value)
+        if match:
+            carried = _CARRIED_FROM.search(value)
+            sha = carried.group(1) if carried else match.group(2)
+            claims.append((int(match.group(1)), sha.lower()))
+    return claims
 
 
 def clean_review_for_head(
@@ -565,7 +598,8 @@ def assess(
         return TriggerResult(
             "blocker",
             f"Reserved ({label}): RJ must authorize head {head_oid[:7]} before merge; "
-            f"once he has, add `RJ-authorized: {head_oid[:7]}` to the PR body.{hit_note}",
+            f"once he has, add `RJ-authorized: {head_oid[:7]} <link to his words>` to the PR "
+            f"body.{hit_note}",
             hits,
         )
     if hits:

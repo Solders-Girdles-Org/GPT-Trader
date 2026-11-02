@@ -28,6 +28,7 @@ import os
 import re
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
@@ -47,7 +48,7 @@ _SETTLE_ROUNDS = 3
 
 @dataclass(frozen=True)
 class Verdict:
-    state: str  # success / failure / error
+    state: str  # pending / success / failure / error
     message: str
     paths: tuple[str, ...] = ()
 
@@ -97,6 +98,35 @@ def fetch_files(repo: str, number: int) -> tuple[list[str], int]:
     return paths, listed
 
 
+def fetch_review(repo: str, number: int, review_id: int) -> dict[str, Any] | None:
+    """The review on this PR, or None when GitHub has no such review there."""
+    try:
+        payload = json.loads(_gh(["api", f"repos/{repo}/pulls/{number}/reviews/{review_id}"]))
+    except RuntimeError as error:
+        if "HTTP 404" in str(error):
+            return None
+        raise
+    return payload if isinstance(payload, dict) else None
+
+
+def unbacked_review(trigger: ModuleType, pr: dict[str, Any], repo: str) -> str | None:
+    """Why a ``Review:`` line names no real review of its commit on this PR, if one doesn't.
+
+    The trigger reads the lines as text, so without this a line could cite a
+    review that doesn't exist, or one of another commit, and still count.
+    """
+    number = int(pr["number"])
+    for review_id, sha in trigger.review_claims(str(pr.get("body") or ""), repo, number):
+        review = fetch_review(repo, number, review_id)
+        commit = str((review or {}).get("commit_id") or "").lower()
+        if not commit.startswith(sha):
+            return (
+                f"A Review: line names review {review_id} at {sha[:7]}, but this PR has no "
+                f"review {review_id} of {sha[:7]}."
+            )
+    return None
+
+
 def queued_pr_number(ref: str) -> int:
     match = _QUEUE_REF.fullmatch(ref or "")
     if not match:
@@ -120,6 +150,9 @@ def judge(
             f"GitHub listed {listed} of {expected} changed files; "
             "the trigger must see every file. Split the PR.",
         )
+    unbacked = unbacked_review(trigger, pr, repo)
+    if unbacked:
+        return Verdict("failure", unbacked)
     result = trigger.assess(
         paths,
         str(pr.get("body") or ""),
@@ -138,14 +171,20 @@ def evaluate(
     *,
     expected_head: str | None = None,
     queued: bool = False,
+    on_current: Callable[[str], None] | None = None,
 ) -> tuple[Verdict, dict[str, Any]]:
-    """Judge the PR as it stands now; returns the verdict and the PR read it covers."""
+    """Judge the PR as it stands now; returns the verdict and the PR read it covers.
+
+    ``on_current`` is called with the head once the event is known to be current.
+    """
     pr = fetch_pr(repo, number)
     if not queued and pr.get("state") != "open":
         raise Skip(f"PR #{number} is {pr.get('state')}")
     head = str(pr["head"]["sha"])
     if expected_head and head != expected_head:
         raise Skip(f"PR #{number} head moved from {expected_head[:7]} to {head[:7]}")
+    if on_current:
+        on_current(head)
     paths, listed = fetch_files(repo, number)
     # Read the PR again: the files must belong to the head and body being judged.
     again = fetch_pr(repo, number)
@@ -244,8 +283,20 @@ def main(argv: list[str] | None = None) -> int:
         if not queued:
             targets = queue_shas(args.repo, number)
         trigger = load_trigger()
+
+        def judging(head: str) -> None:
+            # Pending first: if this run is killed (the job's time limit), an
+            # earlier success for the same commit doesn't stand.
+            for target in dict.fromkeys((sha or head, *targets)):
+                publish(target, Verdict("pending", "Judging with the base trading trigger."))
+
         verdict, pr = evaluate(
-            trigger, args.repo, number, expected_head=args.expected_head, queued=queued
+            trigger,
+            args.repo,
+            number,
+            expected_head=args.expected_head,
+            queued=queued,
+            on_current=judging,
         )
         sha = sha or str(pr["head"]["sha"])
         publish(sha, verdict)
