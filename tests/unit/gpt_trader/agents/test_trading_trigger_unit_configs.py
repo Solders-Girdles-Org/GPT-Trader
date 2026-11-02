@@ -107,3 +107,35 @@ def test_python_code_with_unreadable_encoding_and_no_switch_off_passes(tmp_path:
     code.parent.mkdir(parents=True)
     code.write_bytes(b"# caf\xe9\nprint('hello')\n")
     assert tt.unflagged_live_capable(tmp_path, [path]) == []
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        b"# \xcc\x85dry_run: false #\xcc\x85mock_broker: false #\n",
+        b'# \xcc\x85"dry_run": false #\xcc\x85"mock_broker": false #\n',
+    ],
+)
+def test_valid_utf8_python_config_with_latin1_line_breaks_is_caught(
+    tmp_path: Path, data: bytes
+) -> None:
+    import yaml
+
+    # UTF-8 sees only a comment; Latin-1 sees NEL line breaks and live config.
+    assert yaml.safe_load(data) is None
+    assert yaml.safe_load(data.decode("latin-1")) == {"dry_run": False, "mock_broker": False}
+    path = "tests/unit/locale.py"
+    config = tmp_path / path
+    config.parent.mkdir(parents=True)
+    config.write_bytes(data)
+    assert tt.unflagged_live_capable(tmp_path, [path]) == [path]
+
+
+def test_unicode_python_with_switch_off_text_needs_review(tmp_path: Path) -> None:
+    # Conservative tradeoff: the Python exception cannot use UTF-8 parsing to
+    # prove a non-ASCII file harmless under a different runtime locale.
+    path = "tests/unit/unicode.py"
+    code = tmp_path / path
+    code.parent.mkdir(parents=True)
+    code.write_text('# caf\u00e9\nconfig = "dry_run: false"\n', encoding="utf-8")
+    assert tt.unflagged_live_capable(tmp_path, [path]) == [path]

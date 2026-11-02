@@ -255,7 +255,7 @@ LIVE_CAPABLE = re.compile(
 # Areas the backstop does not scan for every token: prose (scanned for
 # LIVE_SWITCH_OFF only), and Python unit tests (mock-only in CI). Unit-test
 # files still get the switch scan if non-Python, parseable as a YAML mapping,
-# or unreadable in a possible config encoding: --config accepts any extension.
+# or non-ASCII (runtime locale decodings can change YAML structure).
 SCAN_SKIP: tuple[str, ...] = ("**/*.md", "docs/**", "tests/unit/**", "uv.lock")
 
 # Files that contain a LIVE_CAPABLE token but were reviewed as unable to reach
@@ -440,6 +440,11 @@ def scan_text(data: bytes) -> str:
 
 
 def _could_be_yaml_mapping(data: bytes) -> bool:
+    # A successful UTF-8 parse does not exclude a YAML mapping under another
+    # runtime locale. For example, Latin-1 reads a UTF-8 continuation byte 0x85
+    # as a YAML line break. Keep non-ASCII switch-off candidates flagged.
+    if not data.isascii():
+        return True
     # Only the content backstop needs PyYAML (an existing runtime dependency).
     # Keep path classification importable by the stdlib-only trusted base job.
     import yaml

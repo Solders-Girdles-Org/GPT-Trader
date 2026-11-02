@@ -206,9 +206,9 @@ The [trading trigger](../src/gpt_trader/agents/trading_trigger.py) scans
 non-Python files and Python files parseable as YAML mappings under `tests/unit/`
 for live switches turned off, since `run --config` accepts any extension. The
 [config regression tests](../tests/unit/gpt_trader/agents/test_trading_trigger_unit_configs.py)
-pair the runtime loader with the scan; ordinary Python test code retains its
-mock-only scan exception. Unreadable encodings with live-switch-off text
-remain flagged because the runtime can load configs using a different locale.
+pair the runtime loader with the scan; ordinary ASCII Python test code retains
+its mock-only scan exception. Non-ASCII Python files with live-switch-off text
+remain flagged because runtime locale decodings can change YAML structure.
 
 ## Dependency workflow continuation
 
