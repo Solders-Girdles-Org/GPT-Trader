@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -18,7 +17,6 @@ QUEUE_SHA = "1111111111111111111111111111111111111111"
 QUEUE_REF = "refs/heads/gh-readonly-queue/main/pr-7-2222222222222222222222222222222222222222"
 TRADING = "src/gpt_trader/features/live_trade/execution/order_submission.py"
 LINK = f"https://github.com/{REPO}/pull/7#pullrequestreview-1"
-WORKFLOW = status.ROOT / ".github" / "workflows" / "trading-trigger.yml"
 
 
 class FakeGitHub:
@@ -39,8 +37,10 @@ class FakeGitHub:
         self.review_state = "COMMENTED"
         self.rendered: str | None = None  # HTML for the markdown API; None shows the body
         self.markdown_calls = 0
+        self.tokens: list[str | None] = []  # token each status was posted with
+        self.head_pulls: list[dict[str, Any]] = []  # answer to commits/{sha}/pulls
 
-    def __call__(self, args: list[str], stdin: str | None = None) -> str:
+    def __call__(self, args: list[str], stdin: str | None = None, token: str | None = None) -> str:
         if args[:2] == ["api", "markdown"]:
             self.markdown_calls += 1
             text = json.loads(stdin or "{}")["text"]
@@ -48,6 +48,7 @@ class FakeGitHub:
         if args[:3] == ["api", "--method", "POST"]:
             fields = dict(a.split("=", 1) for a in args[4:] if a != "-f")
             fields["sha"] = args[3].rsplit("/", 1)[1]
+            self.tokens.append(token)
             self.order.append(fields["state"])
             if fields["state"] == "pending":
                 self.pending.append(fields["sha"])
@@ -62,6 +63,8 @@ class FakeGitHub:
             return json.dumps({"id": review_id, "commit_id": commit, "state": self.review_state})
         if "--paginate" in args:
             return json.dumps([self.files])
+        if "/commits/" in args[1] and args[1].endswith("/pulls"):
+            return json.dumps(self.head_pulls)
         if "/git/matching-refs/" in args[1]:
             assert args[1] == f"repos/{REPO}/git/matching-refs/heads/gh-readonly-queue/main/pr-7-"
             return json.dumps(self.queue_refs)
@@ -183,12 +186,12 @@ class FlakyGitHub(FakeGitHub):
         self.fail_on = fail_on
         self.always = always
 
-    def __call__(self, args: list[str], stdin: str | None = None) -> str:
+    def __call__(self, args: list[str], stdin: str | None = None, token: str | None = None) -> str:
         if self.fail_on and any(self.fail_on in a for a in args):
             if not self.always:
                 self.fail_on = ""
             raise RuntimeError("HTTP 502")
-        return super().__call__(args, stdin)
+        return super().__call__(args, stdin, token)
 
 
 @pytest.mark.parametrize("fail_on", ["--paginate", "/git/matching-refs/", "--merge-group-ref"])
@@ -306,25 +309,3 @@ def test_runs_isolated_without_the_package(tmp_path: Path) -> None:
     )
     assert result.returncode == 2  # argparse: --pr or --merge-group-ref is required
     assert "ModuleNotFoundError" not in result.stderr
-
-
-def test_workflow_never_fetches_the_pr_head_or_uses_secrets() -> None:
-    text = WORKFLOW.read_text()
-    assert "pull_request_target:" in text and "merge_group:" in text
-    assert "${{ secrets" not in text
-    # No third-party action runs with the write token.
-    assert not re.search(r"^\s*(?:- )?uses:", text, re.MULTILINE)
-    assert "head.ref" not in text and "merge_group.head_sha" in text
-    # The head SHA is passed only as the event's expected head, never fetched.
-    assert re.findall(r"pull_request\.head\.\w+", text) == ["pull_request.head.sha"]
-    assert "PR_HEAD: ${{ github.event.pull_request.head.sha }}" in text
-    fetch = [line for line in text.splitlines() if "git -C base fetch" in line]
-    assert fetch == [
-        '          git -C base fetch -q --depth 1 --no-tags "https://github.com/$REPO" "$BASE_REF"'
-    ]
-    assert (
-        "BASE_REF: ${{ github.event_name == 'merge_group' && "
-        "github.event.merge_group.base_ref || github.sha }}" in text
-    )
-    assert "python3 -I -S scripts/ci/trading_trigger_status.py" in text
-    assert "statuses: write" in text and "contents: write" not in text

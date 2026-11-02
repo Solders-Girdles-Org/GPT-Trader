@@ -1,0 +1,23 @@
+name: Trading trigger request
+
+# Starts the `Trading trigger` workflow (trading-trigger.yml), which runs from
+# main on `workflow_run`, judges this PR with main's trading trigger and posts
+# the required `trading-trigger/base` status. This run is the PR's own copy
+# and does nothing else: it gets no permissions, and the judge reads nothing
+# from it but the commit and PR GitHub records for the run.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, edited, ready_for_review]
+  merge_group:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  request:
+    name: Trading trigger request
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - run: echo "The Trading trigger workflow judges this from main."
