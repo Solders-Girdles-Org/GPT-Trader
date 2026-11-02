@@ -19,8 +19,13 @@ on:
 permissions: {}
 
 concurrency:
-  # One run at a time per PR branch or queue entry, so an older body's verdict can't land last.
-  group: trading-trigger-${{ github.event.workflow_run.head_branch }}
+  # One run at a time per PR branch or queue entry, so an older body's verdict
+  # can't land last. The head repository keeps forks' same-named branches
+  # apart; a newer run for the same branch may replace a pending one, and it
+  # reads the PR as it stands.
+  group: >-
+    trading-trigger-${{ github.event.workflow_run.head_repository.full_name }}-${{
+    github.event.workflow_run.head_branch }}
   cancel-in-progress: false
 
 jobs:

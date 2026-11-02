@@ -43,10 +43,24 @@ def test_judge_fetches_only_main_and_uses_no_actions() -> None:
 def test_judge_takes_only_githubs_record_of_the_request_run() -> None:
     # Everything from the request run comes through env, never into the script text.
     used = set(re.findall(r"github\.event\.workflow_run\.([\w\[\]0-9.]+)", JUDGE))
-    assert used == {"event", "head_sha", "head_branch", "pull_requests[0].number"}
+    assert used == {
+        "event",
+        "head_sha",
+        "head_branch",
+        "head_repository.full_name",
+        "pull_requests[0].number",
+    }
     for line in JUDGE.splitlines():
         if "${{" in line and "workflow_run" in line:
-            assert re.match(r"\s+(?:RUN_\w+: |group: |github\.event\.workflow_run\.event ==)", line)
+            assert re.match(
+                r"\s+(?:RUN_\w+: |trading-trigger-|github\.event\.workflow_run\.event ==)", line
+            )
+
+
+def test_concurrency_keeps_forks_with_the_same_branch_apart() -> None:
+    group = JUDGE.split("group: >-", 1)[1].split("cancel-in-progress", 1)[0]
+    assert "head_repository.full_name" in group and "head_branch" in group
+    assert "cancel-in-progress: false" in JUDGE
     code = "\n".join(line for line in JUDGE.splitlines() if not line.lstrip().startswith("#"))
     assert "artifact" not in code.lower() and "outputs." not in code
 
@@ -96,6 +110,27 @@ def test_with_the_app_every_status_uses_its_token(
         ("POST", "/app/installations/42/access_tokens"),
     ]
     assert set(github.tokens) == {"app-token"} and len(github.tokens) == 2  # pending, verdict
+
+
+def test_an_app_failure_still_reaches_queued_copies(
+    github: FakeGitHub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A body edit that revokes a pass must reach the queue even if the App can't sign in.
+    from tests.unit.scripts.test_trading_trigger_status import QUEUE_SHA
+
+    github.queue_refs = [
+        {
+            "ref": "refs/heads/gh-readonly-queue/main/pr-7-" + "2" * 40,
+            "object": {"sha": QUEUE_SHA},
+        }
+    ]
+    monkeypatch.setenv("STATUS_APP_ID", "123")
+    monkeypatch.setenv("STATUS_APP_KEY", "not a key")
+    assert run("--pr", "7", "--expected-head", HEAD) == 1
+    assert {(p["sha"], p["state"]) for p in github.posted} == {
+        (HEAD, "error"),
+        (QUEUE_SHA, "error"),
+    }
 
 
 def test_a_bad_app_key_fails_without_a_success(

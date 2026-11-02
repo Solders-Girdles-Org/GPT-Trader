@@ -453,9 +453,6 @@ def main(argv: list[str] | None = None) -> int:
         write_summary(os.environ.get("GITHUB_STEP_SUMMARY"), verdict, target, number)
 
     try:
-        app_id = os.environ.get("STATUS_APP_ID", "").strip()
-        if app_id and not args.print_only:
-            token = app_status_token(args.repo, app_id, os.environ.get("STATUS_APP_KEY", ""))
         number = queued_pr_number(args.merge_group_ref) if queued else int(args.pr)
         if not queued and not number:
             # GitHub's record of the run names no PR (a fork, say): find it by commit.
@@ -469,6 +466,13 @@ def main(argv: list[str] | None = None) -> int:
             number = found[0]
         if not queued:
             targets = queue_shas(args.repo, number, args.base)
+        # After the targets are known, so a failure here still reaches them.
+        # Limit: once the required status is pinned to the App, an error posted
+        # with the job's token doesn't replace an earlier App success; if the
+        # App can't sign in, the job fails visibly instead.
+        app_id = os.environ.get("STATUS_APP_ID", "").strip()
+        if app_id and not args.print_only:
+            token = app_status_token(args.repo, app_id, os.environ.get("STATUS_APP_KEY", ""))
         trigger = load_trigger()
 
         def judging(head: str) -> None:
