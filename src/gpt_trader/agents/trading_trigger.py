@@ -305,9 +305,17 @@ _DECLARATION = re.compile(
     re.IGNORECASE,
 )
 # ``RJ-authorized: <head SHA> <link to RJ's words>``: the head RJ authorized,
-# then where his authorization is recorded (a Linear or GitHub comment).
-_AUTHORIZED_HEAD = re.compile(
-    r"([0-9a-f]{7,40})(?![0-9a-z]).*?\bhttps://(?:linear\.app|github\.com)/\S+", re.IGNORECASE
+# then the comment that records his authorization, on a Linear card or a
+# GitHub issue or PR. A commit link is not his words.
+_RJ_WORDS = (
+    r"https://(?:linear\.app/\S+#comment-[\w-]+"
+    r"|github\.com/[^/\s]+/[^/\s]+/(?:pull|issues)/\d+"
+    r"#(?:issuecomment|pullrequestreview|discussion_r)-\d+)"
+)
+_AUTHORIZED_HEAD = re.compile(r"([0-9a-f]{7,40})(?![0-9a-z]).*?" + _RJ_WORDS, re.IGNORECASE)
+# The same declaration as a shown line: its text, then its link targets.
+_SHOWN_AUTHORIZATION = re.compile(
+    r"rj-authorized: ([0-9a-f]{7,40})(?![0-9a-z]).*?" + _RJ_WORDS, re.IGNORECASE
 )
 # HTML comments hide text in the rendered PR; an unclosed one hides the rest.
 _HTML_COMMENT = re.compile(r"<!--.*?(?:-->|\Z)", re.DOTALL)
@@ -481,11 +489,12 @@ def reserved_values(body: str) -> list[str]:
 def rj_authorized_heads(body: str, rendered: Sequence[str] | None = None) -> list[str]:
     """Heads named by ``RJ-authorized:`` lines, lowercased.
 
-    A line counts only with a link to RJ's words, and not inside an HTML
-    comment; others are ignored. Given ``rendered``, the lines GitHub shows
+    A line counts only with a link to the comment holding RJ's words, and not
+    inside an HTML comment; others are ignored. Given ``rendered``, the lines GitHub shows
     when it renders the body (with each line's link targets), a head also
     counts only if one shown line itself starts ``RJ-authorized: <SHA>`` and
-    carries such a link, so Markdown that hides the line can't carry one.
+    carries such a link (link targets follow a line's text), so Markdown that
+    hides the line can't carry one.
     """
     shown = [" ".join(line.split()).lower() for line in rendered or ()]
     heads = []
@@ -494,13 +503,18 @@ def rj_authorized_heads(body: str, rendered: Sequence[str] | None = None) -> lis
         if not match:
             continue
         head = match.group(1).lower()
-        if rendered is None or any(
-            line.startswith(f"rj-authorized: {head}")
-            and _AUTHORIZED_HEAD.match(line[len("rj-authorized: ") :])
-            for line in shown
-        ):
+        if rendered is None or any(_shows(line, head) for line in shown):
             heads.append(head)
     return heads
+
+
+def _shows(line: str, head: str) -> bool:
+    """Whether a shown line is an authorization of ``head`` with its link.
+
+    GitHub shows a commit SHA shortened, so either SHA may be the other's prefix.
+    """
+    match = _SHOWN_AUTHORIZATION.match(line)
+    return bool(match and (head.startswith(match.group(1)) or match.group(1).startswith(head)))
 
 
 def has_rj_authorized_line(body: str) -> bool:

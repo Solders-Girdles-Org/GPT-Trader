@@ -40,6 +40,9 @@ def test_authorization_line_for_this_head_clears_reserved(line: str) -> None:
         "RJ-authorized: abcdef1 RJ said yes in chat",
         "RJ-authorized: abcdef1 http://linear.app/x",  # not https
         "RJ-authorized: abcdef1 https://example.com/rj-said-yes",  # not Linear or GitHub
+        "RJ-authorized: abcdef1 https://linear.app/rj-openclaw/issue/RJ-1",  # not a comment
+        "RJ-authorized: abcdef1 https://github.com/o/r/commit/abcdef1",  # a commit, not words
+        "RJ-authorized: abcdef1 https://github.com/o/r/pull/7",  # the PR, not a comment
         f"{WORDS} RJ-authorized: abcdef1",
     ],
 )
@@ -133,6 +136,11 @@ def test_a_shown_line_must_carry_the_authorization() -> None:
     body = f"{RESERVED}\nRJ-authorized: abcdef1 {WORDS}"
     assert tt.rj_authorized_heads(body, rendered=["Reserved: e - can cancel open orders"]) == []
     shown = ["Reserved: e", f"RJ-authorized:   ABCDEF1 RJ {WORDS}"]
+    # GitHub shows a real commit SHA shortened; a full SHA in the body still matches.
+    full = f"{RESERVED}\nRJ-authorized: {HEAD} {WORDS}"
+    assert tt.rj_authorized_heads(full, rendered=[f"RJ-authorized: abcdef1 RJ {WORDS}"]) == [
+        HEAD.lower()
+    ]
     assert tt.rj_authorized_heads(body, rendered=shown) == ["abcdef1"]
     assert tt.assess(TRADING, body, HEAD, rendered=["nothing"]).severity == "blocker"
     assert tt.assess(TRADING, body, HEAD, rendered=shown).severity == "info"

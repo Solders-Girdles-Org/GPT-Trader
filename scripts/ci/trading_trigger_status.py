@@ -142,7 +142,7 @@ def unbacked_review(trigger: ModuleType, pr: dict[str, Any], repo: str) -> str |
 
 
 def rendered_lines(repo: str, body: str) -> list[str]:
-    """The body's lines as GitHub renders and shows them, each with its link targets.
+    """The body's lines as GitHub renders and shows them, each followed by its link targets.
 
     Comments and Markdown that hides text drop out. Block elements and line
     breaks end a line, so prose that mentions an authorization stays a
@@ -167,19 +167,21 @@ class _ShownLines(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.current: list[str] = []
+        self.links: list[str] = []
         self.done: list[str] = []
 
     def _end_line(self) -> None:
-        line = " ".join(" ".join(self.current).split())
+        # Link targets go after the text, so the shown text keeps its order.
+        line = " ".join(" ".join([*self.current, *self.links]).split())
         if line:
             self.done.append(line)
-        self.current = []
+        self.current, self.links = [], []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in self._BREAKS:
             self._end_line()
         if tag == "a":
-            self.current.extend(value for name, value in attrs if name == "href" and value)
+            self.links.extend(value for name, value in attrs if name == "href" and value)
 
     def handle_endtag(self, tag: str) -> None:
         if tag in self._BREAKS:

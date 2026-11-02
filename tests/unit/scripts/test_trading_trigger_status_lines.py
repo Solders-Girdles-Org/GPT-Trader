@@ -137,10 +137,31 @@ def test_rendered_lines_split_blocks_and_breaks_and_keep_link_targets(
     assert status.rendered_lines("o/r", "body") == [
         "Reserved: e",
         "Self-check: x",
-        "RJ-authorized: 1234567 https://linear.app/a RJ",
+        "RJ-authorized: 1234567 RJ https://linear.app/a",
         "one",
         "two",
     ]
+
+
+def test_authorization_with_githubs_shortened_commit_link_counts(github: FakeGitHub) -> None:
+    # GitHub renders a real commit SHA as a link showing its first 7 characters.
+    github.files = [{"filename": TRADING}]
+    github.pr["body"] = f"Reserved: e - places orders\nRJ-authorized: {HEAD} {WORDS}"
+    commit = f"https://github.com/o/r/commit/{HEAD}"
+    github.rendered = (
+        f'<p dir="auto">Reserved: e - places orders<br>\nRJ-authorized: <a class="commit-link" '
+        f'href="{commit}"><tt>{HEAD[:7]}</tt></a> <a href="{WORDS}">{WORDS}</a></p>'
+    )
+    run("--pr", "7", "--expected-head", HEAD)
+    assert github.posted[0]["state"] == "success"
+
+
+def test_a_commit_link_is_not_rjs_words(github: FakeGitHub) -> None:
+    commit = f"https://github.com/o/r/commit/{HEAD}"
+    github.files = [{"filename": TRADING}]
+    github.pr["body"] = f"Reserved: e - places orders\nRJ-authorized: {HEAD[:7]} {commit}"
+    run("--pr", "7", "--expected-head", HEAD)
+    assert github.posted[0]["state"] == "failure"
 
 
 def test_authorization_shown_in_the_rendered_pr_counts(github: FakeGitHub) -> None:
