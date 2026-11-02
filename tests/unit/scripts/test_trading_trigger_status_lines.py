@@ -128,7 +128,7 @@ def test_rendered_lines_split_blocks_and_breaks_and_keep_link_targets(
     class Html:
         def __call__(self, args: list[str], stdin: str | None = None) -> str:
             return (
-                "<p>Reserved: e<br>\nSelf-check: x</p><ul><li><strong>RJ-authorized:</strong> "
+                "<p>Reserved: e<br>Self-check: x</p><ul><li><strong>RJ-authorized:</strong> "
                 '1234567 <a href="https://linear.app/a">RJ</a></li></ul>'
                 "<pre><code>one\ntwo</code></pre><!-- hidden -->"
             )
