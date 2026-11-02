@@ -225,8 +225,8 @@ TRADING_EXCEPT: dict[str, str] = {
 # trades live only by carrying one of these lines. Empty and null values are
 # flagged too (RJ-1127): another loader may read them as false. A bare key line
 # is matched only at line start, so Python's ``if dry_run:`` is not. Markdown
-# is scanned for these lines alone (RJ-1143), so ``docs/live.md`` can't serve
-# as a live config.
+# and non-Python files under tests/unit/ are scanned for these lines alone
+# (RJ-1143, RJ-1200), so a skipped file can't serve as a live config.
 _SWITCH_OFF = (
     r"""(?i:\b(?:dry_run|mock_broker)["']?\s*:\s*"""
     r"""(?:["']?(?:false|no|off|0|null|none)\b|~|""|''))"""
@@ -253,7 +253,8 @@ LIVE_CAPABLE = re.compile(
 )
 
 # Areas the backstop does not scan for every token: prose (scanned for
-# LIVE_SWITCH_OFF only), and unit tests (mock-only in CI).
+# LIVE_SWITCH_OFF only), and Python unit tests (mock-only in CI). Non-Python
+# unit-test files still get the switch scan: --config accepts any extension.
 SCAN_SKIP: tuple[str, ...] = ("**/*.md", "docs/**", "tests/unit/**", "uv.lock")
 
 # Files that contain a LIVE_CAPABLE token but were reviewed as unable to reach
@@ -444,14 +445,16 @@ def unflagged_live_capable(root: Path, paths: Iterable[str] | None = None) -> li
     """
     misses = []
     for path in tracked_files(root) if paths is None else paths:
-        prose = _PROSE.match(path)
-        if (_skipped(path) and not prose) or trading_paths([path]):
+        switch_only = _PROSE.match(path) or (
+            path.startswith("tests/unit/") and not path.endswith(".py")
+        )
+        if (_skipped(path) and not switch_only) or trading_paths([path]):
             continue
         try:
             data = (root / path).read_bytes()
         except OSError:
             continue
-        if (LIVE_SWITCH_OFF if prose else LIVE_CAPABLE).search(scan_text(data)):
+        if (LIVE_SWITCH_OFF if switch_only else LIVE_CAPABLE).search(scan_text(data)):
             misses.append(path)
     return sorted(misses)
 

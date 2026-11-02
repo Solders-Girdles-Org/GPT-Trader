@@ -202,6 +202,13 @@ not impose runtime composition on the experiment. The PR template names the
 current [local verification contract](DEVELOPMENT_GUIDELINES.md#verify-before-a-pr)
 without the retired agent-inventory freshness step.
 
+The [trading trigger](../src/gpt_trader/agents/trading_trigger.py) scans
+non-Python files under `tests/unit/` for live switches turned off, since
+`run --config` accepts files there with any extension. The
+[config regression tests](../tests/unit/gpt_trader/agents/test_trading_trigger_unit_configs.py)
+pair the runtime loader with the scan; Python unit tests retain their
+mock-only scan exception.
+
 ## Dependency workflow continuation
 
 The [coordinated dependency closeout](https://github.com/Solders-Girdles-Org/GPT-Trader/pull/1292)
