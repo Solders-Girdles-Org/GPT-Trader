@@ -1,5 +1,6 @@
 """Helper utilities for CLI command implementations."""
 
+import re
 import warnings
 from argparse import Namespace
 from pathlib import Path
@@ -52,9 +53,11 @@ def load_config_from_yaml(path: str | Path) -> BotConfig:
     ``dry_run`` and ``mock_broker`` the file does not set to a boolean false
     is set to true: left out, where ``BotConfig`` would default it to false
     (live orders on the real broker), or left empty, null or any other value,
-    which would load as a falsy ``None``, ``""`` or ``0`` (RJ-1127). A file
-    that sets both to false carries lower-case keys the trigger's token scan
-    flags for RJ wherever the file sits.
+    which would load as a falsy ``None``, ``""`` or ``0`` (RJ-1127). A
+    switch counts as off only when the file also writes it as plain text the
+    trading trigger's token scan flags for RJ wherever the file sits, such as
+    ``dry_run: false``. A YAML tag, alias or escaped key that loads as false
+    without that text is ignored with a warning (RJ-1188).
     """
     with warnings.catch_warnings():
         warnings.filterwarnings(
@@ -77,6 +80,16 @@ def load_config_from_yaml(path: str | Path) -> BotConfig:
 # Keys that keep a run off the real broker and order path when true.
 _LIVE_KEYS: tuple[str, ...] = ("dry_run", "mock_broker")
 
+# A switch written off as plain text: the key, then a literal false. Each is a
+# narrower form of the trading trigger's ``_SWITCH_OFF`` scan, so a file whose
+# switch this loader honors as off fails the scan until flagged for RJ
+# (RJ-1188). YAML reaches false other ways the scan can't read: ``!!bool
+# false``, ``*alias``, ``"dry\u005frun"``. Matched in the file's UTF-8
+# reading, which is the scan's first.
+_WRITTEN_OFF: dict[str, re.Pattern[str]] = {
+    key: re.compile(rf"""(?i:\b{key}["']?\s*:\s*["']?(?:false|no|off)\b)""") for key in _LIVE_KEYS
+}
+
 
 def _keys_set_false(path: str | Path) -> set[str]:
     """Which of ``_LIVE_KEYS`` the YAML file sets to a boolean false.
@@ -84,6 +97,8 @@ def _keys_set_false(path: str | Path) -> set[str]:
     Only a YAML boolean counts (``false``, ``no``, ``off``, as PyYAML reads
     them): an
     empty value, ``~``, ``null``, ``""``, ``0`` or a quoted string does not.
+    And only when the file also writes it as ``_WRITTEN_OFF`` text, which the
+    trading trigger's scan flags (RJ-1188).
 
     Read where ``BotConfig.from_dict`` reads them: a legacy profile-style file
     (any of ``trading``, ``risk_management``, ``profile_name``) under
@@ -104,7 +119,18 @@ def _keys_set_false(path: str | Path) -> set[str]:
         )
         if not isinstance(data, dict):
             return set()
-    return {key for key in _LIVE_KEYS if data.get(key) is False}
+    loaded_off = {key for key in _LIVE_KEYS if data.get(key) is False}
+    text = Path(path).read_bytes().decode("utf-8", errors="ignore")
+    written_off = {key for key in loaded_off if _WRITTEN_OFF[key].search(text)}
+    for key in sorted(loaded_off - written_off):
+        logger.warning(
+            "Config %s sets %s to false only through a YAML tag, alias or escape; "
+            "ignoring it so the file cannot trade live unflagged. Write `%s: false`.",
+            path,
+            key,
+            key,
+        )
+    return written_off
 
 
 def load_profile_config(profile: Profile | str) -> BotConfig:
