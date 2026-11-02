@@ -88,3 +88,22 @@ def test_python_extension_without_a_yaml_mapping_stays_exempt(tmp_path: Path, te
     config.parent.mkdir(parents=True)
     config.write_text(text)
     assert tt.unflagged_live_capable(tmp_path, [path]) == []
+
+
+@pytest.mark.parametrize("prefix", [b"# caf\xe9\n", b"# \xff\n"])
+def test_python_config_with_unreadable_encoding_is_caught(tmp_path: Path, prefix: bytes) -> None:
+    # A runtime using a non-UTF-8 locale can read these as YAML mappings.
+    # The backstop must not grant the Python exception on a decoding failure.
+    path = "tests/unit/latin1.py"
+    config = tmp_path / path
+    config.parent.mkdir(parents=True)
+    config.write_bytes(prefix + b"dry_run: false\nmock_broker: false\n")
+    assert tt.unflagged_live_capable(tmp_path, [path]) == [path]
+
+
+def test_python_code_with_unreadable_encoding_and_no_switch_off_passes(tmp_path: Path) -> None:
+    path = "tests/unit/helper.py"
+    code = tmp_path / path
+    code.parent.mkdir(parents=True)
+    code.write_bytes(b"# caf\xe9\nprint('hello')\n")
+    assert tt.unflagged_live_capable(tmp_path, [path]) == []

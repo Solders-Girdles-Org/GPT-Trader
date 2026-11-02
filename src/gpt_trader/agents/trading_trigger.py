@@ -254,8 +254,8 @@ LIVE_CAPABLE = re.compile(
 
 # Areas the backstop does not scan for every token: prose (scanned for
 # LIVE_SWITCH_OFF only), and Python unit tests (mock-only in CI). Unit-test
-# files still get the switch scan if non-Python or parseable as a YAML mapping:
-# --config accepts any extension.
+# files still get the switch scan if non-Python, parseable as a YAML mapping,
+# or unreadable in a possible config encoding: --config accepts any extension.
 SCAN_SKIP: tuple[str, ...] = ("**/*.md", "docs/**", "tests/unit/**", "uv.lock")
 
 # Files that contain a LIVE_CAPABLE token but were reviewed as unable to reach
@@ -439,14 +439,18 @@ def scan_text(data: bytes) -> str:
     return "\n".join(readings)
 
 
-def _yaml_mapping(data: bytes) -> bool:
+def _could_be_yaml_mapping(data: bytes) -> bool:
     # Only the content backstop needs PyYAML (an existing runtime dependency).
     # Keep path classification importable by the stdlib-only trusted base job.
     import yaml
 
     try:
         return isinstance(yaml.safe_load(data), dict)
-    except (yaml.YAMLError, UnicodeError, ValueError, RecursionError):
+    except (yaml.reader.ReaderError, UnicodeError):
+        # The runtime opens configs using the locale's encoding, which may
+        # accept bytes PyYAML cannot decode here. Keep such candidates flagged.
+        return True
+    except (yaml.YAMLError, ValueError, RecursionError):
         return False
 
 
@@ -467,7 +471,7 @@ def unflagged_live_capable(root: Path, paths: Iterable[str] | None = None) -> li
         except OSError:
             continue
         if (LIVE_SWITCH_OFF if switch_only else LIVE_CAPABLE).search(scan_text(data)):
-            if unit and path.endswith(".py") and not _yaml_mapping(data):
+            if unit and path.endswith(".py") and not _could_be_yaml_mapping(data):
                 continue
             misses.append(path)
     return sorted(misses)
