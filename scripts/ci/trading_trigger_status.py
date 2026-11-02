@@ -30,6 +30,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
+from html.parser import HTMLParser
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -68,8 +69,8 @@ def load_trigger(path: Path = TRIGGER_PATH) -> ModuleType:
     return module
 
 
-def _gh(args: list[str]) -> str:
-    result = subprocess.run(["gh", *args], capture_output=True, text=True, check=False)
+def _gh(args: list[str], stdin: str | None = None) -> str:
+    result = subprocess.run(["gh", *args], input=stdin, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or f"gh {args[0]} failed")
     return result.stdout
@@ -109,22 +110,56 @@ def fetch_review(repo: str, number: int, review_id: int) -> dict[str, Any] | Non
     return payload if isinstance(payload, dict) else None
 
 
+# Review states that can back a clean claim. A pending review is a draft only
+# its author sees; changes requested or dismissed is not clean.
+_CLEAN_STATES = {"APPROVED", "COMMENTED"}
+
+
 def unbacked_review(trigger: ModuleType, pr: dict[str, Any], repo: str) -> str | None:
     """Why a ``Review:`` line names no real review of its commit on this PR, if one doesn't.
 
     The trigger reads the lines as text, so without this a line could cite a
-    review that doesn't exist, or one of another commit, and still count.
+    review that doesn't exist, one of another commit, or one that isn't clean,
+    and still count. A line about the current head needs a review of that exact
+    commit, not just one whose SHA shares the line's prefix.
     """
     number = int(pr["number"])
-    for review_id, sha in trigger.review_claims(str(pr.get("body") or ""), repo, number):
-        review = fetch_review(repo, number, review_id)
-        commit = str((review or {}).get("commit_id") or "").lower()
-        if not commit.startswith(sha):
+    head = str(pr["head"]["sha"]).lower()
+    for claim in trigger.review_claims(str(pr.get("body") or ""), repo, number):
+        review_id, sha = claim["id"], claim["sha"]
+        review = fetch_review(repo, number, review_id) or {}
+        commit = str(review.get("commit_id") or "").lower()
+        current = not claim["carried"] and head.startswith(sha)
+        state = str(review.get("state") or "")
+        if not commit or (commit != head if current else not commit.startswith(sha)):
             return (
                 f"A Review: line names review {review_id} at {sha[:7]}, but this PR has no "
                 f"review {review_id} of {sha[:7]}."
             )
+        if claim["outcome"] == "clean" and state not in _CLEAN_STATES:
+            return f"A Review: line calls review {review_id} clean, but its state is {state}."
     return None
+
+
+def rendered_text(repo: str, body: str) -> str:
+    """The body's visible text as GitHub renders it (comments and hidden Markdown drop out)."""
+    html = _gh(
+        ["api", "markdown", "--input", "-"],
+        stdin=json.dumps({"text": body, "mode": "gfm", "context": repo}),
+    )
+    parser = _TextOnly()
+    parser.feed(html)
+    parser.close()
+    return " ".join("".join(parser.parts).split())
+
+
+class _TextOnly(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        self.parts.append(data)
 
 
 def queued_pr_number(ref: str) -> int:
@@ -153,12 +188,16 @@ def judge(
     unbacked = unbacked_review(trigger, pr, repo)
     if unbacked:
         return Verdict("failure", unbacked)
+    body = str(pr.get("body") or "")
+    # Only a reserved PR's authorization line needs the rendered text.
+    rendered = rendered_text(repo, body) if trigger.has_rj_authorized_line(body) else None
     result = trigger.assess(
         paths,
-        str(pr.get("body") or ""),
+        body,
         str(pr["head"]["sha"]),
         repo=repo,
         number=int(pr["number"]),
+        rendered=rendered,
     )
     state = "failure" if result.severity == "blocker" else "success"
     return Verdict(state, str(result.message), tuple(result.paths))
@@ -286,8 +325,11 @@ def main(argv: list[str] | None = None) -> int:
 
         def judging(head: str) -> None:
             # Pending first: if this run is killed (the job's time limit), an
-            # earlier success for the same commit doesn't stand.
-            for target in dict.fromkeys((sha or head, *targets)):
+            # earlier success for the same commit doesn't stand. Keep the head,
+            # so an error after this replaces the pending.
+            nonlocal sha
+            sha = sha or head
+            for target in dict.fromkeys((sha, *targets)):
                 publish(target, Verdict("pending", "Judging with the base trading trigger."))
 
         verdict, pr = evaluate(

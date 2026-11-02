@@ -36,8 +36,15 @@ class FakeGitHub:
         self.pending: list[str] = []  # commits marked pending, in order
         self.order: list[str] = []  # state of every post, in order
         self.reviews: dict[int, str] = {}  # review id -> commit it reviewed
+        self.review_state = "COMMENTED"
+        self.rendered: str | None = None  # HTML for the markdown API; None shows the body
+        self.markdown_calls = 0
 
-    def __call__(self, args: list[str]) -> str:
+    def __call__(self, args: list[str], stdin: str | None = None) -> str:
+        if args[:2] == ["api", "markdown"]:
+            self.markdown_calls += 1
+            text = json.loads(stdin or "{}")["text"]
+            return self.rendered if self.rendered is not None else f"<p>{text}</p>"
         if args[:3] == ["api", "--method", "POST"]:
             fields = dict(a.split("=", 1) for a in args[4:] if a != "-f")
             fields["sha"] = args[3].rsplit("/", 1)[1]
@@ -51,7 +58,8 @@ class FakeGitHub:
             review_id = int(args[1].rsplit("/", 1)[1])
             if review_id not in self.reviews:
                 raise RuntimeError("gh: Not Found (HTTP 404)")
-            return json.dumps({"id": review_id, "commit_id": self.reviews[review_id]})
+            commit = self.reviews[review_id]
+            return json.dumps({"id": review_id, "commit_id": commit, "state": self.review_state})
         if "--paginate" in args:
             return json.dumps([self.files])
         if "/git/matching-refs/" in args[1]:
@@ -62,12 +70,16 @@ class FakeGitHub:
         return json.dumps(self.pr)
 
 
-@pytest.fixture
-def github(monkeypatch: pytest.MonkeyPatch) -> FakeGitHub:
+def install_fake(monkeypatch: pytest.MonkeyPatch) -> FakeGitHub:
     fake = FakeGitHub("Reserved: none", ["docs/STATUS.md"])
     monkeypatch.setattr(status, "_gh", fake)
     monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
     return fake
+
+
+@pytest.fixture
+def github(monkeypatch: pytest.MonkeyPatch) -> FakeGitHub:
+    return install_fake(monkeypatch)
 
 
 def run(*args: str) -> int:
@@ -88,81 +100,6 @@ def test_trading_path_with_unconfirmed_none_posts_failure(github: FakeGitHub) ->
     assert run("--pr", "7", "--expected-head", HEAD) == 0
     assert github.posted[0]["state"] == "failure"
     assert len(github.posted[0]["description"]) <= 140
-
-
-def test_clean_review_of_this_head_posts_success(github: FakeGitHub) -> None:
-    github.files = [{"filename": TRADING}]
-    github.reviews = {1: HEAD}
-    github.pr["body"] = f"Reserved: none\nReview: {LINK} (Codex) at {HEAD[:7]}: clean"
-    run("--pr", "7", "--expected-head", HEAD)
-    assert github.posted[0]["state"] == "success"
-
-
-@pytest.mark.parametrize(
-    "reviews",
-    [{}, {1: "f" * 40}, {2: HEAD}],
-    ids=["no such review", "review of another commit", "another review id"],
-)
-def test_review_line_must_name_a_real_review_of_that_commit(
-    github: FakeGitHub, reviews: dict[int, str]
-) -> None:
-    github.files = [{"filename": TRADING}]
-    github.reviews = reviews
-    github.pr["body"] = f"Reserved: none\nReview: {LINK} (Codex) at {HEAD[:7]}: clean"
-    run("--pr", "7", "--expected-head", HEAD)
-    assert github.posted[0]["state"] == "failure"
-    assert "no review 1 of abcdef1" in github.posted[0]["description"]
-
-
-def test_carried_review_is_checked_against_the_head_it_was_carried_from(
-    github: FakeGitHub,
-) -> None:
-    old = "1234567890abcdef1234567890abcdef12345678"
-    github.files = [{"filename": TRADING}]
-    github.reviews = {1: old}
-    github.pr["body"] = (
-        f"Reserved: none\nReview: {LINK} (Codex) at {old[:7]}: clean\n"
-        f"Review: {LINK} (Codex) at {HEAD[:7]}: clean (carried from {old[:7]}: clean rebase)"
-    )
-    run("--pr", "7", "--expected-head", HEAD)
-    assert github.posted[0]["state"] == "success"
-
-
-def test_any_unbacked_review_line_fails_even_off_trading_paths(github: FakeGitHub) -> None:
-    github.pr["body"] = f"Reserved: none\nReview: {LINK} (Claude) at {HEAD[:7]}: clean"
-    run("--pr", "7", "--expected-head", HEAD)
-    assert github.posted[0]["state"] == "failure"
-
-
-def test_review_lookup_error_posts_error(github: FakeGitHub, monkeypatch) -> None:
-    def broken(repo: str, number: int, review_id: int) -> None:
-        raise RuntimeError("HTTP 502")
-
-    monkeypatch.setattr(status, "fetch_review", broken)
-    github.pr["body"] = f"Reserved: none\nReview: {LINK} (Claude) at {HEAD[:7]}: clean"
-    assert run("--pr", "7", "--expected-head", HEAD) == 1
-    assert github.posted[0]["state"] == "error"
-
-
-def test_pending_goes_first_on_the_head_and_queued_copies(github: FakeGitHub) -> None:
-    # A run killed after this leaves pending, not an earlier success.
-    github.queue_refs = [_queue_ref(7, QUEUE_SHA)]
-    run("--pr", "7", "--expected-head", HEAD)
-    assert github.pending == [HEAD, QUEUE_SHA]
-    assert github.order == ["pending", "pending", "success", "success"]
-
-
-def test_queue_run_marks_its_commit_pending_first(github: FakeGitHub) -> None:
-    run("--merge-group-ref", QUEUE_REF, "--status-sha", QUEUE_SHA)
-    assert github.pending == [QUEUE_SHA]
-    assert github.order[0] == "pending"
-
-
-@pytest.mark.parametrize("pr", [{"state": "closed"}, {"head": {"sha": "f" * 40}}])
-def test_obsolete_event_marks_nothing_pending(github: FakeGitHub, pr: dict[str, Any]) -> None:
-    github.pr.update(pr)
-    run("--pr", "7", "--expected-head", HEAD)
-    assert github.pending == []
 
 
 def test_review_link_must_be_on_this_pr(github: FakeGitHub) -> None:
@@ -246,12 +183,12 @@ class FlakyGitHub(FakeGitHub):
         self.fail_on = fail_on
         self.always = always
 
-    def __call__(self, args: list[str]) -> str:
+    def __call__(self, args: list[str], stdin: str | None = None) -> str:
         if self.fail_on and any(self.fail_on in a for a in args):
             if not self.always:
                 self.fail_on = ""
             raise RuntimeError("HTTP 502")
-        return super().__call__(args)
+        return super().__call__(args, stdin)
 
 
 @pytest.mark.parametrize("fail_on", ["--paginate", "/git/matching-refs/", "--merge-group-ref"])

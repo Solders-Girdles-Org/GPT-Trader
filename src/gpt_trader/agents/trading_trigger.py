@@ -106,7 +106,7 @@ TRADING_PATTERNS: tuple[str, ...] = (
     # The required status that applies this rule from base-branch code.
     ".github/workflows/trading-trigger.yml",
     "scripts/ci/trading_trigger_status.py",
-    "tests/unit/scripts/test_trading_trigger_status.py",
+    "tests/unit/scripts/test_trading_trigger_status*.py",
     "tests/unit/gpt_trader/agents/test_trading_trigger*.py",
     "tests/unit/scripts/test_pr_readiness_base_trigger.py",
     # Files that decide what other code runs (RJ-1143): pytest loads every
@@ -478,18 +478,29 @@ def reserved_values(body: str) -> list[str]:
     return _declarations(body, "reserved")
 
 
-def rj_authorized_heads(body: str) -> list[str]:
+def rj_authorized_heads(body: str, rendered: str | None = None) -> list[str]:
     """Heads named by ``RJ-authorized:`` lines, lowercased.
 
     A line counts only where the rendered PR shows it (not inside an HTML
-    comment) and only with a link to RJ's words; others are ignored.
+    comment) and only with a link to RJ's words; others are ignored. Given
+    ``rendered``, the PR body's visible text as GitHub renders it, a line also
+    counts only if that text shows ``RJ-authorized: <its SHA>``, so Markdown
+    that hides text can't carry one.
     """
+    seen = " ".join((rendered or "").split()).lower()
     heads = []
     for value in _declarations(_HTML_COMMENT.sub("", body or ""), "rj-authorized"):
         match = _AUTHORIZED_HEAD.match(value)
-        if match:
-            heads.append(match.group(1).lower())
+        if not match:
+            continue
+        head = match.group(1).lower()
+        if rendered is None or f"rj-authorized: {head}" in seen:
+            heads.append(head)
     return heads
+
+
+def has_rj_authorized_line(body: str) -> bool:
+    return bool(_declarations(body, "rj-authorized"))
 
 
 def _authorizes(sha: str | None, head_oid: str) -> bool:
@@ -522,22 +533,29 @@ def parse_review(value: str, repo: str | None = None, number: int | None = None)
     return {"family": match.group(1).lower(), "sha": match.group(2).lower(), "outcome": outcome}
 
 
-def review_claims(body: str, repo: str, number: int) -> list[tuple[int, str]]:
-    """``(review id, reviewed commit)`` for each well-formed ``Review:`` line on this PR.
+def review_claims(body: str, repo: str, number: int) -> list[dict[str, Any]]:
+    """What each well-formed ``Review:`` line on this PR claims.
 
-    The reviewed commit is the line's head, or for a carried line the head it
-    was carried from. The text can't prove a review exists; the caller checks
-    each claim against GitHub.
+    Each claim names the review ``id``, the ``sha`` it says was reviewed (for a
+    carried line, the head it was carried from, with ``carried`` true) and its
+    ``outcome``. The text can't prove a review exists; the caller checks each
+    claim against GitHub.
     """
     claims = []
     for value in _declarations(body, "review"):
-        if _NONE.fullmatch(value) or parse_review(value, repo, number) is None:
-            continue
-        match = _REVIEW_ID.search(value)
-        if match:
+        parsed = None if _NONE.fullmatch(value) else parse_review(value, repo, number)
+        match = _REVIEW_ID.search(value) if parsed else None
+        if parsed and match:
             carried = _CARRIED_FROM.search(value)
             sha = carried.group(1) if carried else match.group(2)
-            claims.append((int(match.group(1)), sha.lower()))
+            claims.append(
+                {
+                    "id": int(match.group(1)),
+                    "sha": sha.lower(),
+                    "outcome": parsed["outcome"],
+                    "carried": bool(carried),
+                }
+            )
     return claims
 
 
@@ -574,18 +592,21 @@ def assess(
     rj_authorized_head: str | None = None,
     repo: str | None = None,
     number: int | None = None,
+    rendered: str | None = None,
 ) -> TriggerResult:
     """Apply reserved item (e) and the contract's Reserved line to one PR.
 
     RJ's authorization comes from ``rj_authorized_head`` or an ``RJ-authorized:``
-    line in the body; either counts only for the current head.
+    line in the body; either counts only for the current head. ``rendered`` is
+    the body's visible text, which an authorization line must appear in.
     """
     hits = tuple(trading_paths(paths))
     values = reserved_values(body)
     reserved = [v for v in values if not _NONE.fullmatch(v)]
     blank = [v for v in values if not v]
     authorized = any(
-        _authorizes(sha, head_oid) for sha in (rj_authorized_head, *rj_authorized_heads(body))
+        _authorizes(sha, head_oid)
+        for sha in (rj_authorized_head, *rj_authorized_heads(body, rendered))
     )
     hit_note = f" Trading paths: {', '.join(hits)}." if hits else ""
 

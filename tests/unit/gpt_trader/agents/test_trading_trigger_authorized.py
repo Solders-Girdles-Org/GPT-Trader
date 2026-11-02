@@ -119,7 +119,28 @@ def test_review_claims_name_each_review_and_its_commit() -> None:
         "Review: https://github.com/o/r/pull/8#pullrequestreview-12 (Codex) at abcdef1: clean\n"
         f"Review: {LINK} (Codex) at abcdef1: clean-ish"
     )
-    assert tt.review_claims(body, "o/r", 7) == [(11, "1234567"), (11, "2345678"), (11, "2345678")]
+    claims = [
+        (c["id"], c["sha"], c["outcome"], c["carried"]) for c in tt.review_claims(body, "o/r", 7)
+    ]
+    assert claims == [
+        (11, "1234567", "blocking", False),
+        (11, "2345678", "clean", False),
+        (11, "2345678", "clean", True),
+    ]
+
+
+def test_rendered_text_must_show_the_authorization() -> None:
+    body = f"{RESERVED}\nRJ-authorized: abcdef1 {WORDS}"
+    assert tt.rj_authorized_heads(body, rendered="Reserved: e - can cancel open orders") == []
+    shown = f"Reserved: e  RJ-authorized:   ABCDEF1 {WORDS}"
+    assert tt.rj_authorized_heads(body, rendered=shown) == ["abcdef1"]
+    assert tt.assess(TRADING, body, HEAD, rendered="nothing").severity == "blocker"
+    assert tt.assess(TRADING, body, HEAD, rendered=shown).severity == "info"
+
+
+def test_has_rj_authorized_line() -> None:
+    assert tt.has_rj_authorized_line(f"x\nRJ-authorized: abcdef1 {WORDS}")
+    assert not tt.has_rj_authorized_line("Reserved: none")
 
 
 def test_gate_runner_files_are_flagged() -> None:
