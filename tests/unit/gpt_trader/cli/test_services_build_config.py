@@ -169,6 +169,17 @@ def test_apply_profile_kwargs_maps_risk_budget_runtime_seed_gate() -> None:
             "trading:\n  symbols: [BTC-USD]\nexecution:\n  dry_run:\n  mock_broker: ~\n",
             (True, True),
         ),
+        # RJ-1188: false reached through a tag, alias or escaped key, which
+        # the trigger's scan can't read, runs non-live too.
+        ("dry_run: !!bool false\nmock_broker: !!bool off\n", (True, True)),
+        ("dry_run: !<tag:yaml.org,2002:bool> false\nmock_broker: false\n", (True, False)),
+        ("mock_broker: &mock_broker false\ndry_run: *mock_broker\n", (True, True)),
+        ('"dry\\u005frun": false\n"mock\\x5fbroker": false\n', (True, True)),
+        ("dry_run: &a false\nmock_broker: False\n", (True, False)),
+        (
+            "profile_name: x\nexecution:\n  dry_run: !!bool false\n  mock_broker: no\n",
+            (True, False),
+        ),
     ],
 )
 def test_config_file_runs_live_only_when_it_says_so(

@@ -140,3 +140,33 @@ def test_pr_ready_starts_readiness_isolated(monkeypatch) -> None:
     assert cli.pr_ready() == 0
     assert seen[0][1:3] == ["-I", "-S"]
     assert seen[0][3].endswith("scripts/agents/pr_readiness.py")
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "dry_run: false\nmock_broker: false\n",
+        "dry_run: !!bool false\nmock_broker: !!bool false\n",
+        'dry_run: !!bool "false"\nmock_broker: !!bool no\n',
+        "dry_run: !<tag:yaml.org,2002:bool> false\nmock_broker: !<tag:yaml.org,2002:bool> off\n",
+        "x: &f false\ndry_run: *f\nmock_broker: *f\n",
+        "dry_run: &dry_run false\nmock_broker: *dry_run\n",
+        '"dry\\u005frun": false\n"mock\\x5fbroker": false\n',
+        '"\\x64ry_run": false\n"\\U0000006dock_broker": false\n',
+        "profile_name: x\nexecution:\n  dry_run: !!bool false\n  mock_broker: !!bool false\n",
+        'profile_name: x\nexecution: {"dry_run": !!bool false, "mock_broker": false}\n',
+    ],
+)
+@pytest.mark.parametrize("directory", ["scripts", "config/agents", "scripts/analysis/strategies"])
+def test_a_switch_the_loader_honors_as_off_fails_the_scan(
+    tmp_path: Path, body: str, directory: str
+) -> None:
+    # RJ-1188: run --config honors a switch as off only in a form the scan
+    # reads, so no unflagged tracked file can turn one off.
+    from gpt_trader.cli.services import _keys_set_false
+
+    path = f"{directory}/run.yaml"
+    (tmp_path / directory).mkdir(parents=True)
+    (tmp_path / path).write_text("symbols: [BTC-USD]\n" + body)
+    if _keys_set_false(tmp_path / path):
+        assert tt.unflagged_live_capable(tmp_path, [path]) == [path]
