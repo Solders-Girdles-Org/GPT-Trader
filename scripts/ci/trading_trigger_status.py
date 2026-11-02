@@ -141,25 +141,60 @@ def unbacked_review(trigger: ModuleType, pr: dict[str, Any], repo: str) -> str |
     return None
 
 
-def rendered_text(repo: str, body: str) -> str:
-    """The body's visible text as GitHub renders it (comments and hidden Markdown drop out)."""
+def rendered_lines(repo: str, body: str) -> list[str]:
+    """The body's lines as GitHub renders and shows them, each with its link targets.
+
+    Comments and Markdown that hides text drop out. Block elements and line
+    breaks end a line, so prose that mentions an authorization stays a
+    separate line from one that is hidden.
+    """
     html = _gh(
         ["api", "markdown", "--input", "-"],
         stdin=json.dumps({"text": body, "mode": "gfm", "context": repo}),
     )
-    parser = _TextOnly()
+    parser = _ShownLines()
     parser.feed(html)
     parser.close()
-    return " ".join("".join(parser.parts).split())
+    return parser.lines()
 
 
-class _TextOnly(HTMLParser):
+class _ShownLines(HTMLParser):
+    _BREAKS = {
+        "p", "li", "div", "pre", "blockquote", "details", "summary", "br", "hr", "tr",
+        "td", "th", "dt", "dd", "h1", "h2", "h3", "h4", "h5", "h6", "table", "ul", "ol",
+    }  # fmt: skip
+
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
-        self.parts: list[str] = []
+        self.current: list[str] = []
+        self.done: list[str] = []
+
+    def _end_line(self) -> None:
+        line = " ".join(" ".join(self.current).split())
+        if line:
+            self.done.append(line)
+        self.current = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in self._BREAKS:
+            self._end_line()
+        if tag == "a":
+            self.current.extend(value for name, value in attrs if name == "href" and value)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self._BREAKS:
+            self._end_line()
 
     def handle_data(self, data: str) -> None:
-        self.parts.append(data)
+        parts = data.split("\n")
+        for index, part in enumerate(parts):
+            if index:
+                self._end_line()
+            self.current.append(part)
+
+    def lines(self) -> list[str]:
+        self._end_line()
+        return self.done
 
 
 def queued_pr_number(ref: str) -> int:
@@ -190,7 +225,7 @@ def judge(
         return Verdict("failure", unbacked)
     body = str(pr.get("body") or "")
     # Only a reserved PR's authorization line needs the rendered text.
-    rendered = rendered_text(repo, body) if trigger.has_rj_authorized_line(body) else None
+    rendered = rendered_lines(repo, body) if trigger.has_rj_authorized_line(body) else None
     result = trigger.assess(
         paths,
         body,

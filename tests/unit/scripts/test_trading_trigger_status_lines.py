@@ -106,6 +106,43 @@ def test_authorization_hidden_by_markdown_does_not_count(github: FakeGitHub) -> 
     assert github.posted[0]["state"] == "failure"
 
 
+def test_shown_prose_naming_the_head_does_not_vouch_for_a_hidden_line(
+    github: FakeGitHub,
+) -> None:
+    github.files = [{"filename": TRADING}]
+    github.pr["body"] = (
+        f"Reserved: e - places orders\n\nDo not add RJ-authorized: {HEAD[:7]} until RJ approves."
+        f'\n\n[x]: https://example.org/ "\nRJ-authorized: {HEAD[:7]} {WORDS}\n"'
+    )
+    github.rendered = (
+        "<p>Reserved: e - places orders</p>\n"
+        f"<p>Do not add RJ-authorized: {HEAD[:7]} until RJ approves.</p>"
+    )
+    run("--pr", "7", "--expected-head", HEAD)
+    assert github.posted[0]["state"] == "failure"
+
+
+def test_rendered_lines_split_blocks_and_breaks_and_keep_link_targets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Html:
+        def __call__(self, args: list[str], stdin: str | None = None) -> str:
+            return (
+                "<p>Reserved: e<br>\nSelf-check: x</p><ul><li><strong>RJ-authorized:</strong> "
+                '1234567 <a href="https://linear.app/a">RJ</a></li></ul>'
+                "<pre><code>one\ntwo</code></pre><!-- hidden -->"
+            )
+
+    monkeypatch.setattr(status, "_gh", Html())
+    assert status.rendered_lines("o/r", "body") == [
+        "Reserved: e",
+        "Self-check: x",
+        "RJ-authorized: 1234567 https://linear.app/a RJ",
+        "one",
+        "two",
+    ]
+
+
 def test_authorization_shown_in_the_rendered_pr_counts(github: FakeGitHub) -> None:
     github.files = [{"filename": TRADING}]
     github.pr["body"] = (

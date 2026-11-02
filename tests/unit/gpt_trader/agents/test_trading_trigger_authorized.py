@@ -129,13 +129,27 @@ def test_review_claims_name_each_review_and_its_commit() -> None:
     ]
 
 
-def test_rendered_text_must_show_the_authorization() -> None:
+def test_a_shown_line_must_carry_the_authorization() -> None:
     body = f"{RESERVED}\nRJ-authorized: abcdef1 {WORDS}"
-    assert tt.rj_authorized_heads(body, rendered="Reserved: e - can cancel open orders") == []
-    shown = f"Reserved: e  RJ-authorized:   ABCDEF1 {WORDS}"
+    assert tt.rj_authorized_heads(body, rendered=["Reserved: e - can cancel open orders"]) == []
+    shown = ["Reserved: e", f"RJ-authorized:   ABCDEF1 RJ {WORDS}"]
     assert tt.rj_authorized_heads(body, rendered=shown) == ["abcdef1"]
-    assert tt.assess(TRADING, body, HEAD, rendered="nothing").severity == "blocker"
+    assert tt.assess(TRADING, body, HEAD, rendered=["nothing"]).severity == "blocker"
     assert tt.assess(TRADING, body, HEAD, rendered=shown).severity == "info"
+
+
+@pytest.mark.parametrize(
+    "shown",
+    [
+        ["Do not add RJ-authorized: abcdef1 until RJ approves."],  # prose, not the line
+        ["RJ-authorized: abcdef1 pending"],  # shown, but without the link
+        ["RJ-authorized: abcdef1 https://example.com/x"],  # not a link to RJ's words
+        [f"RJ-authorized: 1234567 {WORDS}"],  # another head
+    ],
+)
+def test_a_hidden_line_cant_borrow_another_shown_line(shown: list[str]) -> None:
+    body = f"{RESERVED}\nRJ-authorized: abcdef1 {WORDS}"
+    assert tt.rj_authorized_heads(body, rendered=shown) == []
 
 
 def test_has_rj_authorized_line() -> None:

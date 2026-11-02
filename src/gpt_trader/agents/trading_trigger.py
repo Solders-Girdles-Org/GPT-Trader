@@ -478,23 +478,27 @@ def reserved_values(body: str) -> list[str]:
     return _declarations(body, "reserved")
 
 
-def rj_authorized_heads(body: str, rendered: str | None = None) -> list[str]:
+def rj_authorized_heads(body: str, rendered: Sequence[str] | None = None) -> list[str]:
     """Heads named by ``RJ-authorized:`` lines, lowercased.
 
-    A line counts only where the rendered PR shows it (not inside an HTML
-    comment) and only with a link to RJ's words; others are ignored. Given
-    ``rendered``, the PR body's visible text as GitHub renders it, a line also
-    counts only if that text shows ``RJ-authorized: <its SHA>``, so Markdown
-    that hides text can't carry one.
+    A line counts only with a link to RJ's words, and not inside an HTML
+    comment; others are ignored. Given ``rendered``, the lines GitHub shows
+    when it renders the body (with each line's link targets), a head also
+    counts only if one shown line itself starts ``RJ-authorized: <SHA>`` and
+    carries such a link, so Markdown that hides the line can't carry one.
     """
-    seen = " ".join((rendered or "").split()).lower()
+    shown = [" ".join(line.split()).lower() for line in rendered or ()]
     heads = []
     for value in _declarations(_HTML_COMMENT.sub("", body or ""), "rj-authorized"):
         match = _AUTHORIZED_HEAD.match(value)
         if not match:
             continue
         head = match.group(1).lower()
-        if rendered is None or f"rj-authorized: {head}" in seen:
+        if rendered is None or any(
+            line.startswith(f"rj-authorized: {head}")
+            and _AUTHORIZED_HEAD.match(line[len("rj-authorized: ") :])
+            for line in shown
+        ):
             heads.append(head)
     return heads
 
@@ -592,13 +596,13 @@ def assess(
     rj_authorized_head: str | None = None,
     repo: str | None = None,
     number: int | None = None,
-    rendered: str | None = None,
+    rendered: Sequence[str] | None = None,
 ) -> TriggerResult:
     """Apply reserved item (e) and the contract's Reserved line to one PR.
 
     RJ's authorization comes from ``rj_authorized_head`` or an ``RJ-authorized:``
     line in the body; either counts only for the current head. ``rendered`` is
-    the body's visible text, which an authorization line must appear in.
+    the body's lines as GitHub shows them, where an authorization line must be.
     """
     hits = tuple(trading_paths(paths))
     values = reserved_values(body)
