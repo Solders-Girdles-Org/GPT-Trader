@@ -19,6 +19,9 @@ WORDS = "https://linear.app/rj-openclaw/issue/RJ-1234#comment-abc"
         f"RJ-authorized: abcdef1234567890 (RJ on RJ-1234: 'go ahead', {WORDS})",
         "- **RJ-authorized:** ABCDEF1, carried from 1234567, "
         "https://github.com/o/r/pull/1#issuecomment-9",
+        "RJ-authorized: abcdef1 https://github.com/o/r/pull/1#discussion_r123",
+        "RJ-authorized: abcdef1 https://github.com/o/r/pull/1#pullrequestreview-5",
+        "RJ-authorized: abcdef1 https://github.com/o/r/issues/3#issuecomment-7",
         f"rj-authorized: abcdef12 {WORDS}",
     ],
 )
@@ -43,6 +46,7 @@ def test_authorization_line_for_this_head_clears_reserved(line: str) -> None:
         "RJ-authorized: abcdef1 https://linear.app/rj-openclaw/issue/RJ-1",  # not a comment
         "RJ-authorized: abcdef1 https://github.com/o/r/commit/abcdef1",  # a commit, not words
         "RJ-authorized: abcdef1 https://github.com/o/r/pull/7",  # the PR, not a comment
+        "RJ-authorized: abcdef1 https://github.com/o/r/pull/7#discussion_r-1",  # not an anchor
         f"{WORDS} RJ-authorized: abcdef1",
     ],
 )

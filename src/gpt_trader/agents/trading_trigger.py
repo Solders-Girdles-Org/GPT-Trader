@@ -310,7 +310,7 @@ _DECLARATION = re.compile(
 _RJ_WORDS = (
     r"https://(?:linear\.app/\S+#comment-[\w-]+"
     r"|github\.com/[^/\s]+/[^/\s]+/(?:pull|issues)/\d+"
-    r"#(?:issuecomment|pullrequestreview|discussion_r)-\d+)"
+    r"#(?:(?:issuecomment|pullrequestreview)-|discussion_r)\d+)"
 )
 _AUTHORIZED_HEAD = re.compile(r"([0-9a-f]{7,40})(?![0-9a-z]).*?" + _RJ_WORDS, re.IGNORECASE)
 # The same declaration as a shown line: its text, then its link targets.
