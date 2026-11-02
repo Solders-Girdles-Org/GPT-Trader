@@ -202,6 +202,14 @@ not impose runtime composition on the experiment. The PR template names the
 current [local verification contract](DEVELOPMENT_GUIDELINES.md#verify-before-a-pr)
 without the retired agent-inventory freshness step.
 
+The [trading trigger](../src/gpt_trader/agents/trading_trigger.py) scans
+non-Python files and Python files parseable as YAML mappings under `tests/unit/`
+for live switches turned off, since `run --config` accepts any extension. The
+[config regression tests](../tests/unit/gpt_trader/agents/test_trading_trigger_unit_configs.py)
+pair the runtime loader with the scan; ordinary ASCII Python test code retains
+its mock-only scan exception. Non-ASCII Python files with live-switch-off text
+remain flagged because runtime locale decodings can change YAML structure.
+
 ## Dependency workflow continuation
 
 The [coordinated dependency closeout](https://github.com/Solders-Girdles-Org/GPT-Trader/pull/1292)
