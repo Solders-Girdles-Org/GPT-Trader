@@ -203,10 +203,10 @@ current [local verification contract](DEVELOPMENT_GUIDELINES.md#verify-before-a-
 without the retired agent-inventory freshness step.
 
 The [trading trigger](../src/gpt_trader/agents/trading_trigger.py) scans
-non-Python files under `tests/unit/` for live switches turned off, since
-`run --config` accepts files there with any extension. The
+non-Python files and Python files parseable as YAML mappings under `tests/unit/`
+for live switches turned off, since `run --config` accepts any extension. The
 [config regression tests](../tests/unit/gpt_trader/agents/test_trading_trigger_unit_configs.py)
-pair the runtime loader with the scan; Python unit tests retain their
+pair the runtime loader with the scan; ordinary Python test code retains its
 mock-only scan exception.
 
 ## Dependency workflow continuation

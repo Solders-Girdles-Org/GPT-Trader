@@ -225,8 +225,8 @@ TRADING_EXCEPT: dict[str, str] = {
 # trades live only by carrying one of these lines. Empty and null values are
 # flagged too (RJ-1127): another loader may read them as false. A bare key line
 # is matched only at line start, so Python's ``if dry_run:`` is not. Markdown
-# and non-Python files under tests/unit/ are scanned for these lines alone
-# (RJ-1143, RJ-1200), so a skipped file can't serve as a live config.
+# and config files under tests/unit/ are scanned for these lines alone
+# (RJ-1143, RJ-1200), including YAML mappings with a Python extension.
 _SWITCH_OFF = (
     r"""(?i:\b(?:dry_run|mock_broker)["']?\s*:\s*"""
     r"""(?:["']?(?:false|no|off|0|null|none)\b|~|""|''))"""
@@ -253,8 +253,9 @@ LIVE_CAPABLE = re.compile(
 )
 
 # Areas the backstop does not scan for every token: prose (scanned for
-# LIVE_SWITCH_OFF only), and Python unit tests (mock-only in CI). Non-Python
-# unit-test files still get the switch scan: --config accepts any extension.
+# LIVE_SWITCH_OFF only), and Python unit tests (mock-only in CI). Unit-test
+# files still get the switch scan if non-Python or parseable as a YAML mapping:
+# --config accepts any extension.
 SCAN_SKIP: tuple[str, ...] = ("**/*.md", "docs/**", "tests/unit/**", "uv.lock")
 
 # Files that contain a LIVE_CAPABLE token but were reviewed as unable to reach
@@ -390,6 +391,7 @@ def trading_paths(paths: Iterable[str]) -> list[str]:
 
 _SKIP = tuple(_glob_regex(p) for p in SCAN_SKIP)
 _PROSE = _glob_regex("**/*.md")
+_UNIT = _glob_regex("tests/unit/**")
 
 
 def _skipped(path: str) -> bool:
@@ -437,6 +439,17 @@ def scan_text(data: bytes) -> str:
     return "\n".join(readings)
 
 
+def _yaml_mapping(data: bytes) -> bool:
+    # Only the content backstop needs PyYAML (an existing runtime dependency).
+    # Keep path classification importable by the stdlib-only trusted base job.
+    import yaml
+
+    try:
+        return isinstance(yaml.safe_load(data), dict)
+    except (yaml.YAMLError, UnicodeError, ValueError, RecursionError):
+        return False
+
+
 def unflagged_live_capable(root: Path, paths: Iterable[str] | None = None) -> list[str]:
     """Files with a LIVE_CAPABLE token that the trigger does not flag.
 
@@ -445,9 +458,8 @@ def unflagged_live_capable(root: Path, paths: Iterable[str] | None = None) -> li
     """
     misses = []
     for path in tracked_files(root) if paths is None else paths:
-        switch_only = _PROSE.match(path) or (
-            path.startswith("tests/unit/") and not path.endswith(".py")
-        )
+        unit = _UNIT.match(path)
+        switch_only = _PROSE.match(path) or unit
         if (_skipped(path) and not switch_only) or trading_paths([path]):
             continue
         try:
@@ -455,6 +467,8 @@ def unflagged_live_capable(root: Path, paths: Iterable[str] | None = None) -> li
         except OSError:
             continue
         if (LIVE_SWITCH_OFF if switch_only else LIVE_CAPABLE).search(scan_text(data)):
+            if unit and path.endswith(".py") and not _yaml_mapping(data):
+                continue
             misses.append(path)
     return sorted(misses)
 
