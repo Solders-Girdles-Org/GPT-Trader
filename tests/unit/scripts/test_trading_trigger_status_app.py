@@ -42,7 +42,7 @@ def test_judge_fetches_only_main_and_uses_no_actions() -> None:
 
 def test_judge_takes_only_githubs_record_of_the_request_run() -> None:
     # Everything from the request run comes through env, never into the script text.
-    used = set(re.findall(r"github\.event\.workflow_run\.([\w\[\]0-9.]+)", JUDGE))
+    used = set(re.findall(r"github\.event\.workflow_run\.([\w\[\].]+)", JUDGE))
     assert used == {
         "event",
         "head_sha",
