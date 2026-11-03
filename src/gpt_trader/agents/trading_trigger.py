@@ -29,11 +29,13 @@ symlink or submodule that REVIEWED_LINKS does not name.
 Two runners apply the rule. ``agent-pr-ready`` runs in the PR's checkout, and
 the merging agent runs it: it catches a mistaken ``Reserved: none`` but cannot
 stop code written to fool the process it runs in. The required
-``trading-trigger/base`` status can't be fooled that way: a
-``pull_request_target`` workflow runs this file from the base branch over the
-PR's file list and body (``scripts/ci/trading_trigger_status.py``), and no file
-from the PR runs. Its limit: GitHub identifies a status by name and the app
-that posted it, so a PR that adds its own workflow could post the same name.
+``trading-trigger/base`` status can't be fooled that way: a ``workflow_run``
+workflow runs this file from main over the PR's file list and body
+(``scripts/ci/trading_trigger_status.py``), and no file from the PR runs. It
+posts as a GitHub App whose key only main's workflows can read, and the
+required status is pinned to that App, so a workflow a PR adds can't post it
+either. Until the App is set up it posts with the job's own token, and a PR
+that adds its own workflow could post the same name.
 
 Replay the trigger over recent merged PRs, or run the scan::
 
@@ -105,6 +107,7 @@ TRADING_PATTERNS: tuple[str, ...] = (
     "scripts/ci/check_branch_protection.py",
     # The required status that applies this rule from base-branch code.
     ".github/workflows/trading-trigger.yml",
+    ".github/workflows/trading-trigger-request.yml",
     "scripts/ci/trading_trigger_status.py",
     "tests/unit/scripts/test_trading_trigger_status*.py",
     "tests/unit/gpt_trader/agents/test_trading_trigger*.py",

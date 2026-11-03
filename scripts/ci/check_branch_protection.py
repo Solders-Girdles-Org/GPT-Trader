@@ -43,7 +43,9 @@ EXPECTED_REQUIRED_CHECKS = frozenset(
     }
 )
 # GitHub Actions' app id. A required status pinned to it can't be met by a
-# status an agent posts with its own token.
+# status an agent posts with its own token. trading-trigger/base moves to the
+# trading trigger's own App once RJ has set it up, so a workflow a PR adds
+# can't post it either (RJ-1119).
 GITHUB_ACTIONS_APP_ID = 15368
 EXPECTED_CHECK_SOURCES = {"trading-trigger/base": GITHUB_ACTIONS_APP_ID}
 EXPECTED_STRICT = False

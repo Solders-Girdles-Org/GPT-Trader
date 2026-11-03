@@ -3,11 +3,17 @@
 
 ``agent-pr-ready`` applies the trading trigger (reserved item e) in the PR's own
 checkout, so code in the PR can bend its report. This runner cannot be bent
-that way: ``.github/workflows/trading-trigger.yml`` fetches the base branch,
-never the PR's head, and runs this file with ``python3 -I -S``. It reads the
-PR's file list and body from the GitHub API, loads the base branch's
-``src/gpt_trader/agents/trading_trigger.py`` by path and posts a commit status.
-No file from the PR runs. Standard library only.
+that way: ``.github/workflows/trading-trigger.yml`` runs on ``workflow_run``
+from main, fetches main, never the PR's head, and runs this file with
+``python3 -I -S``. It reads the PR's file list and body from the GitHub API,
+loads main's ``src/gpt_trader/agents/trading_trigger.py`` by path and posts a
+commit status. No file from the PR runs. Standard library only, plus openssl
+to sign the App's token request.
+
+With ``STATUS_APP_ID`` and ``STATUS_APP_KEY`` set (the ``trading-trigger``
+environment, readable only from main), statuses are posted as the trading
+trigger's GitHub App, which the required status is pinned to. Without them,
+they go out with the job's own token.
 
 For a pull request event it posts on the PR's head, and on the commit of any
 merge-queue entry testing the PR, so a body edit reaches a queued copy too. For
@@ -22,12 +28,16 @@ Locally, print the verdict without posting it::
 from __future__ import annotations
 
 import argparse
+import base64
 import importlib.util  # naming: allow
 import json
 import os
 import re
 import subprocess
 import sys
+import tempfile
+import time
+import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from html.parser import HTMLParser
@@ -39,6 +49,7 @@ ROOT = Path(__file__).resolve().parents[2]
 TRIGGER_PATH = ROOT / "src" / "gpt_trader" / "agents" / "trading_trigger.py"
 CONTEXT = "trading-trigger/base"
 DEFAULT_REPOSITORY = "Solders-Girdles-Org/GPT-Trader"
+DEFAULT_BRANCH = "main"
 # GitHub caps a status description at 140 characters.
 _DESCRIPTION_LIMIT = 140
 # Merge-queue branches are gh-readonly-queue/<base branch>/pr-<number>-<base sha>.
@@ -69,8 +80,11 @@ def load_trigger(path: Path = TRIGGER_PATH) -> ModuleType:
     return module
 
 
-def _gh(args: list[str], stdin: str | None = None) -> str:
-    result = subprocess.run(["gh", *args], input=stdin, capture_output=True, text=True, check=False)
+def _gh(args: list[str], stdin: str | None = None, token: str | None = None) -> str:
+    env = {**os.environ, "GH_TOKEN": token} if token else None
+    result = subprocess.run(
+        ["gh", *args], input=stdin, capture_output=True, text=True, check=False, env=env
+    )
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or f"gh {args[0]} failed")
     return result.stdout
@@ -199,6 +213,79 @@ class _ShownLines(HTMLParser):
         return self.done
 
 
+def prs_for_head(repo: str, head: str, base: str) -> list[int]:
+    """Open PRs into ``base`` whose head is this commit."""
+    pulls = json.loads(_gh(["api", f"repos/{repo}/commits/{head}/pulls"]))
+    found = []
+    for pull in pulls if isinstance(pulls, list) else []:
+        if (
+            pull.get("state") == "open"
+            and str(pull["head"]["sha"]) == head
+            and str(pull["base"]["ref"]) == base
+        ):
+            found.append(int(pull["number"]))
+    return sorted(found)
+
+
+def _b64url(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+
+def _app_jwt(app_id: str, key: str, now: float | None = None) -> str:
+    """A ten-minute JWT for the App, signed with its key by openssl."""
+    issued = int(time.time() if now is None else now)
+    header = _b64url(json.dumps({"alg": "RS256", "typ": "JWT"}).encode())
+    claims = _b64url(json.dumps({"iat": issued - 60, "exp": issued + 540, "iss": app_id}).encode())
+    with tempfile.TemporaryDirectory() as folder:
+        key_path = Path(folder) / "app.pem"
+        key_path.touch(mode=0o600)
+        key_path.write_text(key)
+        signature = subprocess.run(
+            ["openssl", "dgst", "-sha256", "-sign", str(key_path)],
+            input=f"{header}.{claims}".encode(),
+            capture_output=True,
+            check=False,
+        )
+    if signature.returncode != 0 or not signature.stdout:
+        raise RuntimeError("could not sign the App's JWT; check its key")
+    return f"{header}.{claims}.{_b64url(signature.stdout)}"
+
+
+def _app_api(method: str, path: str, jwt: str, body: dict[str, Any] | None = None) -> Any:
+    request = urllib.request.Request(
+        os.environ.get("GITHUB_API_URL", "https://api.github.com") + path,
+        method=method,
+        data=None if body is None else json.dumps(body).encode(),
+        headers={
+            "Authorization": f"Bearer {jwt}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310 - fixed https API
+        return json.loads(response.read())
+
+
+def app_status_token(repo: str, app_id: str, key: str) -> str:
+    """An installation token for the trading trigger's App, limited to statuses on this repo.
+
+    The required status is pinned to this App, so a workflow a PR adds, which
+    can't read the key, can't post it.
+    """
+    jwt = _app_jwt(app_id, key)
+    installation = _app_api("GET", f"/repos/{repo}/installation", jwt)["id"]
+    token = str(
+        _app_api(
+            "POST",
+            f"/app/installations/{installation}/access_tokens",
+            jwt,
+            {"repositories": [repo.split("/", 1)[1]], "permissions": {"statuses": "write"}},
+        )["token"]
+    )
+    print(f"::add-mask::{token}")  # keep it out of the job log
+    return token
+
+
 def queued_pr_number(ref: str) -> int:
     match = _QUEUE_REF.fullmatch(ref or "")
     if not match:
@@ -248,6 +335,7 @@ def evaluate(
     expected_head: str | None = None,
     queued: bool = False,
     on_current: Callable[[str], None] | None = None,
+    base: str = DEFAULT_BRANCH,
 ) -> tuple[Verdict, dict[str, Any]]:
     """Judge the PR as it stands now; returns the verdict and the PR read it covers.
 
@@ -256,6 +344,8 @@ def evaluate(
     pr = fetch_pr(repo, number)
     if not queued and pr.get("state") != "open":
         raise Skip(f"PR #{number} is {pr.get('state')}")
+    if not queued and str(pr["base"]["ref"]) != base:
+        raise Skip(f"PR #{number} merges into {pr['base']['ref']}, not {base}")
     head = str(pr["head"]["sha"])
     if expected_head and head != expected_head:
         raise Skip(f"PR #{number} head moved from {expected_head[:7]} to {head[:7]}")
@@ -275,7 +365,7 @@ def _snapshot(pr: dict[str, Any]) -> tuple[str, str]:
     return str(pr["head"]["sha"]), str(pr.get("body") or "")
 
 
-def queue_shas(repo: str, number: int, base: str = "main") -> list[str]:
+def queue_shas(repo: str, number: int, base: str = DEFAULT_BRANCH) -> list[str]:
     """Commits of the merge-queue branches now testing this PR."""
     prefix = f"heads/gh-readonly-queue/{base}/pr-{number}-"
     refs = json.loads(_gh(["api", f"repos/{repo}/git/matching-refs/{prefix}"]))
@@ -294,7 +384,9 @@ def description(text: str) -> str:
     return text[: _DESCRIPTION_LIMIT - 1] + "…"
 
 
-def post_status(repo: str, sha: str, verdict: Verdict, target_url: str | None) -> None:
+def post_status(
+    repo: str, sha: str, verdict: Verdict, target_url: str | None, token: str | None = None
+) -> None:
     args = [
         "api",
         "--method",
@@ -309,7 +401,7 @@ def post_status(repo: str, sha: str, verdict: Verdict, target_url: str | None) -
     ]
     if target_url:
         args += ["-f", f"target_url={target_url}"]
-    _gh(args)
+    _gh(args, token=token)
 
 
 def write_summary(path: str | None, verdict: Verdict, sha: str, number: int | None) -> None:
@@ -326,7 +418,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Post the trading trigger's verdict as a status.")
     parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY", DEFAULT_REPOSITORY))
     target = parser.add_mutually_exclusive_group(required=True)
-    target.add_argument("--pr", type=int, help="Judge this pull request.")
+    target.add_argument(
+        "--pr", type=int, help="Judge this pull request (0: find it from --expected-head)."
+    )
     target.add_argument(
         "--merge-group-ref", help="Judge the PR this merge-queue branch is testing."
     )
@@ -335,6 +429,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--status-sha", help="Commit to post the status on (default: the PR's head)."
     )
     parser.add_argument("--target-url", help="Link for the status, such as the workflow run.")
+    parser.add_argument("--base", default=DEFAULT_BRANCH, help="Judge only PRs into this branch.")
     parser.add_argument("--print-only", action="store_true", help="Print; post nothing.")
     return parser.parse_args(argv)
 
@@ -347,17 +442,37 @@ def main(argv: list[str] | None = None) -> int:
     # Merge-queue commits testing this PR: a PR run's verdict, or its error,
     # replaces their status too, so a body edit reaches a queued copy.
     targets: list[str] = []
+    # The App's token when it is set up (STATUS_APP_ID and STATUS_APP_KEY);
+    # otherwise statuses go out with the job's own token.
+    token: str | None = None
 
     def publish(target: str, verdict: Verdict) -> None:
         print(f"{CONTEXT}: {verdict.state} on {target[:12]} (PR #{number}): {verdict.message}")
         if not args.print_only:
-            post_status(args.repo, target, verdict, args.target_url)
+            post_status(args.repo, target, verdict, args.target_url, token)
         write_summary(os.environ.get("GITHUB_STEP_SUMMARY"), verdict, target, number)
 
     try:
         number = queued_pr_number(args.merge_group_ref) if queued else int(args.pr)
+        if not queued and not number:
+            # GitHub's record of the run names no PR (a fork, say): find it by commit.
+            if not args.expected_head:
+                raise ValueError("--pr 0 needs --expected-head")
+            found = prs_for_head(args.repo, args.expected_head, args.base)
+            if not found:
+                raise Skip(f"no open PR into {args.base} has head {args.expected_head[:7]}")
+            if len(found) > 1:
+                raise ValueError(f"open PRs {found} share head {args.expected_head[:7]}")
+            number = found[0]
         if not queued:
-            targets = queue_shas(args.repo, number)
+            targets = queue_shas(args.repo, number, args.base)
+        # After the targets are known, so a failure here still reaches them.
+        # Limit: once the required status is pinned to the App, an error posted
+        # with the job's token doesn't replace an earlier App success; if the
+        # App can't sign in, the job fails visibly instead.
+        app_id = os.environ.get("STATUS_APP_ID", "").strip()
+        if app_id and not args.print_only:
+            token = app_status_token(args.repo, app_id, os.environ.get("STATUS_APP_KEY", ""))
         trigger = load_trigger()
 
         def judging(head: str) -> None:
@@ -376,6 +491,7 @@ def main(argv: list[str] | None = None) -> int:
             expected_head=args.expected_head,
             queued=queued,
             on_current=judging,
+            base=args.base,
         )
         sha = sha or str(pr["head"]["sha"])
         publish(sha, verdict)
@@ -402,7 +518,7 @@ def main(argv: list[str] | None = None) -> int:
         print(verdict.message, file=sys.stderr)
         if number is not None and not queued and not targets:
             try:
-                targets = queue_shas(args.repo, number)
+                targets = queue_shas(args.repo, number, args.base)
             except Exception as again:  # noqa: BLE001
                 print(f"Could not list queued copies: {again}", file=sys.stderr)
         for target in dict.fromkeys(t for t in (sha, *targets) if t):
