@@ -129,7 +129,7 @@ class TestPositionSizer:
         )
 
         expected_value = Decimal("10000") * Decimal(str(result.position_fraction))
-        assert result.position_value == pytest.approx(expected_value, rel=0.01)
+        assert result.position_value == pytest.approx(expected_value, rel=Decimal("0.01"))
 
     def test_position_quantity_calculation(self):
         """Test position quantity is calculated correctly."""
@@ -142,7 +142,7 @@ class TestPositionSizer:
         )
 
         expected_quantity = result.position_value / Decimal("100")
-        assert result.position_quantity == pytest.approx(expected_quantity, rel=0.001)
+        assert result.position_quantity == pytest.approx(expected_quantity, rel=Decimal("0.001"))
 
     def test_sizing_result_to_dict(self):
         """Test SizingResult serialization."""
