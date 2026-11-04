@@ -57,6 +57,7 @@ when you add a deprecation shim.
 | `CI` / Lint & Format, Docs Link Audit, Type Check, Test Guardrails, Unit Tests (Core), Property Tests, Contract Tests, Integration Tests | Required by `main` protection; also run on `merge_group` |
 | `trading-trigger/base` commit status, from `Trading trigger` | Required by `main` protection, pinned to the GitHub Actions app; posted on the PR head and on `merge_group` |
 | `CI` / Windows Unit Tests, Dependency Review, `CodeQL` | Advisory |
+| `Card ID guard` / No card ID in PR title or branch | Advisory; fails while the title or head branch names a Linear card, which Linear would close at merge (edit the title; never rename the branch) |
 | `Release Image` (version-tag push) and `Integration Tests (Manual)` | Outside the merge gate; neither deploys, moves money or submits orders |
 
 Merges go through the merge queue, which re-validates each entry against the

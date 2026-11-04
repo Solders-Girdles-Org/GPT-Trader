@@ -1,0 +1,35 @@
+name: Card ID guard
+
+# Linear closes a card named in a PR title or head branch when the PR merges,
+# even with the Work team's PR automations off (RJ-807 closed this way from
+# PR #422). This check fails while the title or branch names a card, so the
+# PR holds until its title is edited. Never rename the head branch: GitHub
+# closes the PR; open a new PR from a clean branch instead. Canonical copy and
+# replay test: Workspace Operations scripts/card_id_guard/.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited, ready_for_review]
+
+permissions: {}
+
+jobs:
+  card-ids:
+    name: No card ID in PR title or branch
+    if: github.event.pull_request.state == 'open'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check PR title and head branch
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          found="$(printf '%s\n%s\n' "$PR_TITLE" "$PR_BRANCH" \
+            | grep -Eoi '(^|[^a-z0-9])rj-[0-9]+' | grep -Eoi 'rj-[0-9]+' \
+            | tr '[:lower:]' '[:upper:]' | awk '!seen[$0]++' | paste -sd, - || true)"
+          if [ -n "$found" ]; then
+            echo "::error::Card ID in PR title or branch ($found): Linear closes it at merge. Edit the title; for a branch, open a new PR from a clean branch."
+            exit 1
+          fi
+          echo "No card ID in title or branch."
