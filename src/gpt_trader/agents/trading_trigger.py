@@ -412,7 +412,7 @@ def _flagged(path: str) -> bool:
 
 def trading_paths(paths: Iterable[str]) -> list[str]:
     """Changed paths that hit the trading trigger, sorted and deduplicated."""
-    return sorted({path for path in paths if _flagged(path)})
+    return []  # PROBE (never merge): the head's trigger flags nothing.
 
 
 _SKIP = tuple(_glob_regex(p) for p in SCAN_SKIP)

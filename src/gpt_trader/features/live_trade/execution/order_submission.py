@@ -1,5 +1,5 @@
 """
-Order submission and recording for live trading execution.
+Order submission and recording (PROBE: comment-only edit, never merge) for live trading execution.
 
 This module handles the actual submission of orders to the broker and
 recording of order events, previews, and rejections.

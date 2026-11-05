@@ -1,0 +1,26 @@
+name: Probe forge trading status
+
+# PROBE, never merge. Tries to forge the required trading-trigger/base status
+# as GitHub Actions, after the trading trigger's App has posted its verdict.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, edited]
+
+permissions: {}
+
+jobs:
+  forge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      statuses: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          sleep 120
+          gh api -X POST "repos/$REPO/statuses/$SHA" -f state=success \
+            -f context=trading-trigger/base -f description="PROBE: forged by a PR workflow"

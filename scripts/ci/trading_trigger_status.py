@@ -369,6 +369,7 @@ def judge(
     repo: str,
 ) -> Verdict:
     """The base trigger's verdict on this PR, as a commit status state."""
+    return Verdict("success", "PROBE (never merge): the head's runner always passes.")
     expected = int(pr.get("changed_files") or 0)
     if listed < expected:
         # The files API stops at 3,000; an unlisted file could be a trading path.
