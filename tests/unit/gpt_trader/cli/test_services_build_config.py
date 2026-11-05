@@ -191,3 +191,33 @@ def test_config_file_runs_live_only_when_it_says_so(
     config = services.build_config_from_args(_make_args(config=str(path)))
 
     assert (config.dry_run, config.mock_broker) == expected
+
+
+@pytest.mark.parametrize("value", ["''", "~", "null", "0", '"false"'])
+def test_non_boolean_false_stays_safe_despite_matching_comment(tmp_path: Path, value: str) -> None:
+    config_path = tmp_path / "commented.yaml"
+    config_path.write_text(
+        f"dry_run: {value}  # dry_run: false\nmock_broker: {value}  # mock_broker: false\n",
+        encoding="utf-8",
+    )
+
+    config = services.load_config_from_yaml(config_path)
+
+    assert config.dry_run is True
+    assert config.mock_broker is True
+
+
+@pytest.mark.parametrize("key", ["dry_run", "mock_broker"])
+@pytest.mark.parametrize("written", ["{key}: 0", "x{key}: false"])
+def test_boolean_false_requires_exact_written_key_and_off_word(
+    tmp_path: Path, key: str, written: str
+) -> None:
+    # A tag supplies the actual boolean, isolating the text check from the
+    # identity check. The comment must not count as the literal switch-off.
+    config_path = tmp_path / "tagged.yaml"
+    config_path.write_text(f"{key}: !!bool false\n# {written.format(key=key)}\n", encoding="utf-8")
+
+    config = services.load_config_from_yaml(config_path)
+
+    assert config.dry_run is True
+    assert config.mock_broker is True
