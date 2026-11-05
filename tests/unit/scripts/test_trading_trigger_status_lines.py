@@ -91,7 +91,7 @@ def test_blocking_claim_may_name_a_changes_requested_review(github: FakeGitHub) 
     assert github.posted[0]["state"] == "success"
 
 
-WORDS = "https://linear.app/rj-openclaw/issue/RJ-1#comment-1"
+WORDS = "https://linear.app/rj-openclaw/issue/RJ-1#comment-2c82f23f"
 
 
 def test_authorization_hidden_by_markdown_does_not_count(github: FakeGitHub) -> None:

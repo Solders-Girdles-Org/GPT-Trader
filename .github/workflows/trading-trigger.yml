@@ -39,6 +39,8 @@ jobs:
     environment: trading-trigger
     permissions:
       contents: read
+      # Read the issue comment an RJ-authorized: line links (public data).
+      issues: read
       pull-requests: read
       statuses: write
     steps:

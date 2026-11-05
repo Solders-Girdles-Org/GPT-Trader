@@ -9,7 +9,7 @@ from gpt_trader.agents import trading_trigger as tt
 HEAD = "abcdef1234567890"
 TRADING = ["src/gpt_trader/features/live_trade/execution/order_submission.py"]
 RESERVED = "Reserved: e - can cancel open orders"
-WORDS = "https://linear.app/rj-openclaw/issue/RJ-1234#comment-abc"
+WORDS = "https://linear.app/rj-openclaw/issue/RJ-1234#comment-2c82f23f"
 
 
 @pytest.mark.parametrize(
@@ -177,3 +177,60 @@ def test_gate_runner_files_are_flagged() -> None:
         "tests/unit/gpt_trader/agents/test_trading_trigger_authorized.py",
     ]
     assert tt.trading_paths(runner) == sorted(runner)
+
+
+@pytest.mark.parametrize(
+    "words",
+    [
+        "https://linear.app/x/issue/NOPE-0#comment-zzz",  # Scout: another workspace
+        "https://linear.app/rj-openclaw/issue/RJ-1#comment-zzz",  # not a comment id
+        "https://linear.app/rj-openclaw/issue/RJ-1#comment-2c82f23",  # too short
+        "https://linear.app/rj-openclaw/issue/RJ-1#comment-2c82f23f0",  # too long
+        "https://linear.app/rj-openclaw/project/p#comment-2c82f23f",  # not a card
+    ],
+)
+def test_linear_link_must_be_a_comment_on_a_card_in_rjs_workspace(words: str) -> None:
+    assert tt.assess(TRADING, f"{RESERVED}\nRJ-authorized: abcdef1 {words}", HEAD).severity == (
+        "blocker"
+    )
+
+
+def test_linear_link_with_the_cards_title_slug_counts() -> None:
+    words = (
+        "https://linear.app/rj-openclaw/issue/RJ-1198/authorize-merging-gpt-trader1423-at-head"
+        "#comment-2c82f23f"
+    )
+    assert tt.assess(TRADING, f"{RESERVED}\nRJ-authorized: abcdef1 {words}", HEAD).severity == (
+        "info"
+    )
+
+
+def test_rj_authorization_links_names_each_github_comment_to_fetch() -> None:
+    body = (
+        f"RJ-authorized: ABCDEF1 https://github.com/o/r/issues/3#issuecomment-5 {WORDS}\n"
+        "RJ-authorized: 1234567 https://github.com/o/r/pull/7#discussion_r8\n"
+        "<!-- RJ-authorized: 7654321 https://github.com/o/r/pull/7#pullrequestreview-9 -->\n"
+        "RJ-authorized: no-sha https://github.com/o/r/pull/7#pullrequestreview-9"
+    )
+    assert [
+        (x["sha"], x["repo"], x["number"], x["kind"], x["id"])
+        for x in tt.rj_authorization_links(body)
+    ] == [
+        ("abcdef1", "o/r", 3, "issuecomment", 5),
+        ("1234567", "o/r", 7, "discussion_r", 8),
+    ]
+    assert tt.rj_authorization_links(f"RJ-authorized: abcdef1 {WORDS}") == []
+
+
+def test_names_head_needs_a_whole_sha_either_prefixes() -> None:
+    assert tt.names_head("Yes to ABCDEF1.", HEAD)
+    assert tt.names_head(f"yes {HEAD}", "abcdef1")
+    assert not tt.names_head("yes abcdef", HEAD)
+    assert not tt.names_head("yes abcdef1x", HEAD)
+    assert not tt.names_head("yes 1234567", HEAD)
+    assert not tt.names_head("", HEAD)
+
+
+def test_trusted_accounts_live_in_base_branch_code() -> None:
+    assert tt.REVIEW_ACCOUNTS == ("Solders-Girdles",)
+    assert tt.RJ_ACCOUNTS == ("Solders-Girdles",)
