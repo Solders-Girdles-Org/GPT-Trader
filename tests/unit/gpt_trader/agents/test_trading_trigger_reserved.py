@@ -61,3 +61,14 @@ def test_container_none_alone_is_still_no_declaration(variant: str) -> None:
 )
 def test_prose_mentions_are_not_declarations(line: str) -> None:
     assert tt.reserved_values(f"Reserved: none\n{line}") == ["none"]
+
+
+@pytest.mark.parametrize("unit", ["[ ]", "[x]", "1.", "- ", "_"])
+def test_wide_reading_does_not_backtrack_on_long_prefixes(unit: str) -> None:
+    # Overlapping prefix alternatives once took seconds at 23 checkboxes.
+    import time
+
+    start = time.monotonic()
+    assert tt.reserved_values("Reserved: none\n" + unit * 2000 + "Summary") == ["none"]
+    assert tt.reserved_values(unit * 2000 + "Reserved: e - x") == ["e - x"]
+    assert time.monotonic() - start < 1.0

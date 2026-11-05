@@ -515,7 +515,9 @@ def _declarations(body: str, name: str) -> list[str]:
 # Read only to tighten: such a line adds its effect, never a ``none``.
 _COLONS = str.maketrans(dict.fromkeys("∶꞉˸ː։׃᠄⁚", ":"))
 _WIDE_RESERVED = re.compile(
-    r"^(?:[^\w:]|_|\d+[.)]|\[[ x]\])*reserved[\s*_`~]*:(.*)$", re.IGNORECASE
+    # The prefix alternatives never overlap, so PR text can't make it backtrack.
+    r"^(?:[^\w:]|_|\d+[.)]|(?<=\[)x(?=\]))*reserved[\s*_`~]*:(.*)$",
+    re.IGNORECASE,
 )
 
 
