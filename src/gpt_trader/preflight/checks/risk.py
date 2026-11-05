@@ -89,5 +89,5 @@ def check_risk_configuration(checker: PreflightCheck) -> bool:
         return all_good
 
     except Exception as exc:
-        checker.log_error(f"Failed to validate risk config: {exc}")
+        checker.log_error(f"Failed to validate risk config: {exc} - UNSAFE VALUE")
         return False
