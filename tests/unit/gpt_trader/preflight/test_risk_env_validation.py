@@ -1,6 +1,7 @@
 """Exercise real environment parsing through the offline risk preflight section."""
 
 import os
+from argparse import Namespace
 from decimal import Decimal
 
 import pytest
@@ -126,3 +127,25 @@ def test_invalid_integer_limit_is_unsafe(
     checker = PreflightCheck(profile="dev")
     assert check_risk_configuration(checker) is False
     assert any(variable in error and "UNSAFE VALUE" in error for error in checker.errors)
+
+
+@pytest.mark.parametrize("token", ["nan", "inf", "-0.01", "1e400", "1e-999"])
+def test_cli_config_refuses_unsafe_shared_limit_before_profile(
+    monkeypatch: pytest.MonkeyPatch, token: str
+) -> None:
+    from gpt_trader.cli.services import build_config_from_args
+
+    monkeypatch.setenv("RISK_MAX_POSITION_PCT_PER_SYMBOL", token)
+    monkeypatch.setenv("RISK_REDUCE_ONLY_MODE", "1")
+    with pytest.raises(ValueError, match="RISK_MAX_POSITION_PCT_PER_SYMBOL"):
+        build_config_from_args(Namespace(profile="prod"))
+
+
+def test_profile_still_replaces_unshared_bot_risk_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    from gpt_trader.cli.services import build_config_from_args
+
+    monkeypatch.setenv("RISK_STOP_LOSS_PCT", "nan")
+    monkeypatch.setenv("RISK_REDUCE_ONLY_MODE", "1")
+    config = build_config_from_args(Namespace(profile="prod"))
+    assert config.risk.stop_loss_pct.is_finite()
+    assert config.reduce_only_mode is True
