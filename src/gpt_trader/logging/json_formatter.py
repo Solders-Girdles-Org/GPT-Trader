@@ -11,6 +11,8 @@ from typing import Any
 
 from .correlation import get_log_context
 
+REDACTED = "[REDACTED]"
+
 
 class StructuredJSONFormatter(logging.Formatter):
     """JSON formatter that includes correlation IDs and domain field support."""
@@ -129,16 +131,48 @@ class StructuredJSONFormatter(logging.Formatter):
             )
 
     def _redact_data(self, data: Any) -> Any:
-        """Recursively redact sensitive keys in dictionaries."""
+        """Recursively redact sensitive values.
+
+        A dict value is redacted when its key looks sensitive (see
+        ``_is_sensitive_key``). Lists, tuples, sets and frozensets are walked,
+        and a two-item ``(name, value)`` pair whose name looks sensitive, such
+        as a ``("Authorization", "Bearer ...")`` header tuple, has its value
+        redacted. Sets become lists so the entry still serialises.
+        """
         if isinstance(data, dict):
             return {
-                k: self._redact_data(v) if k.lower() not in self.SENSITIVE_KEYS else "[REDACTED]"
+                k: REDACTED if self._redacts(k, v) else self._redact_data(v)
                 for k, v in data.items()
             }
-        elif isinstance(data, list):
+        if isinstance(data, (list, tuple)):
+            if len(data) == 2 and self._redacts(data[0], data[1]):
+                pair = [data[0], REDACTED]
+                return tuple(pair) if isinstance(data, tuple) else pair
+            items = [self._redact_data(item) for item in data]
+            return tuple(items) if isinstance(data, tuple) else items
+        if isinstance(data, (set, frozenset)):
             return [self._redact_data(item) for item in data]
         return data
 
+    def _redacts(self, key: Any, value: Any) -> bool:
+        """Return whether ``value`` stored under ``key`` must be redacted."""
+        if not isinstance(key, str):
+            return False
+        lowered = key.lower()
+        if lowered in self.SENSITIVE_KEYS:
+            return True
+        if value is None or isinstance(value, bool):
+            # A flag such as ``cdp_credentials_present`` cannot carry a secret.
+            return False
+        return self._is_sensitive_key(lowered)
+
+    @classmethod
+    def _is_sensitive_key(cls, lowered_key: str) -> bool:
+        """Match a lowercased key on credential fragments, ``-`` read as ``_``."""
+        normalised = lowered_key.replace("-", "_")
+        return any(fragment in normalised for fragment in cls.SENSITIVE_KEY_FRAGMENTS)
+
+    # Exact names, always redacted whatever the value.
     SENSITIVE_KEYS = {
         "access_token",
         "api_key",
@@ -155,6 +189,23 @@ class StructuredJSONFormatter(logging.Formatter):
         "secret",
         "token",
     }
+
+    # Any key containing one of these (after lowercasing and mapping ``-`` to
+    # ``_``) is redacted unless its value is None or a bool. Over-redaction,
+    # such as an LLM ``input_tokens`` count, is the accepted cost.
+    SENSITIVE_KEY_FRAGMENTS = (
+        "secret",
+        "token",
+        "password",
+        "passphrase",
+        "private",
+        "api_key",
+        "apikey",
+        "access_key",
+        "authorization",
+        "cookie",
+        "credential",
+    )
 
     def _format_timestamp(self, created: float) -> str:
         """Format a timestamp from the log record.
