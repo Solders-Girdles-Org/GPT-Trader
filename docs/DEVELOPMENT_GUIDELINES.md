@@ -77,9 +77,13 @@ PR needs `Reserved: none` added once you have read its diff (again if
 Dependabot rewrites the body). A reserved PR passes only once its body
 carries `RJ-authorized: <head SHA> <link to RJ's words>` for the current
 head, outside any HTML comment, after RJ authorizes that head; the link is the
-Linear or GitHub comment that records it. Each `Review:` line must name a
+Linear or GitHub comment that records it. A GitHub link must be a comment on
+this repo, written by RJ's account and naming the head; the status fetches it.
+A Linear link must be a comment on a card in RJ's workspace, but CI can't read
+Linear, so its shape is all that is checked. Each `Review:` line must name a
 review that exists on the PR for the commit it states (the earlier head, for a
-carried line). Limit, until the App is set up: a status is identified by name
+carried line), written by an expected reviewer account (`REVIEW_ACCOUNTS` in
+the trigger). Limit, until the App is set up: a status is identified by name
 and app, so a PR that adds a workflow could post the same name; read any new
 workflow in review.
 

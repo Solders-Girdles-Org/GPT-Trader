@@ -150,8 +150,76 @@ def unbacked_review(trigger: ModuleType, pr: dict[str, Any], repo: str) -> str |
                 f"A Review: line names review {review_id} at {sha[:7]}, but this PR has no "
                 f"review {review_id} of {sha[:7]}."
             )
+        # The repo is public: anyone signed in can leave a COMMENTED review.
+        author = _login(review)
+        if not _listed(author, trigger.REVIEW_ACCOUNTS):
+            return (
+                f"A Review: line names review {review_id}, by {author or 'an unknown account'}, "
+                "which is not an expected reviewer account."
+            )
         if claim["outcome"] == "clean" and state not in _CLEAN_STATES:
             return f"A Review: line calls review {review_id} clean, but its state is {state}."
+    return None
+
+
+def _login(item: dict[str, Any]) -> str:
+    user = item.get("user")
+    return str(user.get("login") or "") if isinstance(user, dict) else ""
+
+
+def _listed(login: str, accounts: tuple[str, ...]) -> bool:
+    return bool(login) and login.lower() in {a.lower() for a in accounts}
+
+
+def fetch_comment(repo: str, link: dict[str, Any]) -> dict[str, Any] | None:
+    """The comment an ``RJ-authorized:`` link points to, or None when it isn't there.
+
+    The comment must sit on the issue or PR the link names, not just in this repo.
+    """
+    number, comment_id = int(link["number"]), int(link["id"])
+    if link["kind"] == "pullrequestreview":
+        return fetch_review(repo, number, comment_id)
+    if link["kind"] == "issuecomment":
+        path, parent, suffix = f"issues/comments/{comment_id}", "issue_url", f"/issues/{number}"
+    else:
+        path, parent, suffix = (
+            f"pulls/comments/{comment_id}",
+            "pull_request_url",
+            f"/pulls/{number}",
+        )
+    try:
+        payload = json.loads(_gh(["api", f"repos/{repo}/{path}"]))
+    except RuntimeError as error:
+        if "HTTP 404" in str(error):
+            return None
+        raise
+    if not isinstance(payload, dict) or not str(payload.get(parent) or "").endswith(suffix):
+        return None
+    return payload
+
+
+def unbacked_authorization(trigger: ModuleType, pr: dict[str, Any], repo: str) -> str | None:
+    """Why an ``RJ-authorized:`` line's GitHub link isn't RJ's words on this head, if it isn't.
+
+    Each link must be a comment on this repo, on the issue or PR it names, written
+    by an RJ_ACCOUNTS login, that names the line's head. A Linear link can't be
+    read from CI, so the trigger judges it by shape alone (a stated limit).
+    """
+    for link in trigger.rj_authorization_links(str(pr.get("body") or "")):
+        sha, url = link["sha"], link["url"]
+        if str(link["repo"]).lower() != repo.lower():
+            return f"An RJ-authorized: line links {url}, outside {repo}; link RJ's words here."
+        comment = fetch_comment(repo, link)
+        if comment is None:
+            return f"An RJ-authorized: line links {url}, but there is no such comment."
+        author = _login(comment)
+        if not _listed(author, trigger.RJ_ACCOUNTS):
+            return (
+                f"An RJ-authorized: line links a comment by {author or 'an unknown account'}, "
+                "not RJ's account."
+            )
+        if not trigger.names_head(str(comment.get("body") or ""), sha):
+            return f"An RJ-authorized: line links {url}, which doesn't name head {sha[:7]}."
     return None
 
 
@@ -309,7 +377,7 @@ def judge(
             f"GitHub listed {listed} of {expected} changed files; "
             "the trigger must see every file. Split the PR.",
         )
-    unbacked = unbacked_review(trigger, pr, repo)
+    unbacked = unbacked_review(trigger, pr, repo) or unbacked_authorization(trigger, pr, repo)
     if unbacked:
         return Verdict("failure", unbacked)
     body = str(pr.get("body") or "")

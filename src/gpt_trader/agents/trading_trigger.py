@@ -12,7 +12,11 @@ cross-family ``Review:`` line for the current head that confirms it. Every PR
 needs a ``Reserved:`` line; one without it is blocked even off these paths.
 Once RJ authorizes a reserved head, an ``RJ-authorized: <head SHA> <link>``
 line records it, linking his words; it clears the reserved blocker for that
-head only, and doesn't count inside an HTML comment.
+head only, and doesn't count inside an HTML comment. The required status
+fetches a GitHub link: it must be a comment on this repo, by an RJ_ACCOUNTS
+login, that names the head. Limit: CI can't read Linear, so a Linear link
+counts by its shape alone (a comment anchor on a card in LINEAR_WORKSPACE).
+A ``Review:`` line counts there only for a review by a REVIEW_ACCOUNTS login.
 
 The trigger flags directories by default and lists its exceptions with
 reasons; anything under ``src/`` that no exception names, such as a new
@@ -309,13 +313,32 @@ _DECLARATION = re.compile(
     r"^(?:[-*] )?(?:\*\*)?(reserved|review|rj-authorized)(?:\*\*)?:(?:\*\*)?(.*)$",
     re.IGNORECASE,
 )
+# GitHub accounts the required status believes (RJ-1555). GPT-Trader is public,
+# so any signed-in GitHub user can comment on it or review a PR; only a review
+# by a REVIEW_ACCOUNTS login backs a ``Review:`` line, and only a comment by an
+# RJ_ACCOUNTS login on this repo backs a GitHub ``RJ-authorized:`` link. RJ and
+# the agents share ``Solders-Girdles``, so this shuts out outsiders, not agents;
+# telling them apart needs a separate reviewer identity, which is RJ's call.
+REVIEW_ACCOUNTS: tuple[str, ...] = ("Solders-Girdles",)
+RJ_ACCOUNTS: tuple[str, ...] = ("Solders-Girdles",)
+# RJ's Linear workspace. CI can't read Linear without a key, so a Linear link is
+# judged by its shape only: a comment anchor on a card in this workspace.
+LINEAR_WORKSPACE = "rj-openclaw"
 # ``RJ-authorized: <head SHA> <link to RJ's words>``: the head RJ authorized,
 # then the comment that records his authorization, on a Linear card or a
 # GitHub issue or PR. A commit link is not his words.
 _RJ_WORDS = (
-    r"https://(?:linear\.app/\S+#comment-[\w-]+"
+    rf"https://(?:linear\.app/{LINEAR_WORKSPACE}/issue/[a-z][a-z0-9]*-\d+(?:/[\w-]*)?"
+    r"#comment-[0-9a-f]{8}"
     r"|github\.com/[^/\s]+/[^/\s]+/(?:pull|issues)/\d+"
-    r"#(?:(?:issuecomment|pullrequestreview)-|discussion_r)\d+)"
+    r"#(?:(?:issuecomment|pullrequestreview)-|discussion_r)\d+)(?![\w-])"
+)
+# The same GitHub link, with its parts: repository, pull or issues, number,
+# anchor kind and comment id. The status runner fetches each such comment.
+_GITHUB_LINK = re.compile(
+    r"https://github\.com/([^/\s]+/[^/\s]+)/(pull|issues)/(\d+)"
+    r"#(issuecomment-|pullrequestreview-|discussion_r)(\d+)(?![\w-])",
+    re.IGNORECASE,
 )
 _AUTHORIZED_HEAD = re.compile(r"([0-9a-f]{7,40})(?![0-9a-z]).*?" + _RJ_WORDS, re.IGNORECASE)
 # The same declaration as a shown line: its text, then its link targets.
@@ -581,6 +604,42 @@ def _shows(line: str, head: str) -> bool:
 
 def has_rj_authorized_line(body: str) -> bool:
     return bool(_declarations(body, "rj-authorized"))
+
+
+def rj_authorization_links(body: str) -> list[dict[str, Any]]:
+    """Every GitHub comment linked from an ``RJ-authorized:`` line that could count.
+
+    Each names the line's ``sha`` and the link's ``url``, ``repo``, ``number``,
+    ``kind`` (``issuecomment``, ``pullrequestreview`` or ``discussion_r``) and
+    comment ``id``. The text can't prove the comment exists, is RJ's or names
+    the head; the status runner fetches each one and checks.
+    """
+    links = []
+    for value in _declarations(_HTML_COMMENT.sub("", body or ""), "rj-authorized"):
+        head = _AUTHORIZED_HEAD.match(value)
+        if not head:
+            continue
+        for link in _GITHUB_LINK.finditer(value):
+            links.append(
+                {
+                    "sha": head.group(1).lower(),
+                    "url": link.group(0),
+                    "repo": link.group(1),
+                    "number": int(link.group(3)),
+                    "kind": link.group(4).rstrip("-"),
+                    "id": int(link.group(5)),
+                }
+            )
+    return links
+
+
+def names_head(text: str, sha: str) -> bool:
+    """Whether ``text`` names the commit ``sha``: a 7-to-40 character SHA either prefixes."""
+    sha = sha.lower()
+    for token in re.findall(r"(?<![0-9a-z])[0-9a-f]{7,40}(?![0-9a-z])", (text or "").lower()):
+        if token.startswith(sha) or sha.startswith(token):
+            return True
+    return False
 
 
 def _authorizes(sha: str | None, head_oid: str) -> bool:

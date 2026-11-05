@@ -35,6 +35,9 @@ class FakeGitHub:
         self.order: list[str] = []  # state of every post, in order
         self.reviews: dict[int, str] = {}  # review id -> commit it reviewed
         self.review_state = "COMMENTED"
+        self.review_user = "Solders-Girdles"  # author of every review
+        self.review_bodies: dict[int, str] = {}  # review id -> its text
+        self.comments: dict[str, dict[str, Any]] = {}  # e.g. "issues/comments/5" -> payload
         self.rendered: str | None = None  # HTML for the markdown API; None shows the body
         self.markdown_calls = 0
         self.tokens: list[str | None] = []  # token each status was posted with
@@ -60,7 +63,20 @@ class FakeGitHub:
             if review_id not in self.reviews:
                 raise RuntimeError("gh: Not Found (HTTP 404)")
             commit = self.reviews[review_id]
-            return json.dumps({"id": review_id, "commit_id": commit, "state": self.review_state})
+            return json.dumps(
+                {
+                    "id": review_id,
+                    "commit_id": commit,
+                    "state": self.review_state,
+                    "user": {"login": self.review_user},
+                    "body": self.review_bodies.get(review_id, ""),
+                }
+            )
+        if "/comments/" in args[1]:
+            path = args[1].removeprefix(f"repos/{REPO}/")
+            if path not in self.comments:
+                raise RuntimeError("gh: Not Found (HTTP 404)")
+            return json.dumps(self.comments[path])
         if "--paginate" in args:
             return json.dumps([self.files])
         if "/commits/" in args[1] and args[1].endswith("/pulls"):
@@ -117,7 +133,9 @@ def test_reserved_pr_passes_only_with_rj_authorization_for_this_head(github: Fak
     github.files = [{"filename": TRADING}]
     github.pr["body"] = "Reserved: e - cancels orders"
     run("--pr", "7", "--expected-head", HEAD)
-    github.pr["body"] += f"\nRJ-authorized: {HEAD[:7]} https://linear.app/x/issue/RJ-1#comment-1"
+    github.pr["body"] += (
+        f"\nRJ-authorized: {HEAD[:7]} https://linear.app/rj-openclaw/issue/RJ-1#comment-2c82f23f"
+    )
     run("--pr", "7", "--expected-head", HEAD)
     assert [p["state"] for p in github.posted] == ["failure", "success"]
 
@@ -225,7 +243,13 @@ def test_queue_run_judges_again_when_the_body_changes_after_it_posts(
 ) -> None:
     # RJ's authorization is removed while the queue run is posting success.
     github.files = [{"filename": TRADING}]
-    authorized = f"Reserved: e - cancels orders\nRJ-authorized: {HEAD[:7]} https://github.com/o/r/pull/7#issuecomment-1"
+    words = f"https://github.com/{REPO}/pull/7#issuecomment-1"
+    github.comments["issues/comments/1"] = {
+        "issue_url": f"https://api.github.com/repos/{REPO}/issues/7",
+        "user": {"login": "Solders-Girdles"},
+        "body": f"Yes, merge {HEAD[:7]}.",
+    }
+    authorized = f"Reserved: e - cancels orders\nRJ-authorized: {HEAD[:7]} {words}"
     github.pr["body"] = authorized
     github.updates = [{}, {}, {"body": "Reserved: e - cancels orders"}]
     assert run("--merge-group-ref", QUEUE_REF, "--status-sha", QUEUE_SHA) == 0
