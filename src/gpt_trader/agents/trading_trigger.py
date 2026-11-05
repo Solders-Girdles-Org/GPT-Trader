@@ -510,9 +510,40 @@ def _declarations(body: str, name: str) -> list[str]:
     return values
 
 
+# A ``Reserved`` declaration the plain parse skips (RJ-1488): a numbered, ``+``
+# or checkbox item, a blockquote, a heading, a table cell, or a colon look-alike.
+# Read only to tighten: such a line adds its effect, never a ``none``.
+_COLONS = str.maketrans(dict.fromkeys("∶꞉˸ː։׃᠄⁚", ":"))
+_WIDE_RESERVED = re.compile(
+    r"^(?:[^\w:]|_|\d+[.)]|\[[ x]\])*reserved[\s*_`~]*:(.*)$", re.IGNORECASE
+)
+
+
+def _wide_reserved(line: str) -> list[str]:
+    text = unicodedata.normalize("NFKC", line)
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Cf").translate(_COLONS)
+    values = []
+    for cell in text.split("|"):
+        match = _WIDE_RESERVED.match(cell.strip())
+        if match:
+            values.append(match.group(1).strip().strip("*_`~").strip())
+    return values
+
+
 def reserved_values(body: str) -> list[str]:
-    """Values of every ``Reserved:`` line; empty when the body has none."""
-    return _declarations(body, "reserved")
+    """Values of every ``Reserved:`` line; empty when the body has none.
+
+    A line the plain parse skips but that still declares ``Reserved``, in any
+    Markdown container or with a look-alike colon, adds its value unless that
+    value is ``none``. So a contradictory body blocks, and a container never
+    supplies the only declaration.
+    """
+    values = _declarations(body, "reserved")
+    for line in (body or "").splitlines():
+        if _declarations(line, "reserved"):
+            continue
+        values += [v for v in _wide_reserved(line) if not _NONE.fullmatch(v)]
+    return values
 
 
 def rj_authorized_heads(body: str, rendered: Sequence[str] | None = None) -> list[str]:
