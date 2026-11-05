@@ -38,8 +38,7 @@ workflow runs this file from main over the PR's file list and body
 (``scripts/ci/trading_trigger_status.py``), and no file from the PR runs. It
 posts as a GitHub App whose key only main's workflows can read, and the
 required status is pinned to that App, so a workflow a PR adds can't post it
-either. Until the App is set up it posts with the job's own token, and a PR
-that adds its own workflow could post the same name.
+either.
 
 Replay the trigger over recent merged PRs, or run the scan::
 

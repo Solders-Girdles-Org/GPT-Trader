@@ -55,7 +55,7 @@ when you add a deprecation shim.
 | Check | Status |
 | --- | --- |
 | `CI` / Lint & Format, Docs Link Audit, Type Check, Test Guardrails, Unit Tests (Core), Property Tests, Contract Tests, Integration Tests | Required by `main` protection; also run on `merge_group` |
-| `trading-trigger/base` commit status, from `Trading trigger` | Required by `main` protection, pinned to the GitHub Actions app; posted on the PR head and on `merge_group` |
+| `trading-trigger/base` commit status, from `Trading trigger` | Required by `main` protection, pinned to the trading trigger's GitHub App (`gpt-trader-trading-trigger`, app 5602327); posted on the PR head and on `merge_group` |
 | `CI` / Windows Unit Tests, Dependency Review, `CodeQL` | Advisory |
 | `Card ID guard` / No card ID in PR title or branch | Advisory; fails while the title or head branch names a Linear card, which Linear would close at merge (edit the title; never rename the branch) |
 | `Release Image` (version-tag push) and `Integration Tests (Manual)` | Outside the merge gate; neither deploys, moves money or submits orders |
@@ -70,12 +70,14 @@ merge-queue entry runs `Trading trigger request`, which does nothing but start
 `Trading trigger` on `workflow_run`. That workflow fetches only `main`, judges
 the PR's file list and body, and posts the status, so code in the PR can't
 change the verdict. It reruns when the body is edited. It posts as the
-trading trigger's GitHub App once its key is in the `trading-trigger`
-environment (deployment branches: `main` only), and with the job's token
-until then. It fails a PR whose body has no `Reserved:` line, so a Dependabot
-PR needs `Reserved: none` added once you have read its diff (again if
-Dependabot rewrites the body). A reserved PR passes only once its body
-carries `RJ-authorized: <head SHA> <link to RJ's words>` for the current
+trading trigger's GitHub App, whose key is in the `trading-trigger`
+environment (deployment branches: `main` only). The required check accepts
+only that App's status, so a status a PR's own workflow posts under the same
+name, as GitHub Actions, doesn't count. If the key is missing, the job posts
+with its own token, which can't meet the check. It fails a PR whose body has
+no `Reserved:` line, so a Dependabot PR needs `Reserved: none` added once you
+have read its diff (again if Dependabot rewrites the body). A reserved PR
+passes only once its body carries `RJ-authorized: <head SHA> <link to RJ's words>` for the current
 head, outside any HTML comment, after RJ authorizes that head; the link is the
 Linear or GitHub comment that records it. A GitHub link must be a comment on
 this repo, written by RJ's account and naming the head; the status fetches it.
@@ -83,9 +85,7 @@ A Linear link must be a comment on a card in RJ's workspace, but CI can't read
 Linear, so its shape is all that is checked. Each `Review:` line must name a
 review that exists on the PR for the commit it states (the earlier head, for a
 carried line), written by an expected reviewer account (`REVIEW_ACCOUNTS` in
-the trigger). Limit, until the App is set up: a status is identified by name
-and app, so a PR that adds a workflow could post the same name; read any new
-workflow in review.
+the trigger).
 
 ### Local CI troubleshooting
 

@@ -45,8 +45,13 @@ def test_trading_trigger_is_required() -> None:
     assert "trading-trigger/base" in checker.EXPECTED_REQUIRED_CHECKS
 
 
-@pytest.mark.parametrize("app_id", [None, -1, 1])
-def test_trading_trigger_must_be_pinned_to_github_actions(app_id: int | None) -> None:
+def test_trading_trigger_is_pinned_to_its_own_app_not_github_actions() -> None:
+    # GitHub Actions (15368) would accept a status from a workflow a PR adds.
+    assert checker.EXPECTED_CHECK_SOURCES == {"trading-trigger/base": 5602327}
+
+
+@pytest.mark.parametrize("app_id", [None, -1, 1, 15368])
+def test_trading_trigger_must_be_pinned_to_its_app(app_id: int | None) -> None:
     # Unpinned, a status posted with an agent's own token would satisfy it.
     payload = _matching_payload()
     for item in payload["required_status_checks"]["checks"]:
@@ -54,7 +59,7 @@ def test_trading_trigger_must_be_pinned_to_github_actions(app_id: int | None) ->
             item["app_id"] = app_id
 
     assert checker.assess_protection_drift(payload) == [
-        "required check trading-trigger/base is not pinned to app 15368"
+        "required check trading-trigger/base is not pinned to app 5602327"
     ]
 
 
@@ -62,7 +67,7 @@ def test_legacy_only_payload_cannot_show_the_pin() -> None:
     payload = _matching_payload()
     del payload["required_status_checks"]["checks"]
     assert checker.assess_protection_drift(payload) == [
-        "required check trading-trigger/base is not pinned to app 15368"
+        "required check trading-trigger/base is not pinned to app 5602327"
     ]
 
 

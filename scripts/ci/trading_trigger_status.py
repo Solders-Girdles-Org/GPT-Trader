@@ -13,7 +13,7 @@ to sign the App's token request.
 With ``STATUS_APP_ID`` and ``STATUS_APP_KEY`` set (the ``trading-trigger``
 environment, readable only from main), statuses are posted as the trading
 trigger's GitHub App, which the required status is pinned to. Without them,
-they go out with the job's own token.
+they go out with the job's own token, which can't meet the required status.
 
 For a pull request event it posts on the PR's head, and on the commit of any
 merge-queue entry testing the PR, so a body edit reaches a queued copy too. For
