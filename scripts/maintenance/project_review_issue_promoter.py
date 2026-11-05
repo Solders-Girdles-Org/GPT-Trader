@@ -320,7 +320,7 @@ def promotion_plan(packet: dict[str, Any], snapshot: dict[str, Any] | None) -> d
     if not isinstance(issues, list):
         raise ValueError("snapshot.issues must be a list")
     matches = []
-    pattern = re.compile(r"^\s*(?:<!--\s*)?" + re.escape(marker) + r"(?:\s*-->)?\s*$", re.MULTILINE)
+    pattern = re.compile(r"^\s*(?:<!--\s*)?" + re.escape(marker) + r"(?:\s*-->)?\s*$")
     for issue in issues:
         if not isinstance(issue, dict) or not isinstance(issue.get("description"), str):
             raise ValueError("search results must include issue descriptions")
@@ -330,7 +330,9 @@ def promotion_plan(packet: dict[str, Any], snapshot: dict[str, Any] | None) -> d
             )
         if issue.get("teamId") != LINEAR_TEAM_ID or issue.get("projectId") != LINEAR_PROJECT_ID:
             raise ValueError("search result is outside the registered Linear destination")
-        if pattern.search(issue["description"]):
+        # Only the generated header owns identity; body text may quote other markers.
+        first_line = issue["description"].split("\n", 1)[0]
+        if pattern.fullmatch(first_line):
             if not issue.get("id") or not issue.get("url") or "archivedAt" not in issue:
                 raise ValueError("matching issue lacks identity, URL or archive state")
             if issue.get("statusType") not in {
