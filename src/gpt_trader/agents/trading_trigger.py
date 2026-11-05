@@ -513,7 +513,7 @@ def _declarations(body: str, name: str) -> list[str]:
 # A ``Reserved`` declaration the plain parse skips (RJ-1488): a numbered, ``+``
 # or checkbox item, a blockquote, a heading, a table cell, or a colon look-alike.
 # Read only to tighten: such a line adds its effect, never a ``none``.
-_COLONS = str.maketrans(dict.fromkeys("∶꞉˸ː։׃᠄⁚", ":"))
+_COLONS = str.maketrans(dict.fromkeys("\u2236\ua789\u02f8\u02d0\u0589\u05c3\u1804\u205a", ":"))
 _WIDE_RESERVED = re.compile(
     # The prefix alternatives never overlap, so PR text can't make it backtrack.
     r"^(?:[^\w:]|_|\d+[.)]|(?<=\[)x(?=\]))*reserved[\s*_`~]*:(.*)$",
