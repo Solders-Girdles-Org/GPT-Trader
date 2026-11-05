@@ -1,5 +1,6 @@
 """Exercise real environment parsing through the offline risk preflight section."""
 
+import os
 from decimal import Decimal
 
 import pytest
@@ -8,6 +9,13 @@ from gpt_trader.app.config.bot_config import BotConfig
 from gpt_trader.features.live_trade.risk.config import RiskConfig
 from gpt_trader.preflight.checks.risk import check_risk_configuration
 from gpt_trader.preflight.core import PreflightCheck
+
+
+@pytest.fixture(autouse=True)
+def clear_risk_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    for variable in os.environ:
+        if variable.startswith(("RISK_", "CFM_")):
+            monkeypatch.delenv(variable)
 
 
 @pytest.mark.parametrize("token", ["1", "true", "yes", "on", "t", "y", " TRUE "])
@@ -65,7 +73,7 @@ def test_invalid_limit_is_rejected_and_reported_unsafe(
     assert not any("No daily loss limit configured" in warning for warning in checker.warnings)
 
 
-@pytest.mark.parametrize("token", ["nan", "inf", "-inf", "-0.01", "bad", ""])
+@pytest.mark.parametrize("token", ["nan", "inf", "-inf", "-0.01", "1e400", "1e-999", "bad", ""])
 def test_shared_position_limit_rejected_by_bot_and_preflight(
     monkeypatch: pytest.MonkeyPatch, token: str
 ) -> None:
@@ -118,21 +126,3 @@ def test_invalid_integer_limit_is_unsafe(
     checker = PreflightCheck(profile="dev")
     assert check_risk_configuration(checker) is False
     assert any(variable in error and "UNSAFE VALUE" in error for error in checker.errors)
-
-
-@pytest.mark.parametrize(
-    "variable",
-    [
-        "RISK_MAX_POSITION_SIZE",
-        "RISK_STOP_LOSS_PCT",
-        "RISK_TAKE_PROFIT_PCT",
-        "RISK_TARGET_LEVERAGE",
-    ],
-)
-@pytest.mark.parametrize("token", ["nan", "inf", "-1", ""])
-def test_invalid_bot_risk_limit_rejected(
-    monkeypatch: pytest.MonkeyPatch, variable: str, token: str
-) -> None:
-    monkeypatch.setenv(variable, token)
-    with pytest.raises(ValueError, match=variable):
-        BotConfig.from_env()

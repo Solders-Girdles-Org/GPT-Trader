@@ -94,6 +94,9 @@ def parse_risk_decimal_env(var_name: str, default: str) -> Decimal:
         raise ValueError(f"{var_name}: expected a finite non-negative number") from exc
     if not value.is_finite() or value < 0:
         raise ValueError(f"{var_name}: expected a finite non-negative number")
+    float_value = float(value)
+    if not math.isfinite(float_value) or (float_value == 0 and value != 0):
+        raise ValueError(f"{var_name}: risk limit is outside the finite float range")
     return value
 
 
@@ -109,12 +112,8 @@ def parse_risk_int_env(var_name: str, default: str) -> int:
 
 
 def parse_risk_float_env(var_name: str, default: str) -> float:
-    """Read the same risk limit as Decimal readers, rejecting float overflow too."""
-    decimal_value = parse_risk_decimal_env(var_name, default)
-    value = float(decimal_value)
-    if not math.isfinite(value) or (value == 0 and decimal_value != 0):
-        raise ValueError(f"{var_name}: risk limit is outside the finite float range")
-    return value
+    """Read the same finite, non-negative risk limit as Decimal readers."""
+    return float(parse_risk_decimal_env(var_name, default))
 
 
 def parse_int_env(var_name: str, default: int | None = None) -> int | None:
