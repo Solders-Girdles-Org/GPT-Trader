@@ -134,8 +134,11 @@ required consumer; no credential or scheduler change is part of this cutover.
 
 ## M4 promotion evidence continuation
 
-[RJ-747](https://linear.app/rj-openclaw/issue/RJ-747) remains Waiting. Its
-November 8 checkpoint is a review date, not permission to resume the old loop.
+[RJ-747](https://linear.app/rj-openclaw/issue/RJ-747) is Duplicate of
+[RJ-751](https://linear.app/rj-openclaw/issue/RJ-751), which carries its remaining
+M4 step after the frozen forward reading. Reopen RJ-747 when that step comes up,
+or work it on RJ-751; RJ-747 retains its contract, holds and evidence. The fold
+supersedes the November 8 checkpoint and grants no permission to resume the old loop.
 The [July 7 closeout](https://github.com/Solders-Girdles-Org/GPT-Trader/issues/1212#issuecomment-4910064978)
 completed all six M4 implementation workstreams, including the paper drawdown
 setting and suppression telemetry consumer. Its 4/7 scorecard is historical;
