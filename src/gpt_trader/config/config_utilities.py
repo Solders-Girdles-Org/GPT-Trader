@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import math
 import os
 from collections.abc import Callable
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import TypeVar
 
 from gpt_trader.config.env_utils import (  # naming: allow
@@ -83,6 +84,36 @@ def parse_decimal_env(var_name: str, default: Decimal | None = None) -> Decimal 
         return get_env_decimal(var_name, default=default)
     except EnvVarError as exc:
         raise _wrap_env_error(var_name, exc) from exc
+
+
+def parse_risk_decimal_env(var_name: str, default: str) -> Decimal:
+    """Read a finite, non-negative risk limit without silently replacing bad input."""
+    try:
+        value = Decimal(os.getenv(var_name, default))
+    except InvalidOperation as exc:
+        raise ValueError(f"{var_name}: expected a finite non-negative number") from exc
+    if not value.is_finite() or value < 0:
+        raise ValueError(f"{var_name}: expected a finite non-negative number")
+    float_value = float(value)
+    if not math.isfinite(float_value) or (float_value == 0 and value != 0):
+        raise ValueError(f"{var_name}: risk limit is outside the finite float range")
+    return value
+
+
+def parse_risk_int_env(var_name: str, default: str) -> int:
+    """Read an integer risk limit, rejecting invalid and negative values."""
+    try:
+        value = int(os.getenv(var_name, default))
+    except ValueError as exc:
+        raise ValueError(f"{var_name}: expected a non-negative integer") from exc
+    if value < 0:
+        raise ValueError(f"{var_name}: expected a non-negative integer")
+    return value
+
+
+def parse_risk_float_env(var_name: str, default: str) -> float:
+    """Read the same finite, non-negative risk limit as Decimal readers."""
+    return float(parse_risk_decimal_env(var_name, default))
 
 
 def parse_int_env(var_name: str, default: int | None = None) -> int | None:

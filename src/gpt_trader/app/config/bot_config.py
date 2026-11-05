@@ -356,6 +356,7 @@ class BotConfig:
             parse_decimal_env,
             parse_int_env,
             parse_list_env,
+            parse_risk_decimal_env,
         )
         from gpt_trader.features.live_trade.strategies.baseline import (
             PerpsStrategyConfig,
@@ -381,14 +382,14 @@ class BotConfig:
             return Decimal(_risk_env(key, default))
 
         # Map RISK_MAX_POSITION_PCT_PER_SYMBOL -> position_fraction
-        position_fraction_raw = os.getenv("RISK_MAX_POSITION_PCT_PER_SYMBOL", "0.1")
+        position_fraction = parse_risk_decimal_env("RISK_MAX_POSITION_PCT_PER_SYMBOL", "0.1")
 
         risk = BotRiskConfig(
             max_position_size=_risk_decimal("MAX_POSITION_SIZE", "1000"),
             target_leverage=_risk_int("TARGET_LEVERAGE", 1),
             stop_loss_pct=_risk_decimal("STOP_LOSS_PCT", "0.02"),
             take_profit_pct=_risk_decimal("TAKE_PROFIT_PCT", "0.04"),
-            position_fraction=Decimal(position_fraction_raw),
+            position_fraction=position_fraction,
         )
 
         # Derivatives = CFM US futures (INTX perpetuals removed). Source enablement

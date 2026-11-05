@@ -7,7 +7,6 @@ This is the canonical location for RiskConfig.
 """
 
 import json
-import os
 from dataclasses import asdict, dataclass, field
 from decimal import Decimal
 from pathlib import Path
@@ -15,7 +14,12 @@ from typing import Any
 
 import yaml
 
-from gpt_trader.config.config_utilities import kill_switch_env_engaged
+from gpt_trader.config.config_utilities import (
+    kill_switch_env_engaged,
+    parse_bool_env,
+    parse_risk_float_env,
+    parse_risk_int_env,
+)
 
 RISK_CONFIG_ENV_KEYS = [
     "RISK_MAX_LEVERAGE",
@@ -144,51 +148,66 @@ class RiskConfig:
         Uses RISK_* prefixed names (e.g., RISK_MAX_LEVERAGE).
         """
 
-        def _get_env(key: str, default: str) -> str:
-            """Get env var from RISK_ prefixed key."""
-            return os.getenv(f"RISK_{key}", default)
-
         return cls(
-            max_leverage=int(_get_env("MAX_LEVERAGE", "5")),
-            daily_loss_limit_pct=float(_get_env("DAILY_LOSS_LIMIT_PCT", "0.05")),
-            max_exposure_pct=float(_get_env("MAX_EXPOSURE_PCT", "0.8")),
-            max_position_pct_per_symbol=float(_get_env("MAX_POSITION_PCT_PER_SYMBOL", "0.2")),
-            min_liquidation_buffer_pct=float(_get_env("MIN_LIQUIDATION_BUFFER_PCT", "0.1")),
-            slippage_guard_bps=int(_get_env("SLIPPAGE_GUARD_BPS", "50")),
+            max_leverage=parse_risk_int_env("RISK_MAX_LEVERAGE", "5"),
+            daily_loss_limit_pct=parse_risk_float_env("RISK_DAILY_LOSS_LIMIT_PCT", "0.05"),
+            max_exposure_pct=parse_risk_float_env("RISK_MAX_EXPOSURE_PCT", "0.8"),
+            max_position_pct_per_symbol=parse_risk_float_env(
+                "RISK_MAX_POSITION_PCT_PER_SYMBOL", "0.2"
+            ),
+            min_liquidation_buffer_pct=parse_risk_float_env(
+                "RISK_MIN_LIQUIDATION_BUFFER_PCT", "0.1"
+            ),
+            slippage_guard_bps=parse_risk_int_env("RISK_SLIPPAGE_GUARD_BPS", "50"),
             kill_switch_enabled=kill_switch_env_engaged(),
-            reduce_only_mode=_get_env("REDUCE_ONLY_MODE", "0") == "1",
+            reduce_only_mode=parse_bool_env("RISK_REDUCE_ONLY_MODE", default=False),
             # CFM-specific parameters
-            cfm_max_leverage=int(os.getenv("CFM_MAX_LEVERAGE", "5")),
-            cfm_min_liquidation_buffer_pct=float(
-                os.getenv("CFM_MIN_LIQUIDATION_BUFFER_PCT", "0.15")
+            cfm_max_leverage=parse_risk_int_env("CFM_MAX_LEVERAGE", "5"),
+            cfm_min_liquidation_buffer_pct=parse_risk_float_env(
+                "CFM_MIN_LIQUIDATION_BUFFER_PCT", "0.15"
             ),
-            cfm_max_exposure_pct=float(os.getenv("CFM_MAX_EXPOSURE_PCT", "0.8")),
-            cfm_max_position_size_pct=float(os.getenv("CFM_MAX_POSITION_SIZE_PCT", "0.25")),
+            cfm_max_exposure_pct=parse_risk_float_env("CFM_MAX_EXPOSURE_PCT", "0.8"),
+            cfm_max_position_size_pct=parse_risk_float_env("CFM_MAX_POSITION_SIZE_PCT", "0.25"),
             # API health guard thresholds
-            api_error_rate_threshold=float(_get_env("API_ERROR_RATE_THRESHOLD", "0.2")),
-            api_rate_limit_usage_threshold=float(_get_env("API_RATE_LIMIT_USAGE_THRESHOLD", "0.9")),
+            api_error_rate_threshold=parse_risk_float_env("RISK_API_ERROR_RATE_THRESHOLD", "0.2"),
+            api_rate_limit_usage_threshold=parse_risk_float_env(
+                "RISK_API_RATE_LIMIT_USAGE_THRESHOLD", "0.9"
+            ),
             # Graceful degradation settings
-            api_health_cooldown_seconds=int(_get_env("API_HEALTH_COOLDOWN_SECONDS", "300")),
-            mark_staleness_cooldown_seconds=int(_get_env("MARK_STALENESS_COOLDOWN_SECONDS", "120")),
-            mark_staleness_threshold_seconds=float(
-                _get_env("MARK_STALENESS_THRESHOLD_SECONDS", "30")
+            api_health_cooldown_seconds=parse_risk_int_env(
+                "RISK_API_HEALTH_COOLDOWN_SECONDS", "300"
             ),
-            mark_staleness_allow_reduce_only=_get_env("MARK_STALENESS_ALLOW_REDUCE_ONLY", "1")
-            == "1",
-            slippage_failure_pause_after=int(_get_env("SLIPPAGE_FAILURE_PAUSE_AFTER", "3")),
-            slippage_pause_seconds=int(_get_env("SLIPPAGE_PAUSE_SECONDS", "60")),
-            validation_failure_cooldown_seconds=int(
-                _get_env("VALIDATION_FAILURE_COOLDOWN_SECONDS", "180")
+            mark_staleness_cooldown_seconds=parse_risk_int_env(
+                "RISK_MARK_STALENESS_COOLDOWN_SECONDS", "120"
             ),
-            preview_failure_disable_after=int(_get_env("PREVIEW_FAILURE_DISABLE_AFTER", "5")),
-            broker_outage_max_failures=int(_get_env("BROKER_OUTAGE_MAX_FAILURES", "3")),
-            broker_outage_cooldown_seconds=int(_get_env("BROKER_OUTAGE_COOLDOWN_SECONDS", "120")),
-            unfilled_order_alert_seconds=int(_get_env("UNFILLED_ORDER_ALERT_SECONDS", "300")),
+            mark_staleness_threshold_seconds=parse_risk_float_env(
+                "RISK_MARK_STALENESS_THRESHOLD_SECONDS", "30"
+            ),
+            mark_staleness_allow_reduce_only=parse_bool_env(
+                "RISK_MARK_STALENESS_ALLOW_REDUCE_ONLY", default=True
+            ),
+            slippage_failure_pause_after=parse_risk_int_env(
+                "RISK_SLIPPAGE_FAILURE_PAUSE_AFTER", "3"
+            ),
+            slippage_pause_seconds=parse_risk_int_env("RISK_SLIPPAGE_PAUSE_SECONDS", "60"),
+            validation_failure_cooldown_seconds=parse_risk_int_env(
+                "RISK_VALIDATION_FAILURE_COOLDOWN_SECONDS", "180"
+            ),
+            preview_failure_disable_after=parse_risk_int_env(
+                "RISK_PREVIEW_FAILURE_DISABLE_AFTER", "5"
+            ),
+            broker_outage_max_failures=parse_risk_int_env("RISK_BROKER_OUTAGE_MAX_FAILURES", "3"),
+            broker_outage_cooldown_seconds=parse_risk_int_env(
+                "RISK_BROKER_OUTAGE_COOLDOWN_SECONDS", "120"
+            ),
+            unfilled_order_alert_seconds=parse_risk_int_env(
+                "RISK_UNFILLED_ORDER_ALERT_SECONDS", "300"
+            ),
             # WebSocket health monitoring
-            ws_health_interval_seconds=int(_get_env("WS_HEALTH_INTERVAL_SECONDS", "5")),
-            ws_message_stale_seconds=int(_get_env("WS_MESSAGE_STALE_SECONDS", "15")),
-            ws_heartbeat_stale_seconds=int(_get_env("WS_HEARTBEAT_STALE_SECONDS", "30")),
-            ws_reconnect_pause_seconds=int(_get_env("WS_RECONNECT_PAUSE_SECONDS", "30")),
+            ws_health_interval_seconds=parse_risk_int_env("RISK_WS_HEALTH_INTERVAL_SECONDS", "5"),
+            ws_message_stale_seconds=parse_risk_int_env("RISK_WS_MESSAGE_STALE_SECONDS", "15"),
+            ws_heartbeat_stale_seconds=parse_risk_int_env("RISK_WS_HEARTBEAT_STALE_SECONDS", "30"),
+            ws_reconnect_pause_seconds=parse_risk_int_env("RISK_WS_RECONNECT_PAUSE_SECONDS", "30"),
         )
 
     def to_dict(self) -> dict[str, Any]:
