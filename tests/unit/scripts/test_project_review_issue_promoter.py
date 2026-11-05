@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from scripts.maintenance import project_review_issue_promoter as promoter
 
 
@@ -243,3 +244,44 @@ def test_exhausted_marker_search_cannot_certify_terminal_absence() -> None:
     snapshot["state"] = "started"
     with pytest.raises(ValueError, match="without query or state filters"):
         promoter.promotion_plan(packet, snapshot)
+
+
+@pytest.mark.parametrize("field", ["summary", "evidence", "acceptance_criteria", "dedupe"])
+@pytest.mark.parametrize("already_filed", [False, True])
+def test_quoted_marker_cannot_take_over_another_findings_identity(field, already_filed) -> None:
+    packet = promoter.example_packet()
+    other = promoter.example_packet()
+    other["finding_id"] += "-other"
+    quoted = f"Earlier report:\n{promoter.marker_for(packet['finding_id'])}\nUnrelated finding."
+    if field == "summary":
+        other["summary"] = quoted
+    elif field == "evidence":
+        other["evidence"][0]["detail"] = quoted
+    elif field == "acceptance_criteria":
+        other["acceptance_criteria"] = [quoted]
+    else:
+        other["dedupe"]["search_terms"] = [quoted]
+    assert promoter.validate_packet(other) == []
+    description = promoter.promotion_plan(other, None)["body"]
+    issues = [linear_issue(other, description=description, id="RJ-9")]
+    if already_filed:
+        issues.append(linear_issue(packet))
+
+    plan = promoter.promotion_plan(packet, linear_snapshot(packet, issues))
+
+    assert plan["action"] == ("comment_existing" if already_filed else "create")
+    if already_filed:
+        assert plan["issue"]["id"] == "RJ-999"
+    # The quoted text must not interfere with the other finding's own identity.
+    other_plan = promoter.promotion_plan(other, linear_snapshot(other, issues))
+    assert other_plan["action"] == "comment_existing"
+    assert other_plan["issue"]["id"] == "RJ-9"
+
+
+@pytest.mark.parametrize("prefix", ["## Summary\n", "\n", "<!--\n"])
+def test_marker_after_first_line_is_only_body_text(prefix) -> None:
+    packet = promoter.example_packet()
+    description = prefix + promoter.marker_for(packet["finding_id"])
+    issue = linear_issue(packet, description=description)
+
+    assert promoter.promotion_plan(packet, linear_snapshot(packet, [issue]))["action"] == "create"
