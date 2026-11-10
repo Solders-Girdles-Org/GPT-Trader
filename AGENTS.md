@@ -43,6 +43,10 @@ ladder and what an execution lane needs.
 
 ## Merge discipline
 
+GPT-Trader is parked (RJ-1570): no agent starts, wakes or merges, Dependabot's
+included, until RJ revives it
+([parked projects](https://github.com/Solders-Girdles/workspace-operations/blob/main/docs/agents/waker.md#parked-projects)).
+
 `main` is protected and merges go through the merge queue. Opening a PR is
 not merging. Before merging, resolve every review thread, re-read
 current-head review and reaction signals, and run `uv run agent-pr-ready`.
